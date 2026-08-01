@@ -1,41 +1,144 @@
-const Parser = require("rss-parser");
 const axios = require("axios");
 
-const parser = new Parser();
+const MARKETAUX_URL =
+  "https://api.marketaux.com/v1/news/all";
 
-async function fetchFeed(url) {
-  const response = await axios.get(url, {
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/126.0 Safari/537.36",
-      Accept: "application/rss+xml, application/xml;q=0.9,*/*;q=0.8",
-    },
-    timeout: 10000,
-  });
+function getMarketauxApiKey() {
+  const apiKey = process.env.MARKETAUX_API_KEY;
 
-  return parser.parseString(response.data);
+  if (!apiKey) {
+    throw new Error(
+      "MARKETAUX_API_KEY is not configured"
+    );
+  }
+
+  return apiKey;
+}
+
+function getPublishedAfter(numberOfDays) {
+  const date = new Date();
+
+  date.setUTCDate(
+    date.getUTCDate() - numberOfDays
+  );
+
+  return date.toISOString();
+}
+
+function normalizeSearchQuery(searchQuery = "") {
+  return String(searchQuery)
+    .replace(/\s+OR\s+/gi, " | ")
+    .replace(/\s+AND\s+/gi, " + ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeMarketauxArticle(article) {
+  return {
+    guid:
+      article.uuid ||
+      article.url ||
+      null,
+
+    title:
+      article.title ||
+      "Untitled article",
+
+    link:
+      article.url ||
+      "",
+
+    pubDate:
+      article.published_at ||
+      null,
+
+    creator:
+      article.source ||
+      "Marketaux",
+
+    source:
+      article.source ||
+      "Marketaux",
+
+    contentSnippet:
+      article.snippet ||
+      article.description ||
+      "",
+
+    content:
+      article.description ||
+      article.snippet ||
+      "",
+
+    imageUrl:
+      article.image_url ||
+      null,
+
+    entities:
+      Array.isArray(article.entities)
+        ? article.entities
+        : [],
+  };
+}
+
+async function fetchMarketauxNews({
+  search,
+  numberOfDays = 7,
+  limit = 50,
+  countries = "in",
+}) {
+  const response = await axios.get(
+    MARKETAUX_URL,
+    {
+      params: {
+        api_token:
+          getMarketauxApiKey(),
+
+        search:
+          normalizeSearchQuery(search),
+
+        countries,
+        language: "en",
+
+        published_after:
+          getPublishedAfter(numberOfDays),
+
+        group_similar: true,
+        must_have_entities: false,
+        limit,
+      },
+
+      timeout: 15000,
+    }
+  );
+
+  const articles = Array.isArray(
+    response.data?.data
+  )
+    ? response.data.data
+    : [];
+
+  return articles.map(
+    normalizeMarketauxArticle
+  );
 }
 
 async function fetchCompanyNews(companyName) {
-  const query = encodeURIComponent(`"${companyName}"`);
-
-  const url =
-    `https://news.google.com/rss/search?q=${query}&hl=en-IN&gl=IN&ceid=IN:en`;
-
-  const feed = await fetchFeed(url);
-
-  return feed.items || [];
+  return fetchMarketauxNews({
+    search: `"${companyName}"`,
+    numberOfDays: 30,
+    limit: 50,
+    countries: "in",
+  });
 }
 
 async function fetchGlobalMarketNews(searchQuery) {
-  const query = encodeURIComponent(`${searchQuery} when:7d`);
-
-  const url =
-    `https://news.google.com/rss/search?q=${query}&hl=en-IN&gl=IN&ceid=IN:en`;
-
-  const feed = await fetchFeed(url);
-
-  return feed.items || [];
+  return fetchMarketauxNews({
+    search: searchQuery,
+    numberOfDays: 30,
+    limit: 50,
+    countries: "in",
+  });
 }
 
 module.exports = {
