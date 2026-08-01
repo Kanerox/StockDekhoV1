@@ -30,6 +30,8 @@ app.use("/api/market", marketRoutes);
 app.use("/api/news", newsRoutes);
 app.use("/api/sectors", sectorRoutes);
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
+const PORT = process.env.PORT || port;
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Server running on port ${PORT}`);
 });
