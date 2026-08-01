@@ -1165,14 +1165,20 @@ async function getNiftyMarketEventsFromService() {
         })
       )
     );
-    for (const result of topicResults) {
-  if (result.status !== "fulfilled") continue;
+ topicResults.forEach((result, index) => {
+  const topic = NIFTY_MARKET_TOPICS[index]?.topic || "Unknown";
 
-  console.log(
-    result.value.topic,
-    result.value.articles.length
-  );
-}
+  if (result.status === "fulfilled") {
+    console.log(
+      `${topic}: ${result.value.articles.length} articles`
+    );
+  } else {
+    console.error(
+      `${topic} news request failed:`,
+      result.reason?.message || result.reason
+    );
+  }
+});
 
   const candidates = topicResults.flatMap(
     (result) => {
@@ -1466,12 +1472,12 @@ function analyseArticle(title, snippet) {
 }
 
 async function getCompanyNewsFromService(symbol) {
-  const quote = await fetchMarketData(symbol);
+const quote = await fetchMarketData(symbol);
 
-  const companyName =
-    quote.longName ||
-    quote.shortName ||
-    symbol;
+const companyName =
+  quote?.longName ||
+  quote?.shortName ||
+  symbol;
 
   const articles =
     await fetchCompanyNews(companyName);
@@ -1534,7 +1540,7 @@ async function getCompanyNewsFromService(symbol) {
     });
 
   return {
-    symbol: quote.symbol || symbol,
+    symbol: quote?.symbol || symbol,
     company: companyName,
     range: "Last 30 days",
     articleCount: currentArticles.length,
