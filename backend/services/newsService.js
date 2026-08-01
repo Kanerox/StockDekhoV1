@@ -207,25 +207,41 @@ const BLOCKED_LIVE_HEADLINE_TERMS = [
 ];
 
 function cleanGoogleNewsArticle(article) {
-  const rawTitle = article.title || "Untitled article";
-  const separatorIndex = rawTitle.lastIndexOf(" - ");
+  const rawTitle = String(
+    article.title || "Untitled article"
+  ).trim();
 
-  const title =
-    separatorIndex !== -1
-      ? rawTitle.slice(0, separatorIndex).trim()
-      : rawTitle.trim();
+  const explicitSource = String(
+    article.source ||
+    article.creator ||
+    ""
+  ).trim();
 
-  const rawSource =
-    separatorIndex !== -1
-      ? rawTitle.slice(separatorIndex + 3).trim()
-      : article.creator || "Google News";
+  let title = rawTitle;
+  let rawSource = explicitSource;
 
-  const source = rawSource
+  if (!rawSource) {
+    const separatorIndex =
+      rawTitle.lastIndexOf(" - ");
+
+    if (separatorIndex !== -1) {
+      title = rawTitle
+        .slice(0, separatorIndex)
+        .trim();
+
+      rawSource = rawTitle
+        .slice(separatorIndex + 3)
+        .trim();
+    }
+  }
+
+  const source = String(
+    rawSource || "Marketaux"
+  )
     .replace(/^https?:\/\//i, "")
     .replace(/^www\./i, "")
     .replace(/^m\./i, "")
     .replace(/\/.*$/, "")
-    .replace(/\.(?:co\.in|com|in|net|org)$/i, "")
     .trim();
 
   const rawSnippet =
@@ -236,10 +252,6 @@ function cleanGoogleNewsArticle(article) {
   const snippet = String(rawSnippet)
     .replace(rawTitle, "")
     .replace(title, "")
-    .replace(rawSource, "")
-    .replace(source, "")
-    .replace(/(^|\s)\.(?:co\.in|com|in|net|org)\b/gi, " ")
-    .replace(/^\s*(?:co\.in|com|in|net|org)\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -1198,7 +1210,7 @@ async function getNiftyMarketEventsFromService() {
             cleanGoogleNewsArticle(article),
           topic: result.value.topic,
         }))
-        .filter(
+ .filter(
   ({
     article,
     cleanedArticle,
@@ -1206,9 +1218,6 @@ async function getNiftyMarketEventsFromService() {
     !isBlockedGlobalArticle(
       article,
       cleanedArticle
-    ) &&
-    isTrustedGlobalSource(
-      cleanedArticle.source
     ) &&
     !isBlockedLiveHeadline(
       cleanedArticle.title
