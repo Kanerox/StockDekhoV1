@@ -5948,22 +5948,20 @@ function CurrenciesPage() {
       sourceDate: formatCurrencyMarketTime(live?.marketTime),
     };
   });
-  const globalMarketNews = globalNewsData.map((article) => ({
-    id: article.id,
-    topic: article.topic,
-    title: article.title,
-    date: article.publishedAt
-      ? new Date(article.publishedAt).toLocaleDateString("en-IN", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        })
-      : "Date unavailable",
-    teaser: article.summary,
-    body: article.summary,
-    source: article.source,
-    link: article.link,
-  }));
+const globalMarketNews = globalNewsData.map((article) => ({
+  id: article.id,
+  topic: article.topic,
+  title: article.title,
+
+  date: formatNewsDate(
+    article.publishedAt
+  ),
+
+  teaser: article.summary,
+  body: article.summary,
+  source: article.source,
+  link: article.link,
+}));
   const globalNewsPerPage = 8;
   const globalNewsTotalPages = Math.max(
     1,
