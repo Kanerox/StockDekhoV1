@@ -198,6 +198,10 @@ const TRUSTED_GLOBAL_SOURCES = [
   "businessline",
   "financial express",
   "yahoo finance",
+  "business-standard.com",
+  "economictimes.indiatimes.com",
+  "thehindubusinessline.com",
+  "livemint.com",
 ];
 
 const BLOCKED_LIVE_HEADLINE_TERMS = [
@@ -386,15 +390,20 @@ function isCompanyRelevantArticle(
   const cleanedArticle =
     cleanGoogleNewsArticle(article);
 
+  // Match only against user-visible editorial text.
+  // Avoid provider metadata or extended content that may
+  // contain unrelated entity names.
   const searchableText = [
     cleanedArticle.title,
     cleanedArticle.snippet,
     article.contentSnippet,
-    article.content,
   ]
     .filter(Boolean)
     .join(" ")
-    .toLowerCase();
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
   const normalizedCompanyName = String(
     companyName || ""
@@ -406,18 +415,47 @@ function isCompanyRelevantArticle(
     .replace(/\s+/g, " ")
     .trim();
 
-  const companyWords = normalizedCompanyName
-    .split(" ")
-    .filter((word) => word.length > 2);
-
-  const normalizedSymbol = String(symbol || "")
+  const normalizedSymbol = String(
+    symbol || ""
+  )
     .toLowerCase()
     .replace(/\.(ns|bo)$/i, "")
     .replace(/[^a-z0-9]/g, "");
 
+  const GENERIC_COMPANY_WORDS =
+    new Set([
+      "limited",
+      "ltd",
+      "industries",
+      "industry",
+      "company",
+      "corporation",
+      "enterprise",
+      "enterprises",
+      "holdings",
+      "group",
+      "services",
+    ]);
+
+  const significantCompanyWords =
+    normalizedCompanyName
+      .split(" ")
+      .filter(
+        (word) =>
+          word.length > 2 &&
+          !GENERIC_COMPANY_WORDS.has(
+            word
+          )
+      );
+
   const fullCompanyMatch =
     Boolean(normalizedCompanyName) &&
-    searchableText.includes(normalizedCompanyName);
+    new RegExp(
+      `\\b${normalizedCompanyName
+        .split(/\s+/)
+        .join("\\s+")}\\b`,
+      "i"
+    ).test(searchableText);
 
   const symbolMatch =
     normalizedSymbol.length >= 3 &&
@@ -426,15 +464,20 @@ function isCompanyRelevantArticle(
       "i"
     ).test(searchableText);
 
-  const matchedCompanyWords =
-    companyWords.filter((word) =>
-      searchableText.includes(word)
+  const matchedSignificantWords =
+    significantCompanyWords.filter(
+      (word) =>
+        new RegExp(
+          `\\b${word}\\b`,
+          "i"
+        ).test(searchableText)
     );
 
   const strongWordMatch =
-    companyWords.length > 1 &&
-    matchedCompanyWords.length >=
-      Math.min(2, companyWords.length);
+    significantCompanyWords.length === 1
+      ? matchedSignificantWords.length === 1
+      : significantCompanyWords.length >= 2 &&
+        matchedSignificantWords.length >= 2;
 
   return (
     fullCompanyMatch ||
@@ -455,14 +498,34 @@ function generateSummary(title, snippet) {
   );
 }
 
+function normalizeSourceForMatching(
+  source = ""
+) {
+  return String(source)
+    .toLowerCase()
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/^m\./i, "")
+    .replace(/[.\-_]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function isTrustedGlobalSource(source) {
-  const normalizedSource = String(
-    source || ""
-  ).toLowerCase();
+  const normalizedSource =
+    normalizeSourceForMatching(source);
 
   return TRUSTED_GLOBAL_SOURCES.some(
-    (trustedSource) =>
-      normalizedSource.includes(trustedSource)
+    (trustedSource) => {
+      const normalizedTrustedSource =
+        normalizeSourceForMatching(
+          trustedSource
+        );
+
+      return normalizedSource.includes(
+        normalizedTrustedSource
+      );
+    }
   );
 }
 
@@ -631,6 +694,193 @@ function deduplicateAndLimit(
   return articles;
 }
 
+function isRelevantToGlobalTopic(
+  article,
+  cleanedArticle,
+  topic
+) {
+  const text = [
+    cleanedArticle.title,
+    cleanedArticle.snippet,
+    article.contentSnippet,
+    article.content,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const topicTerms = {
+    "Energy & Crude": [
+      "crude oil",
+      "oil price",
+      "brent",
+      "wti",
+      "opec",
+      "opec+",
+      "energy market",
+      "natural gas",
+      "refinery",
+      "petroleum",
+      "middle east",
+      "strait of hormuz",
+    ],
+
+    Semiconductors: [
+      "semiconductor",
+      "chip",
+      "chips",
+      "foundry",
+      "wafer",
+      "lithography",
+      "asml",
+      "tsmc",
+      "nvidia",
+      "intel",
+      "micron",
+      "osat",
+    ],
+
+    "Artificial Intelligence": [
+      "artificial intelligence",
+      " ai ",
+      "ai investment",
+      "ai chip",
+      "data centre",
+      "data center",
+      "machine learning",
+      "generative ai",
+      "large language model",
+    ],
+
+    "Central Banks": [
+      "federal reserve",
+      "fed rate",
+      "ecb",
+      "bank of england",
+      "bank of japan",
+      "central bank",
+      "interest rate",
+      "repo rate",
+      "monetary policy",
+      "inflation",
+      "bond yield",
+      "treasury yield",
+      "rbi",
+    ],
+
+    "Trade & Tariffs": [
+      "tariff",
+      "trade war",
+      "global trade",
+      "trade agreement",
+      "supply chain",
+      "export",
+      "import",
+      "customs duty",
+      "sanction",
+      "shipping route",
+    ],
+
+    Commodities: [
+      "gold price",
+      "silver price",
+      "copper price",
+      "commodity market",
+      "commodities",
+      "bullion",
+      "metal prices",
+      "iron ore",
+      "aluminium",
+      "aluminum",
+      "natural gas",
+      "crude oil",
+      "agricultural commodity",
+    ],
+  };
+
+  const requiredTerms =
+    topicTerms[topic] || [];
+   const topicBlockedTerms = {
+  "Energy & Crude": [
+    "personal finance",
+    "fixed deposit",
+    "bank holiday",
+  ],
+
+  Semiconductors: [
+    "youth address",
+    "cultural youth",
+    "sports",
+  ],
+
+  "Artificial Intelligence": [
+    "proverb",
+    "human signature",
+    "creative expression",
+  ],
+
+  "Central Banks": [
+    "fixed deposit investors",
+    "bank holidays",
+    "senior citizens",
+  ],
+
+  "Trade & Tariffs": [
+    "repo rate",
+    "monetary policy",
+    "rbi likely",
+  ],
+
+  Commodities: [
+    "gold seized",
+    "gold smuggling",
+    "medal",
+    "boxing",
+    "badminton",
+  ],
+};
+
+const blockedForTopic =
+  topicBlockedTerms[topic] || [];
+
+if (
+  blockedForTopic.some((term) =>
+    text.includes(term)
+  )
+) {
+  return false;
+} 
+
+  if (
+    !requiredTerms.some((term) =>
+      text.includes(term)
+    )
+  ) {
+    return false;
+  }
+
+  const blockedGlobalNoiseTerms = [
+    "commonwealth games",
+    "badminton",
+    "boxing",
+    "athlete",
+    "medal tally",
+    "sports",
+    "bank holiday",
+    "fixed deposit investors",
+    "senior citizens",
+    "proverb of the day",
+    "box office",
+    "movie",
+    "celebrity",
+    "personal finance",
+  ];
+
+  return !blockedGlobalNoiseTerms.some(
+    (term) => text.includes(term)
+  );
+}
+
 async function getGlobalMarketNewsFromService() {
   const topicResults =
     await Promise.allSettled(
@@ -668,19 +918,27 @@ async function getGlobalMarketNewsFromService() {
     topic: result.value.topic,
   };
 })
-        .filter(
-          ({
-            article,
-            cleanedArticle,
-          }) =>
-            !isBlockedGlobalArticle(
-              article,
-              cleanedArticle
-            ) &&
-            isTrustedGlobalSource(
-              cleanedArticle.source
-            )
-        )
+    .filter(
+  ({
+    article,
+    cleanedArticle,
+    topic,
+  }) =>
+    !isBlockedGlobalArticle(
+      article,
+      cleanedArticle
+    ) &&
+    isTrustedGlobalSource(
+      cleanedArticle.source
+    ) &&
+    isRelevantToGlobalTopic(
+      article,
+      cleanedArticle,
+      topic
+    )
+)
+
+
         .sort(
           (itemA, itemB) =>
             new Date(

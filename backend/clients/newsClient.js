@@ -1,5 +1,9 @@
 const axios = require("axios");
 
+const currentsProvider = require(
+  "../news/providers/currents"
+);
+
 const MARKETAUX_URL =
   "https://api.marketaux.com/v1/news/all";
 
@@ -28,7 +32,6 @@ function getPublishedAfter(numberOfDays) {
     date.getUTCDate() - numberOfDays
   );
 
-  // Marketaux accepts date-based formats such as YYYY-MM-DD.
   return date
     .toISOString()
     .slice(0, 10);
@@ -38,17 +41,10 @@ function normalizeSearchQuery(
   searchQuery = ""
 ) {
   return String(searchQuery)
-    // Remove quotation marks and grouping characters.
     .replace(/["'()]/g, " ")
-
-    // Replace Boolean operators with spaces.
     .replace(/\bOR\b/gi, " ")
     .replace(/\bAND\b/gi, " ")
-
-    // Remove symbols that may produce a 400 response.
     .replace(/[|+]/g, " ")
-
-    // Clean repeated whitespace.
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -100,15 +96,66 @@ function normalizeMarketauxArticle(
       Array.isArray(article.entities)
         ? article.entities
         : [],
+
+    provider: "marketaux",
+  };
+}
+
+function convertCurrentsToLegacy(
+  article
+) {
+  return {
+    guid:
+      article.id ||
+      article.url ||
+      null,
+
+    title:
+      article.title ||
+      "Untitled article",
+
+    link:
+      article.url ||
+      "",
+
+    pubDate:
+      article.publishedAt ||
+      null,
+
+    creator:
+      article.source ||
+      "Currents",
+
+    source:
+      article.source ||
+      "Currents",
+
+    contentSnippet:
+      article.summary ||
+      "",
+
+    content:
+      article.summary ||
+      "",
+
+    imageUrl:
+      article.raw?.image ||
+      null,
+
+    entities: [],
+
+    provider: "currents",
   };
 }
 
 function getCacheKey({
+  type,
   search,
   numberOfDays,
   countries,
 }) {
   return JSON.stringify({
+    type,
     search,
     numberOfDays,
     countries,
@@ -123,12 +170,12 @@ function getCachedArticles(cacheKey) {
     return null;
   }
 
-  const isExpired =
+  const expired =
     Date.now() -
       cachedEntry.createdAt >
     CACHE_TTL_MS;
 
-  if (isExpired) {
+  if (expired) {
     newsCache.delete(cacheKey);
     return null;
   }
@@ -154,19 +201,6 @@ async function fetchMarketauxNews({
   const normalizedSearch =
     normalizeSearchQuery(search);
 
-  const cacheKey = getCacheKey({
-    search: normalizedSearch,
-    numberOfDays,
-    countries,
-  });
-
-  const cachedArticles =
-    getCachedArticles(cacheKey);
-
-  if (cachedArticles) {
-    return cachedArticles;
-  }
-
   try {
     const response = await axios.get(
       MARKETAUX_URL,
@@ -188,9 +222,6 @@ async function fetchMarketauxNews({
             ),
 
           group_similar: true,
-
-          // The Marketaux free plan permits
-          // three articles per news request.
           limit: 3,
         },
 
@@ -205,69 +236,210 @@ async function fetchMarketauxNews({
         ? response.data.data
         : [];
 
-    const articles =
-      rawArticles.map(
-        normalizeMarketauxArticle
-      );
-
-    saveCachedArticles(
-      cacheKey,
-      articles
+    return rawArticles.map(
+      normalizeMarketauxArticle
     );
-
-    return articles;
   } catch (error) {
-    console.error(
-      "Marketaux request failed:",
-      {
-        status:
-          error.response?.status,
+    const status =
+      error.response?.status;
 
-        details:
-          error.response?.data ||
-          error.message,
+    const errorCode =
+      error.response?.data?.error?.code;
 
-        search:
-          normalizedSearch,
+    const expectedProviderFailure =
+      status === 401 ||
+      status === 402 ||
+      status === 403 ||
+      status === 429 ||
+      errorCode ===
+        "usage_limit_reached";
 
-        countries,
+    if (!expectedProviderFailure) {
+      console.error(
+        "Marketaux request failed:",
+        error.message
+      );
+    }
 
-        publishedAfter:
-          getPublishedAfter(
-            numberOfDays
-          ),
-      }
-    );
-
-    throw new Error(
-      error.response?.data?.error?.message ||
-      error.response?.data?.message ||
-      `Marketaux request failed with status ${
-        error.response?.status ||
-        "unknown"
-      }`
-    );
+    return [];
   }
+}
+
+function removeExactDuplicateUrls(
+  articles = []
+) {
+  const seenUrls = new Set();
+
+  return articles.filter((article) => {
+    const url = String(
+      article.link || ""
+    ).trim();
+
+    if (!url) {
+      return true;
+    }
+
+    if (seenUrls.has(url)) {
+      return false;
+    }
+
+    seenUrls.add(url);
+
+    return true;
+  });
 }
 
 async function fetchCompanyNews(
   companyName
 ) {
-  return fetchMarketauxNews({
+  const cacheKey = getCacheKey({
+    type: "company",
     search: companyName,
     numberOfDays: 30,
     countries: "in",
   });
+
+  const cachedArticles =
+    getCachedArticles(cacheKey);
+
+  if (cachedArticles) {
+    return cachedArticles;
+  }
+
+  const results =
+    await Promise.allSettled([
+      fetchMarketauxNews({
+        search: companyName,
+        numberOfDays: 30,
+        countries: "in",
+      }),
+
+      currentsProvider.getCompanyNews({
+        companyName,
+        aliases: [
+          String(companyName)
+            .replace(/\bLimited\b/gi, "")
+            .replace(/\bLtd\b/gi, "")
+            .trim(),
+        ],
+        limit: 20,
+      }),
+    ]);
+
+
+  const marketauxArticles =
+    results[0].status === "fulfilled"
+      ? results[0].value
+      : [];
+
+  const currentsArticles =
+    results[1].status === "fulfilled"
+      ? results[1].value.map(
+          convertCurrentsToLegacy
+        )
+      : [];
+
+  if (results[0].status === "rejected") {
+    console.error(
+      "Marketaux company news failed:",
+      results[0].reason?.message ||
+        results[0].reason
+    );
+  }
+
+  if (results[1].status === "rejected") {
+    console.error(
+      "Currents company news failed:",
+      results[1].reason?.message ||
+        results[1].reason
+    );
+  }
+
+  const articles =
+    removeExactDuplicateUrls([
+      ...marketauxArticles,
+      ...currentsArticles,
+    ]);
+
+  saveCachedArticles(
+    cacheKey,
+    articles
+  );
+
+  return articles;
 }
 
 async function fetchGlobalMarketNews(
   searchQuery
 ) {
-  return fetchMarketauxNews({
+  const cacheKey = getCacheKey({
+    type: "global",
     search: searchQuery,
     numberOfDays: 30,
     countries: "in",
   });
+
+  const cachedArticles =
+    getCachedArticles(cacheKey);
+
+  if (cachedArticles) {
+    return cachedArticles;
+  }
+
+  const results =
+    await Promise.allSettled([
+      fetchMarketauxNews({
+        search: searchQuery,
+        numberOfDays: 30,
+        countries: "in",
+      }),
+
+      currentsProvider.getGlobalMarketNews({
+        topics: [searchQuery],
+        limit: 20,
+      }),
+    ]);
+
+  const marketauxArticles =
+    results[0].status === "fulfilled"
+      ? results[0].value
+      : [];
+
+  const currentsArticles =
+    results[1].status === "fulfilled"
+      ? results[1].value.map(
+          convertCurrentsToLegacy
+        )
+      : [];
+
+  if (results[0].status === "rejected") {
+    console.error(
+      "Marketaux market news failed:",
+      results[0].reason?.message ||
+        results[0].reason
+    );
+  }
+
+  if (results[1].status === "rejected") {
+    console.error(
+      "Currents market news failed:",
+      results[1].reason?.message ||
+        results[1].reason
+    );
+  }
+
+  const articles =
+    removeExactDuplicateUrls([
+      ...marketauxArticles,
+      ...currentsArticles,
+    ]);
+
+  saveCachedArticles(
+    cacheKey,
+    articles
+  );
+
+  return articles;
 }
 
 module.exports = {
