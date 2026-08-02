@@ -142,6 +142,62 @@ function demoSmallReturn(seed, magnitude) {
   return +((rnd() - 0.48) * magnitude).toFixed(2);
 }
 
+function parseNewsDate(value) {
+  if (!value) {
+    return null;
+  }
+
+  const rawValue = String(value).trim();
+
+  // Converts:
+  // 2026-08-02 11:14:10 +0000
+  // into:
+  // 2026-08-02T11:14:10+00:00
+  const normalizedValue = rawValue
+    .replace(
+      /^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})\s+([+-]\d{2})(\d{2})$/,
+      "$1T$2$3:$4"
+    )
+    // Converts microseconds such as .000000Z to milliseconds.
+    .replace(
+      /\.(\d{3})\d+(Z|[+-]\d{2}:?\d{2})$/,
+      ".$1$2"
+    );
+
+  const parsedDate = new Date(
+    normalizedValue
+  );
+
+  return Number.isNaN(
+    parsedDate.getTime()
+  )
+    ? null
+    : parsedDate;
+}
+
+function formatNewsDate(value) {
+  const parsedDate =
+    parseNewsDate(value);
+
+  if (!parsedDate) {
+    return "Date unavailable";
+  }
+
+  return parsedDate.toLocaleString(
+    "en-IN",
+    {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Kolkata",
+      timeZoneName: "short",
+    }
+  );
+}
+
+
 /* ---------------------------- Benchmark indices (LIVE) ---------------------------- */
 const INDICES = [
   {
@@ -1916,31 +1972,33 @@ useEffect(() => {
           );
         })
         .sort((articleA, articleB) => {
-          const dateA = Date.parse(
-            articleA.publishedAt || ""
-          );
+  const dateA =
+    parseNewsDate(
+      articleA.publishedAt
+    );
 
-          const dateB = Date.parse(
-            articleB.publishedAt || ""
-          );
+  const dateB =
+    parseNewsDate(
+      articleB.publishedAt
+    );
 
-          if (
-            Number.isNaN(dateA) &&
-            Number.isNaN(dateB)
-          ) {
-            return 0;
-          }
+  if (!dateA && !dateB) {
+    return 0;
+  }
 
-          if (Number.isNaN(dateA)) {
-            return 1;
-          }
+  if (!dateA) {
+    return 1;
+  }
 
-          if (Number.isNaN(dateB)) {
-            return -1;
-          }
+  if (!dateB) {
+    return -1;
+  }
 
-          return dateB - dateA;
-        })
+  return (
+    dateB.getTime() -
+    dateA.getTime()
+  );
+})
         .slice(0, 15);
 
       setMarketEvents(
@@ -1948,17 +2006,9 @@ useEffect(() => {
           id: article.id,
           cat: article.category || "Market",
           title: article.title,
-          date: article.publishedAt
-            ? new Date(
-                article.publishedAt
-              ).toLocaleString("en-IN", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit",
-              })
-            : "Date unavailable",
+date: formatNewsDate(
+  article.publishedAt
+),
           desc:
             article.summary ||
             "Open the original report for full details.",
