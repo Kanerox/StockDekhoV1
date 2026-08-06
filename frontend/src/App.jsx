@@ -34,6 +34,7 @@ import FlaskConical from "lucide-react/dist/esm/icons/flask-conical.mjs";
 import Info from "lucide-react/dist/esm/icons/info.mjs";
 import ArrowUpRight from "lucide-react/dist/esm/icons/arrow-up-right.mjs";
 import ArrowDownRight from "lucide-react/dist/esm/icons/arrow-down-right.mjs";
+import ArrowUpDown from "lucide-react/dist/esm/icons/arrow-up-down.mjs";
 import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
 import Clock from "lucide-react/dist/esm/icons/clock.mjs";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left.mjs";
@@ -2808,8 +2809,11 @@ function ThTooltip({ label, infoKey, sortActive, sortDir, onClick, style, align 
       onClick={() => { onClick(); if (info) { if (ref.current) setRect(ref.current.getBoundingClientRect()); setOpen((o) => !o); } }}
       style={{ ...thStyle, ...style, cursor: "pointer", position: "relative", textAlign: align, whiteSpace: "nowrap" }}
     >
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, justifyContent: align === "right" ? "flex-end" : "flex-start", width: "100%" }}>
-        {label}{sortActive && <ChevronDown size={12} style={{ transform: sortDir === "asc" ? "rotate(180deg)" : "none" }} />}
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, justifyContent: align === "right" ? "flex-end" : "flex-start", width: "100%", color: sortActive ? THEME.gold : undefined }}>
+        {label}
+        {sortActive
+          ? <ChevronDown size={12} style={{ transform: sortDir === "asc" ? "rotate(180deg)" : "none" }} />
+          : <ArrowUpDown size={11} style={{ opacity: 0.3 }} />}
         {info && <Info size={10} style={{ opacity: 0.6 }} />}
       </span>
       {open && info && (
@@ -2851,7 +2855,7 @@ function RowMetricLabel({ label, infoKey }) {
   );
 }
 
-function FilterSidebar({ mode, sector, setSector, capSet, setCapSet, peMin, setPeMin, peMax, setPeMax,
+function FilterSidebar({ mode, selectedSectors, setSelectedSectors, capSet, setCapSet, peMin, setPeMin, peMax, setPeMax,
   roeMin, setRoeMin, divMin, setDivMin, deMax, setDeMax, ret1yMin, setRet1yMin, onReset }) {
   const numInputStyle = { width: 70, background: THEME.navyDeep, border: `1px solid ${THEME.hairline}`, color: THEME.ink, borderRadius: 4, padding: "5px 6px", fontSize: 12 };
   return (
@@ -2861,7 +2865,10 @@ function FilterSidebar({ mode, sector, setSector, capSet, setCapSet, peMin, setP
         <button onClick={onReset} style={{ background: "none", border: "none", color: THEME.gold, fontSize: 11, cursor: "pointer" }}>Reset</button>
       </div>
 
-      <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>Market Capitalisation</div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6, display: "flex", alignItems: "center" }}>
+        Market Capitalisation
+        <MetricExplain mode={mode} text="Large, Mid and Small describe a company’s market value and typical liquidity profile. Investors use these categories to understand relative stability, growth potential and trading risk." />
+      </div>
       {["Large", "Mid", "Small"].map((c) => (
         <label key={c} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, padding: "3px 0", cursor: "pointer" }}>
           <input type="checkbox" checked={capSet[c]} onChange={(e) => setCapSet({ ...capSet, [c]: e.target.checked })} />
@@ -2872,13 +2879,27 @@ function FilterSidebar({ mode, sector, setSector, capSet, setCapSet, peMin, setP
         <input type="checkbox" checked={capSet.Micro} onChange={(e) => setCapSet({ ...capSet, Micro: e.target.checked })} />
         Micro Cap
       </label>
-      <ModeExplain mode={mode}>Large caps are typically the most established and liquid; Mid and Small caps can offer more growth potential with more volatility.</ModeExplain>
-
       <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, margin: "16px 0 6px" }}>Sector Classification</div>
-      <select value={sector} onChange={(e) => setSector(e.target.value)} style={{ ...selectStyle, width: "100%" }}>
-        <option>All sectors</option>
-        {SECTOR_LIST.map((s) => <option key={s}>{s}</option>)}
-      </select>
+      <div style={{ maxHeight: 210, overflowY: "auto", paddingRight: 4 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, padding: "3px 0", cursor: "pointer" }}>
+          <input type="checkbox" checked={selectedSectors.length === 0} onChange={() => setSelectedSectors([])} />
+          All sectors
+        </label>
+        {SECTOR_LIST.map((sectorName) => (
+          <label key={sectorName} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, padding: "3px 0", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={selectedSectors.includes(sectorName)}
+              onChange={() => setSelectedSectors(
+                selectedSectors.includes(sectorName)
+                  ? selectedSectors.filter((item) => item !== sectorName)
+                  : [...selectedSectors, sectorName]
+              )}
+            />
+            {sectorName}
+          </label>
+        ))}
+      </div>
 
       <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, margin: "16px 0 6px" }}>P/E range</div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -2912,7 +2933,7 @@ function FilterSidebar({ mode, sector, setSector, capSet, setCapSet, peMin, setP
 
 function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, toggleCompare }) {
   const [q, setQ] = useState("");
-  const [sector, setSector] = useState("All sectors");
+  const [selectedSectors, setSelectedSectors] = useState([]);
   const [capSet, setCapSet] = useState({ Large: true, Mid: true, Small: true, Micro: true });
   const [peMin, setPeMin] = useState("");
   const [peMax, setPeMax] = useState("");
@@ -2920,7 +2941,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
   const [divMin, setDivMin] = useState("");
   const [deMax, setDeMax] = useState("");
   const [ret1yMin, setRet1yMin] = useState("");
-  const [sortKey, setSortKey] = useState("mcap");
+  const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPageN] = useState(1);
   const [liveStocks, setLiveStocks] = useState([]);
@@ -2986,14 +3007,14 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
   }, [stockDefinitions, stockSymbols]);
 
   const resetFilters = () => {
-    setQ(""); setSector("All sectors"); setCapSet({ Large: true, Mid: true, Small: true, Micro: true });
+    setQ(""); setSelectedSectors([]); setCapSet({ Large: true, Mid: true, Small: true, Micro: true });
     setPeMin(""); setPeMax(""); setRoeMin(""); setDivMin(""); setDeMax(""); setRet1yMin("");
     setPageN(1);
   };
 
   let rows = liveStocks.filter((s) => {
     const matchQ = !q || s.name.toLowerCase().includes(q.toLowerCase()) || s.ticker.toLowerCase().includes(q.toLowerCase());
-    const matchSector = sector === "All sectors" || s.sector === sector;
+    const matchSector = selectedSectors.length === 0 || selectedSectors.includes(s.sector);
     const matchCap = capSet[s.cap];
     const matchPeMin = !peMin || (s.pe !== null && s.pe >= parseFloat(peMin));
     const matchPeMax = !peMax || (s.pe !== null && s.pe <= parseFloat(peMax));
@@ -3004,6 +3025,18 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
     return matchQ && matchSector && matchCap && matchPeMin && matchPeMax && matchRoe && matchDiv && matchDe && matchRet;
   });
   rows = [...rows].sort((a, b) => {
+    if (!sortKey) {
+      const watchlistDifference =
+        Number(watchlist.includes(b.ticker)) -
+        Number(watchlist.includes(a.ticker));
+
+      if (watchlistDifference !== 0) {
+        return watchlistDifference;
+      }
+
+      return (b.mcap ?? -Infinity) - (a.mcap ?? -Infinity);
+    }
+
     const av = a[sortKey] ?? null;
     const bv = b[sortKey] ?? null;
 
@@ -3024,17 +3057,22 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
     else { setSortKey(key); setSortDir("desc"); }
   };
 
+  const handleToggleWatch = (ticker) => {
+    toggleWatch(ticker);
+    setPageN(1);
+  };
+
   const stocksTd = { padding: "12px 14px", whiteSpace: "nowrap", overflow: "hidden" };
 
   const cols = [
     { key: "ticker", label: "Company", info: null, width: 240, align: "left" },
-    { key: "sector", label: "Sector", info: "sector", width: 168, align: "left" },
-    { key: "price", label: "EOD Price", info: "price", width: 104, align: "right" },
-    { key: "chgPct", label: "Chg %", info: "chgPct", width: 96, align: "right" },
+    { key: "sector", label: "Sector", info: null, width: 168, align: "left" },
+    { key: "price", label: "EOD Price", info: null, width: 104, align: "right" },
+    { key: "chgPct", label: "Chg %", info: null, width: 96, align: "right" },
     { key: "mcap", label: "Mkt Cap", info: "mcap", width: 116, align: "right" },
-    { key: "pe", label: "P/E", info: "pe", width: 72, align: "right" },
-    { key: "de", label: "D/E", info: "de", width: 72, align: "right" },
-    { key: "ret1y", label: "1Y Return", info: "ret1y", width: 100, align: "right" },
+    { key: "pe", label: "P/E", info: null, width: 72, align: "right" },
+    { key: "de", label: "D/E", info: null, width: 72, align: "right" },
+    { key: "ret1y", label: "1Y Return", info: null, width: 100, align: "right" },
   ];
 
   return (
@@ -3056,10 +3094,10 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
         <div style={{ marginLeft: "auto", fontSize: 12, color: THEME.inkDim, alignSelf: "center" }}>{rows.length} matching companies</div>
       </div>
 
-      <ModeExplain mode={mode}>Use the filters on the left to narrow the universe. Hover (or tap) any column header for a plain-English explanation of that metric. Click a header to sort. The star adds to Watchlist, the + adds to Compare (up to 5).</ModeExplain>
+      <ModeExplain mode={mode}>Use the filters on the left to narrow the universe. Click a metric header with a sort icon to reorder the table; selected information icons explain unfamiliar concepts. The star adds to Watchlist, the + adds to Compare (up to 5).</ModeExplain>
 
       <div style={{ display: "flex", gap: 16, marginTop: 12, alignItems: "flex-start" }}>
-        <FilterSidebar mode={mode} sector={sector} setSector={(v) => { setSector(v); setPageN(1); }}
+        <FilterSidebar mode={mode} selectedSectors={selectedSectors} setSelectedSectors={(value) => { setSelectedSectors(value); setPageN(1); }}
           capSet={capSet} setCapSet={(v) => { setCapSet(v); setPageN(1); }}
           peMin={peMin} setPeMin={(v) => { setPeMin(v); setPageN(1); }} peMax={peMax} setPeMax={(v) => { setPeMax(v); setPageN(1); }}
           roeMin={roeMin} setRoeMin={(v) => { setRoeMin(v); setPageN(1); }}
@@ -3079,16 +3117,20 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
                 <tr style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
                   <th style={thStyle}></th>
                   {cols.map((c) => (
-                    <ThTooltip key={c.key} label={c.label} infoKey={c.info} sortActive={sortKey === c.key} sortDir={sortDir} onClick={() => toggleSort(c.key)}
-                      align={c.align} style={{ padding: "12px 14px" }} />
+                    c.key === "ticker" || c.key === "sector" ? (
+                      <th key={c.key} style={{ ...thStyle, textAlign: c.align, padding: "12px 14px" }}>{c.label}</th>
+                    ) : (
+                      <ThTooltip key={c.key} label={c.label} infoKey={c.info} sortActive={sortKey === c.key} sortDir={sortDir} onClick={() => toggleSort(c.key)}
+                        align={c.align} style={{ padding: "12px 14px" }} />
+                    )
                   ))}
                   <th style={thStyle}></th>
                 </tr>
               </thead>
               <tbody>
                 {pageRows.map((s) => (
-                  <tr key={s.ticker} className="sd-row-hover" style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
-                    <td style={{ ...stocksTd }}><WatchStar active={watchlist.includes(s.ticker)} onClick={() => toggleWatch(s.ticker)} /></td>
+                  <tr key={s.ticker} className="sd-row-hover" style={{ borderBottom: `1px solid ${THEME.hairline}`, background: watchlist.includes(s.ticker) ? "rgba(201,162,75,0.055)" : "transparent" }}>
+                    <td style={{ ...stocksTd }}><WatchStar active={watchlist.includes(s.ticker)} onClick={() => handleToggleWatch(s.ticker)} /></td>
                     <td style={{ ...stocksTd, whiteSpace: "normal" }} onClick={() => openCompany(s.ticker)}>
                       <div style={{ cursor: "pointer", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
                       <div style={{ fontSize: 10.5, color: THEME.inkDim, display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>{s.ticker} · {s.cap} cap {s.live && <LiveTag live small />}</div>
@@ -4302,7 +4344,12 @@ setFinancialsLoading(false);
                   ["Dist. from 52W high", formatMetric(performanceMetrics.distanceFromHigh, 1, "%")],
                 ].map(([label, value]) => (
                   <Panel key={label} style={{ padding: 12 }}>
-                    <div style={{ fontSize: 10.5, color: THEME.inkDim }}>{label}</div>
+                    <div style={{ fontSize: 10.5, color: THEME.inkDim, display: "flex", alignItems: "center" }}>
+                      {label}
+                      {label === "Beta" && (
+                        <MetricExplain mode={mode} text="Beta estimates how strongly a stock has moved relative to the Nifty 50. Investors use it to compare market sensitivity and portfolio risk." />
+                      )}
+                    </div>
                     <div className="sd-mono" style={{ fontSize: 15, marginTop: 4 }}>{value}</div>
                   </Panel>
                 ))}
@@ -4428,7 +4475,13 @@ setFinancialsLoading(false);
     : v !== null
       ? fmtNum(v, 1)
       : "—"
-} mode={mode} explain="Valuation multiples relative to earnings, book value or cash flow — shown with sector/peer context, not as isolated signals." />
+} mode={mode} explain={
+  l.startsWith("EV/EBITDA")
+    ? "EV/EBITDA compares total business value with operating earnings before financing and accounting charges. Investors use it to compare companies with different debt levels and depreciation profiles."
+    : l.startsWith("PEG")
+      ? "PEG compares a company’s P/E ratio with its expected earnings growth. Investors use it to add growth context to an otherwise standalone valuation multiple."
+      : undefined
+} />
             ))}
           </Panel>
           <Panel style={{ padding: 16 }}>
@@ -4440,7 +4493,11 @@ setFinancialsLoading(false);
       ? `${fmtNum(v, 2)}%`
       : fmtNum(v, 2)
     : "—"
-} mode={mode} explain="Profitability and efficiency ratios, shown as trends rather than single-period snapshots." />
+} mode={mode} explain={
+  l === "ROCE %"
+    ? "ROCE measures operating profit relative to the capital used by the business. Investors use it to assess how efficiently a company converts long-term funding into returns."
+    : undefined
+} />
             ))}
           </Panel>
           <Panel style={{ padding: 16 }}>
@@ -4452,7 +4509,11 @@ setFinancialsLoading(false);
   ["Dividend yield %", quote.dividendYield ?? s.divYield],
   ["Payout ratio % (demo)", 24.5]
 ].map(([l, v]) => (
-              <MetricLine key={l} label={l} value={v !== null && v !== undefined ? fmtNum(v, 2) : "—"} mode={mode} explain="Balance-sheet strength and shareholder distribution history." />
+              <MetricLine key={l} label={l} value={v !== null && v !== undefined ? fmtNum(v, 2) : "—"} mode={mode} explain={
+                l === "Dividend yield %"
+                  ? "Dividend yield is the annual dividend relative to the current share price. Investors use it to compare the cash income offered by different investments."
+                  : undefined
+              } />
             ))}
           </Panel>
           <Panel style={{ padding: 16 }}>
@@ -4663,7 +4724,11 @@ setFinancialsLoading(false);
                 <div style={{ fontSize: 12.5, marginTop: 4, whiteSpace: "pre-wrap" }}>{n.text}</div>
               </div>
             ))}
-            {(!notes[ticker] || notes[ticker].length === 0) && <div style={{ fontSize: 12, color: THEME.inkDim }}>No notes yet.</div>}
+            {(!notes[ticker] || notes[ticker].length === 0) && (
+              <div style={{ fontSize: 12, color: THEME.inkDim }}>
+                No notes yet. Add your investment thesis, questions or developments to monitor using the field above.
+              </div>
+            )}
           </div>
         </Panel>
       )}
@@ -4684,7 +4749,7 @@ function IconBtn({ onClick, icon, label, active }) {
 function MetricLine({ label, value, mode, explain }) {
   return (
     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, padding: "6px 0", borderBottom: `1px solid ${THEME.hairline}` }}>
-      <span style={{ color: THEME.inkDim, display: "flex", alignItems: "center" }}>{label}<MetricExplain mode={mode} text={explain} /></span>
+      <span style={{ color: THEME.inkDim, display: "flex", alignItems: "center" }}>{label}{explain && <MetricExplain mode={mode} text={explain} />}</span>
       <span className="sd-mono">{value}</span>
     </div>
   );
@@ -5646,7 +5711,10 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
       </div>
 
       {stocks.length === 0 && (
-        <Panel style={{ padding: 40, textAlign: "center", color: THEME.inkDim }}>Add 2–5 companies above to start comparing performance, valuation and risk.</Panel>
+        <Panel style={{ padding: 40, textAlign: "center" }}>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Start a comparison</div>
+          <div style={{ fontSize: 12.5, color: THEME.inkDim }}>Search above and add 2–5 companies to compare their performance, valuation and risk in one place.</div>
+        </Panel>
       )}
 
       {stocks.length > 0 && (
@@ -5706,7 +5774,7 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
                   const bw = bestWorst(m.key);
                   return (
                     <tr key={m.key} style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
-                      <td style={tdStyle}><RowMetricLabel label={m.label} infoKey={m.key} /></td>
+                      <td style={tdStyle}><RowMetricLabel label={m.label} infoKey={m.key === "divYield" ? "divYield" : null} /></td>
                       {stocks.map((s) => {
                         const liveStock = liveStocks.find((item) => item.ticker === s.ticker);
                         const v = liveStock?.[m.key];
@@ -6172,12 +6240,18 @@ function WatchlistPage({ watchlist, toggleWatch, openCompany, setPage }) {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <SectionHeading eyebrow="No login required" title="Watchlist" />
+      <SectionHeading eyebrow="Research workspace" title="Watchlist" />
+      <Panel style={{ padding: 18, marginBottom: 16 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Your Watchlist</div>
+        <div style={{ fontSize: 12.5, color: THEME.inkDim }}>
+          Save companies you're researching so you can monitor them in one place and quickly return later.
+        </div>
+      </Panel>
       {watchlist.length === 0 ? (
         <Panel style={{ padding: 50, textAlign: "center" }}>
           <Star size={26} color={THEME.gold} style={{ marginBottom: 10 }} />
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Nothing saved yet</div>
-          <div style={{ fontSize: 12.5, color: THEME.inkDim, marginBottom: 14 }}>Add companies from Markets, Stocks, a company page, or Compare — the star icon adds them here for the rest of this session.</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Build your watchlist</div>
+          <div style={{ fontSize: 12.5, color: THEME.inkDim, marginBottom: 14 }}>Select the star beside any company to save it here for quick access.</div>
           <button onClick={() => setPage("stocks")} style={{ background: THEME.gold, color: THEME.navyDeep, border: "none", borderRadius: 4, padding: "8px 16px", fontWeight: 700, cursor: "pointer" }}>Browse All NSE Stocks</button>
         </Panel>
       ) : loading ? (
