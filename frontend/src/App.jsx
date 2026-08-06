@@ -830,6 +830,21 @@ const fmtInt = (n) => (n === null || n === undefined ? "—" : n.toLocaleString(
 const fmtPct = (n) => (n === null || n === undefined ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(2)}%`);
 const fmtCr = (n) => (n === null || n === undefined ? "—" : `₹${fmtInt(Math.round(n))} Cr`);
 const cls = (...a) => a.filter(Boolean).join(" ");
+const formatMarketAsOf = (value) => {
+  if (!value) return "Time unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Time unavailable";
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Asia/Kolkata",
+    timeZoneName: "short",
+  });
+};
 
 /* =========================================================================================
    SMALL SHARED COMPONENTS
@@ -1276,7 +1291,9 @@ function IndexCard({ idx, onOpen }) {
           <Sparkline data={idx.sparkline || []} width={70} height={24} />
         </div>
         <div style={{ fontSize: 10, color: THEME.inkDim, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {isDemo ? "Illustrative 1M series · Demo" : "1M historical close · Yahoo Finance"}
+          {isDemo
+            ? "Illustrative 1M series · Demo"
+            : `As of ${formatMarketAsOf(idx.asOf || idx.marketTime)}`}
         </div>
       </div>
     </div>
@@ -2918,6 +2935,11 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
   const [stocksLoading, setStocksLoading] = useState(true);
   const [stocksError, setStocksError] = useState("");
   const perPage = 12;
+  const stocksAsOf = liveStocks
+    .map((stock) => stock.asOf)
+    .filter(Boolean)
+    .sort()
+    .at(-1);
 
   const stockSymbols = useMemo(
     () => RAW_STOCKS.map((stock) => stock.ticker),
@@ -3030,6 +3052,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
         Represents the broader universe of NSE-listed equities across market-cap bands — not only Nifty 50 constituents.
         This V1 tracks a representative universe using the latest available Yahoo Finance market data; a live product
         would use the complete licensed NSE-listed equity universe under <span className="sd-underline-link">Sector Classification</span>.
+        {stocksAsOf && <> Data as of {formatMarketAsOf(stocksAsOf)}.</>}
       </p>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
@@ -3210,6 +3233,9 @@ function SectorsPage({ mode, openCompany, openSector, activeSector }) {
                 </div>
                 <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 10 }}>
                   {liveSector.companyCount} tracked constituents · {fmtCr(liveSector.combinedMarketCap)} combined market cap
+                </div>
+                <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 4 }}>
+                  As of {formatMarketAsOf(liveSector.asOf)}
                 </div>
                 {liveSector.leader &&
                   liveSector.lagger &&
@@ -4232,7 +4258,7 @@ setFinancialsLoading(false);
     paddingTop: 10,
   }}
 >
-  Market data sourced from Yahoo Finance. For research purposes only. Not investment advice.
+  Market data sourced from Yahoo Finance · As of {formatMarketAsOf(quote.asOf)}. For research purposes only. Not investment advice.
 </div>
       </Panel>
 
