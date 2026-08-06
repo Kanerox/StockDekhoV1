@@ -196,6 +196,10 @@ function formatNewsDate(value) {
   );
 }
 
+function newsDateTimestamp(value) {
+  return parseNewsDate(value)?.getTime() || 0;
+}
+
 
 /* ---------------------------- Benchmark indices (LIVE) ---------------------------- */
 const INDICES = [
@@ -1366,13 +1370,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
             setNews(
               (data.articles || []).map((article) => ({
                 ...article,
-                date: article.publishedAt
-                  ? new Date(article.publishedAt).toLocaleDateString("en-IN", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })
-                  : "Date unavailable",
+                date: formatNewsDate(article.publishedAt),
                 teaser: article.summary || "",
               }))
             );
@@ -1425,7 +1423,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
           )
           .sort(
             (a, b) =>
-              new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0)
+              newsDateTimestamp(b.publishedAt) - newsDateTimestamp(a.publishedAt)
           )
           .filter((article) => {
             const key = article.link || article.title;
@@ -1436,13 +1434,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
           .slice(0, 5)
           .map((article) => ({
             ...article,
-            date: article.publishedAt
-              ? new Date(article.publishedAt).toLocaleDateString("en-IN", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })
-              : "Date unavailable",
+            date: formatNewsDate(article.publishedAt),
             teaser: article.summary || article.snippet || "",
           }));
 
@@ -3332,7 +3324,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
           )
           .sort(
             (a, b) =>
-              new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0)
+              newsDateTimestamp(b.publishedAt) - newsDateTimestamp(a.publishedAt)
           )
           .filter((article) => {
             const key = article.link || article.title;
@@ -3343,13 +3335,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
           .slice(0, 5)
           .map((article) => ({
             ...article,
-            date: article.publishedAt
-              ? new Date(article.publishedAt).toLocaleDateString("en-IN", {
-                  day: "2-digit",
-                  month: "short",
-                  year: "numeric",
-                })
-              : "Date unavailable",
+            date: formatNewsDate(article.publishedAt),
             teaser: article.summary || article.snippet || "",
           }));
 
@@ -3537,13 +3523,7 @@ function CompanyOverviewTab({ ticker, liveNews, newsLoading, newsError }) {
   id: article.id,
   headline: article.title,
 
-  date: article.publishedAt
-    ? new Date(article.publishedAt).toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      })
-    : "Date unavailable",
+  date: formatNewsDate(article.publishedAt),
 
   teaser: article.snippet || "",
   summary: article.summary || article.snippet || "",
