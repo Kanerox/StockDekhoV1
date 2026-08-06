@@ -2795,7 +2795,7 @@ function TooltipPopup({ anchorRect, align = "left", children }) {
   );
 }
 
-function ThTooltip({ label, infoKey, sortActive, sortDir, onClick, style, align = "left" }) {
+function ThTooltip({ label, infoKey, sortActive, sortDir, onClick, style, align = "left", sortable = true }) {
   const [open, setOpen] = useState(false);
   const [rect, setRect] = useState(null);
   const ref = useRef(null);
@@ -2806,14 +2806,16 @@ function ThTooltip({ label, infoKey, sortActive, sortDir, onClick, style, align 
       ref={ref}
       onMouseEnter={() => info && showTooltip()}
       onMouseLeave={() => setOpen(false)}
-      onClick={() => { onClick(); if (info) { if (ref.current) setRect(ref.current.getBoundingClientRect()); setOpen((o) => !o); } }}
-      style={{ ...thStyle, ...style, cursor: "pointer", position: "relative", textAlign: align, whiteSpace: "nowrap" }}
+      onClick={() => { if (sortable && onClick) onClick(); if (info) { if (ref.current) setRect(ref.current.getBoundingClientRect()); setOpen((o) => !o); } }}
+      style={{ ...thStyle, ...style, cursor: sortable ? "pointer" : info ? "help" : "default", position: "relative", textAlign: align, whiteSpace: "nowrap" }}
     >
       <span style={{ display: "inline-flex", alignItems: "center", gap: 3, justifyContent: align === "right" ? "flex-end" : "flex-start", width: "100%", color: sortActive ? THEME.gold : undefined }}>
         {label}
-        {sortActive
-          ? <ChevronDown size={12} style={{ transform: sortDir === "asc" ? "rotate(180deg)" : "none" }} />
-          : <ArrowUpDown size={11} style={{ opacity: 0.3 }} />}
+        {sortable && (
+          sortActive
+            ? <ChevronDown size={12} style={{ transform: sortDir === "asc" ? "rotate(180deg)" : "none" }} />
+            : <ArrowUpDown size={11} style={{ opacity: 0.3 }} />
+        )}
         {info && <Info size={10} style={{ opacity: 0.6 }} />}
       </span>
       {open && info && (
@@ -2907,8 +2909,6 @@ function FilterSidebar({ mode, selectedSectors, setSelectedSectors, capSet, setC
         <span style={{ color: THEME.inkDim, fontSize: 11 }}>–</span>
         <input type="number" placeholder="Max" value={peMax} onChange={(e) => setPeMax(e.target.value)} style={numInputStyle} />
       </div>
-      <ModeExplain mode={mode}>P/E compares price to profit. A "low" or "high" P/E only means something relative to the sector and growth rate — there's no universal good number.</ModeExplain>
-
       <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, margin: "16px 0 6px" }}>1Y Return</div>
       <select value={ret1yRange} onChange={(e) => setRet1yRange(e.target.value)} style={{ ...selectStyle, width: "100%" }}>
         <option value="all">All returns</option>
@@ -3074,11 +3074,11 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
   const cols = [
     { key: "ticker", label: "Company", info: null, width: 240, align: "left" },
     { key: "sector", label: "Sector", info: null, width: 168, align: "left" },
-    { key: "price", label: "EOD Price", info: null, width: 104, align: "right" },
+    { key: "price", label: "EOD Price", info: "price", width: 104, align: "right" },
     { key: "mcap", label: "Mkt Cap", info: "mcap", width: 116, align: "right" },
-    { key: "pe", label: "P/E", info: null, width: 72, align: "right" },
+    { key: "pe", label: "P/E", info: "pe", width: 72, align: "right" },
     { key: "chgPct", label: "Chg %", info: "chgPct", width: 96, align: "right" },
-    { key: "ret1y", label: "1Y Return", info: null, width: 100, align: "right" },
+    { key: "ret1y", label: "1Y Return", info: "ret1y", width: 100, align: "right" },
   ];
 
   return (
@@ -3123,11 +3123,11 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
                 <tr style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
                   <th style={thStyle}></th>
                   {cols.map((c) => (
-                    c.key === "ticker" || c.key === "sector" || c.key === "ret1y" ? (
+                    c.key === "ticker" || c.key === "sector" ? (
                       <th key={c.key} style={{ ...thStyle, textAlign: c.align, padding: "12px 14px" }}>{c.label}</th>
                     ) : (
                       <ThTooltip key={c.key} label={c.label} infoKey={c.info} sortActive={sortKey === c.key} sortDir={sortDir} onClick={() => toggleSort(c.key)}
-                        align={c.align} style={{ padding: "12px 14px" }} />
+                        align={c.align} style={{ padding: "12px 14px" }} sortable={c.key !== "ret1y"} />
                     )
                   ))}
                   <th style={thStyle}></th>
