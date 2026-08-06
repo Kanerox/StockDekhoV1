@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
-import axios from "axios";
 import { getPeerComparison, getStockQuote, getStockUniverse, getMarketPerformers } from "./api/marketApi";
 import CompanyHeader from "./components/CompanyHeader";
 import { getCurrencies, getCurrencyHistory } from "./api/currencyApi";
@@ -6264,7 +6263,6 @@ function Footer() {
 export default function StockDekho() {
  
 
-const [backendMessage, setBackendMessage] = useState("");
 const [page, setPage] = useState("markets");
 const [mode, setMode] = useState("explore");
 const [activeTicker, setActiveTicker] = useState("RELIANCE");
@@ -6274,22 +6272,6 @@ const [watchlist, setWatchlist] = useState(["RELIANCE", "TCS"]);
 const [compareList, setCompareList] = useState(["RELIANCE", "TCS", "INFY"]);
 const [query, setQuery] = useState("");
 const [notes, setNotes] = useState({});  
-
-
-  useEffect(() => {
-    axios
-      .get("http://localhost:3001")
-      .then((response) => {
-        setBackendMessage(response.data.message);
-      })
-      .catch((error) => {
-        console.log(error);
-      });
-  }, []);
-
-
-
-
 
 
   const toggleWatch = (t) => setWatchlist((w) => (w.includes(t) ? w.filter((x) => x !== t) : [...w, t]));
