@@ -1,4 +1,4 @@
-const { getYahooFinanceClient } = require("./yahooClient");
+const { getMarketDataProvider } = require("../providers/marketData");
 
 const CURRENCY_SYMBOLS = {
   USD: "INR=X",
@@ -22,7 +22,7 @@ function getCurrencySymbol(code) {
 async function fetchCurrencyQuotes() {
   const results = await Promise.allSettled(
     Object.values(CURRENCY_SYMBOLS).map((symbol) =>
-      getYahooFinanceClient().quote(symbol)
+      getMarketDataProvider().quote(symbol)
     )
   );
 
@@ -32,7 +32,7 @@ async function fetchCurrencyQuotes() {
 }
 
 async function fetchCurrencyHistory(code, period1, period2) {
-  const result = await getYahooFinanceClient().chart(getCurrencySymbol(code), {
+  const result = await getMarketDataProvider().chart(getCurrencySymbol(code), {
     period1,
     period2,
     interval: "1d",

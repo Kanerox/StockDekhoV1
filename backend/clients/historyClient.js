@@ -1,10 +1,12 @@
-const { getYahooFinanceClient } = require("./yahooClient");
+const {
+  getMarketDataProvider,
+  getMarketDataProviderName,
+} = require("../providers/marketData");
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 
 const FRESH_HISTORY_TTL_MS = 6 * 60 * 60 * 1000;
 const STALE_HISTORY_TTL_MS = 48 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
-const COOLDOWN_CACHE_KEY = "yahoo:blocked-until";
 const requestsInFlight = new Map();
 
 function normalizeSymbol(symbol) {
@@ -28,7 +30,11 @@ function dateKey(date) {
 }
 
 function historyCacheKey(symbol, period1, period2) {
-  return `history:${symbol}:1d:${dateKey(period1)}:${dateKey(period2)}`;
+  return `${getMarketDataProviderName()}:history:${symbol}:1d:${dateKey(period1)}:${dateKey(period2)}`;
+}
+
+function cooldownCacheKey() {
+  return `${getMarketDataProviderName()}:blocked-until`;
 }
 
 function isRateLimitError(error) {
@@ -39,7 +45,7 @@ function isRateLimitError(error) {
 
 async function isYahooCoolingDown() {
   const blockedUntil = await getCachedValue(
-    COOLDOWN_CACHE_KEY,
+    cooldownCacheKey(),
     RATE_LIMIT_COOLDOWN_MS
   );
   return Number(blockedUntil) > Date.now();
@@ -47,7 +53,7 @@ async function isYahooCoolingDown() {
 
 async function startRateLimitCooldown() {
   const blockedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
-  await setCacheEntry(COOLDOWN_CACHE_KEY, blockedUntil, RATE_LIMIT_COOLDOWN_MS);
+  await setCacheEntry(cooldownCacheKey(), blockedUntil, RATE_LIMIT_COOLDOWN_MS);
 }
 
 async function fetchHistoricalPrices(symbol, period1, period2) {
@@ -66,7 +72,7 @@ async function fetchHistoricalPrices(symbol, period1, period2) {
 
   const requestPromise = (async () => {
     try {
-      const result = await getYahooFinanceClient().chart(normalizedSymbol, {
+      const result = await getMarketDataProvider().chart(normalizedSymbol, {
         period1,
         period2,
         interval: "1d",

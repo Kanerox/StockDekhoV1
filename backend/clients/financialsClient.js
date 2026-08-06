@@ -1,4 +1,4 @@
-const { getYahooFinanceClient } = require("./yahooClient");
+const { getMarketDataProvider } = require("../providers/marketData");
 
 function normalizeSymbol(symbol) {
   if (!symbol) {
@@ -33,7 +33,7 @@ async function fetchAnnualFinancialStatement(symbol, module) {
   const yahooSymbol = normalizeSymbol(symbol);
   const { period1, period2 } = getPeriodRange();
 
-  const results = await getYahooFinanceClient().fundamentalsTimeSeries(
+  const results = await getMarketDataProvider().fundamentalsTimeSeries(
     yahooSymbol,
     {
       period1,

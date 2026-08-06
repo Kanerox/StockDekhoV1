@@ -9,6 +9,9 @@ const marketRoutes = require("./routes/marketRoutes");
 const newsRoutes = require("./routes/newsRoutes");
 const sectorRoutes = require("./routes/sectorRoutes");
 const { port } = require("./config/config");
+const {
+  getMarketDataProviderName,
+} = require("./providers/marketData");
 
 const app = express();
 
@@ -22,7 +25,8 @@ app.use("/api/indices", indexRoutes);
 
 app.get("/", (req, res) => {
   res.json({
-    message: "StockDekho Backend is running!"
+    message: "StockDekho Backend is running!",
+    marketDataProvider: getMarketDataProviderName(),
   });
 });
 
@@ -33,5 +37,7 @@ app.use("/api/sectors", sectorRoutes);
 const PORT = process.env.PORT || port;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(
+    `Server running on port ${PORT} with ${getMarketDataProviderName()} market data`
+  );
 });

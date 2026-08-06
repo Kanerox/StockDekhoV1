@@ -1,4 +1,4 @@
-const { getYahooFinanceClient } = require("./yahooClient");
+const { getMarketDataProvider } = require("../providers/marketData");
 
 function normalizeSymbol(symbol) {
   const normalized = String(symbol || "").trim().toUpperCase();
@@ -15,7 +15,7 @@ function normalizeSymbol(symbol) {
 }
 
 async function fetchCompanyEvents(symbol) {
-  return getYahooFinanceClient().quoteSummary(normalizeSymbol(symbol), {
+  return getMarketDataProvider().quoteSummary(normalizeSymbol(symbol), {
     modules: ["calendarEvents", "summaryDetail", "earningsHistory"],
   });
 }

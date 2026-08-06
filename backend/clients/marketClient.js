@@ -1,4 +1,7 @@
-const { getYahooFinanceClient } = require("./yahooClient");
+const {
+  getMarketDataProvider,
+  getMarketDataProviderName,
+} = require("../providers/marketData");
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 
 const FRESH_QUOTE_TTL_MS = 10 * 60 * 1000;
@@ -6,7 +9,6 @@ const STALE_QUOTE_TTL_MS = 6 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
-const COOLDOWN_CACHE_KEY = "yahoo:blocked-until";
 
 const quoteRequestsInFlight = new Map();
 const fundamentalsRequestsInFlight = new Map();
@@ -28,11 +30,15 @@ function normalizeSymbol(symbol) {
 }
 
 function quoteCacheKey(symbol) {
-  return `quote:${symbol}`;
+  return `${getMarketDataProviderName()}:quote:${symbol}`;
 }
 
 function fundamentalsCacheKey(symbol) {
-  return `fundamentals:${symbol}:financialData`;
+  return `${getMarketDataProviderName()}:fundamentals:${symbol}:financialData`;
+}
+
+function cooldownCacheKey() {
+  return `${getMarketDataProviderName()}:blocked-until`;
 }
 
 function wait(milliseconds) {
@@ -53,13 +59,13 @@ function isRateLimitError(error) {
 
 async function startRateLimitCooldown() {
   const blockedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
-  await setCacheEntry(COOLDOWN_CACHE_KEY, blockedUntil, RATE_LIMIT_COOLDOWN_MS);
+  await setCacheEntry(cooldownCacheKey(), blockedUntil, RATE_LIMIT_COOLDOWN_MS);
   console.warn("Yahoo Finance rate limit detected. Pausing new Yahoo requests for 15 minutes.");
 }
 
 async function isYahooCoolingDown() {
   const blockedUntil = await getCachedValue(
-    COOLDOWN_CACHE_KEY,
+    cooldownCacheKey(),
     RATE_LIMIT_COOLDOWN_MS
   );
   return Number(blockedUntil) > Date.now();
@@ -117,7 +123,7 @@ async function fetchMarketData(symbol) {
   const requestPromise = (async () => {
     try {
       const quote = await withRetry(
-        () => getYahooFinanceClient().quote(normalizedSymbol),
+        () => getMarketDataProvider().quote(normalizedSymbol),
         { label: `Yahoo quote ${normalizedSymbol}` }
       );
 
@@ -191,7 +197,7 @@ async function fetchMarketDataBatch(symbols) {
 
   batchRequestInFlight = (async () => {
     const result = await withRetry(
-      () => getYahooFinanceClient().quote(missingSymbols),
+      () => getMarketDataProvider().quote(missingSymbols),
       { label: "Yahoo batch quote request" }
     );
     const fetchedQuotes = (Array.isArray(result) ? result : [result]).filter(Boolean);
@@ -245,7 +251,7 @@ async function fetchPeerFundamentals(symbol) {
     try {
       const summary = await withRetry(
         () =>
-          getYahooFinanceClient().quoteSummary(normalizedSymbol, {
+          getMarketDataProvider().quoteSummary(normalizedSymbol, {
             modules: ["financialData"],
           }),
         { attempts: 1, label: `Yahoo fundamentals ${normalizedSymbol}` }
