@@ -149,12 +149,23 @@ const getStockUniverseFromService = async (symbols) => {
     ),
   ]);
 
-  const quoteByTicker = new Map(
-    quotes.map((quote) => [tickerFromYahooSymbol(quote.symbol), quote])
-  );
+const quoteByTicker = new Map(
+  quotes
+    .filter(
+      (quote) =>
+        quote &&
+        typeof quote.symbol === "string"
+    )
+    .map((quote) => [
+      tickerFromYahooSymbol(quote.symbol),
+      quote,
+    ])
+);
 
   return uniqueSymbols.map((ticker, index) => {
-    const quote = quoteByTicker.get(ticker);
+    const quote = quoteByTicker.get(
+  tickerFromYahooSymbol(ticker)
+);
     const summary =
       fundamentalResults[index]?.status === "fulfilled"
         ? fundamentalResults[index].value
@@ -171,7 +182,12 @@ const getStockUniverseFromService = async (symbols) => {
 
     return {
       ticker,
-      symbol: quote?.symbol || `${ticker}.NS`,
+      symbol:
+  quote?.symbol ||
+  (ticker.endsWith(".NS") ||
+  ticker.endsWith(".BO")
+    ? ticker
+    : `${ticker}.NS`),
       name: quote?.longName || quote?.shortName || ticker,
       price,
       chgPct: valueOrNull(quote?.regularMarketChangePercent),
@@ -308,15 +324,23 @@ const getMarketPerformersFromService = async (
     ]);
 
   const quoteByTicker = new Map(
-    quotes.map((quote) => [
+  quotes
+    .filter(
+      (quote) =>
+        quote &&
+        typeof quote.symbol === "string"
+    )
+    .map((quote) => [
       tickerFromYahooSymbol(quote.symbol),
       quote,
     ])
-  );
+);
 
   const stocks = uniqueSymbols
     .map((ticker, index) => {
-      const quote = quoteByTicker.get(ticker);
+      const quote = quoteByTicker.get(
+  tickerFromYahooSymbol(ticker)
+);
 
       const prices =
         historyResults[index]?.status ===
@@ -329,8 +353,12 @@ const getMarketPerformersFromService = async (
 
       return {
         ticker,
-        symbol:
-          quote?.symbol || `${ticker}.NS`,
+          symbol:
+         quote?.symbol ||
+        (ticker.endsWith(".NS") ||
+         ticker.endsWith(".BO")
+         ? ticker
+        : `${ticker}.NS`),
 
         name:
           quote?.longName ||
