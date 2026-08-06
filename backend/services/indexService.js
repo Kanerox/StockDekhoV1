@@ -9,6 +9,9 @@ const {
   INDICES,
   getIndexDefinition,
 } = require("../config/indexConfig");
+const {
+  getMarketDataProviderName,
+} = require("../providers/marketData");
 
 function valueOrNull(value) {
   return typeof value === "number" && Number.isFinite(value)
@@ -125,6 +128,8 @@ function mapQuote(definition, quote) {
     low52: valueOrNull(quote.fiftyTwoWeekLow),
     high52: valueOrNull(quote.fiftyTwoWeekHigh),
     marketTime: quote.regularMarketTime || null,
+    asOf: quote.regularMarketTime || null,
+    dataProvider: getMarketDataProviderName(),
   };
 }
 

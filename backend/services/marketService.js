@@ -4,6 +4,9 @@ const {
   fetchPeerFundamentals,
 } = require("../clients/marketClient");
 const { fetchHistoricalPrices } = require("../clients/historyClient");
+const {
+  getMarketDataProviderName,
+} = require("../providers/marketData");
 
 const getMarketData = () => {
   return {
@@ -41,6 +44,8 @@ const getStockDataFromService = async (symbol) => {
 
     exchange: quote.fullExchangeName,
     currency: quote.currency,
+    asOf: quote.regularMarketTime || null,
+    dataProvider: getMarketDataProviderName(),
   };
 };
 
@@ -120,6 +125,8 @@ const getPeerComparisonFromService = async (symbols) => {
           debtToEquity === null ? null : debtToEquity / 100,
         dividendYield: valueOrNull(quote.dividendYield),
         oneYearReturn: calculateOneYearReturn(prices),
+        asOf: quote.regularMarketTime || null,
+        dataProvider: getMarketDataProviderName(),
       };
     })
   );
@@ -191,6 +198,8 @@ roe: null,
 divYield: valueOrNull(quote?.dividendYield),
 de: null,
       ret1y: valueOrNull(quote?.fiftyTwoWeekChangePercent),
+      asOf: quote?.regularMarketTime || null,
+      dataProvider: getMarketDataProviderName(),
     };
   });
 };
@@ -382,6 +391,8 @@ const getMarketPerformersFromService = async (
             : null,
 
         returnPercent,
+        asOf: quote?.regularMarketTime || null,
+        dataProvider: getMarketDataProviderName(),
       };
     })
     .filter(

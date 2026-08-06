@@ -8,6 +8,9 @@ const {
   SECTORS,
   getSectorDefinition,
 } = require("../config/sectorConfig");
+const {
+  getMarketDataProviderName,
+} = require("../providers/marketData");
 
 function valueOrNull(value) {
   return typeof value === "number" && Number.isFinite(value)
@@ -116,7 +119,13 @@ function mapQuote(quote, fallbackTicker) {
     pe: valueOrNull(quote?.trailingPE),
     ret1y: valueOrNull(quote?.fiftyTwoWeekChangePercent),
     mcap: marketCap === null ? null : marketCap / 10000000,
+    asOf: quote?.regularMarketTime || null,
   };
+}
+
+function latestHistoryDate(points) {
+  const lastPoint = Array.isArray(points) ? points[points.length - 1] : null;
+  return lastPoint?.date ? new Date(lastPoint.date).toISOString() : null;
 }
 
 async function fetchConstituents(definition) {
@@ -150,6 +159,8 @@ async function getSectorSummary(definition) {
     benchmarkName: definition.benchmarkName,
     benchmarkSymbol: definition.benchmarkSymbol,
     proxy: definition.proxy,
+    asOf: latestHistoryDate(history),
+    dataProvider: getMarketDataProviderName(),
     returns: {
       "1W": calculateTrailingReturn(history, { days: 10 }, 6),
       "1M": calculateTrailingReturn(history, { months: 1 }, 22),
@@ -204,6 +215,8 @@ async function getSectorDetail(key, range = "1Y") {
     benchmarkSymbol: definition.benchmarkSymbol,
     proxy: definition.proxy,
     range,
+    asOf: latestHistoryDate(selectedHistory),
+    dataProvider: getMarketDataProviderName(),
     periodReturn: calculateReturn(selectedHistory),
     returns: {
       "1W": calculateTrailingReturn(metricHistory, { days: 10 }, 6),
