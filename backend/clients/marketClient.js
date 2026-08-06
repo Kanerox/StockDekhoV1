@@ -30,11 +30,16 @@ function normalizeSymbol(symbol) {
 }
 
 function quoteCacheKey(symbol) {
-  return `${getMarketDataProviderName()}:quote:${symbol}`;
+  return providerCacheKey(`quote:${symbol}`);
 }
 
 function fundamentalsCacheKey(symbol) {
-  return `${getMarketDataProviderName()}:fundamentals:${symbol}:financialData`;
+  return providerCacheKey(`fundamentals:${symbol}:financialData`);
+}
+
+function providerCacheKey(key) {
+  const providerName = getMarketDataProviderName();
+  return providerName === "yahoo" ? key : `${providerName}:${key}`;
 }
 
 function cooldownCacheKey() {

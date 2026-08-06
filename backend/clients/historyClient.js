@@ -30,7 +30,9 @@ function dateKey(date) {
 }
 
 function historyCacheKey(symbol, period1, period2) {
-  return `${getMarketDataProviderName()}:history:${symbol}:1d:${dateKey(period1)}:${dateKey(period2)}`;
+  const key = `history:${symbol}:1d:${dateKey(period1)}:${dateKey(period2)}`;
+  const providerName = getMarketDataProviderName();
+  return providerName === "yahoo" ? key : `${providerName}:${key}`;
 }
 
 function cooldownCacheKey() {
