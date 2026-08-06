@@ -34,7 +34,6 @@ import FlaskConical from "lucide-react/dist/esm/icons/flask-conical.mjs";
 import Info from "lucide-react/dist/esm/icons/info.mjs";
 import ArrowUpRight from "lucide-react/dist/esm/icons/arrow-up-right.mjs";
 import ArrowDownRight from "lucide-react/dist/esm/icons/arrow-down-right.mjs";
-import ArrowUpDown from "lucide-react/dist/esm/icons/arrow-up-down.mjs";
 import FileText from "lucide-react/dist/esm/icons/file-text.mjs";
 import Clock from "lucide-react/dist/esm/icons/clock.mjs";
 import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left.mjs";
@@ -2795,7 +2794,7 @@ function TooltipPopup({ anchorRect, align = "left", children }) {
   );
 }
 
-function ThTooltip({ label, infoKey, sortActive, sortDir, onClick, style, align = "left", sortable = true }) {
+function ThTooltip({ label, infoKey, style, align = "left" }) {
   const [open, setOpen] = useState(false);
   const [rect, setRect] = useState(null);
   const ref = useRef(null);
@@ -2806,16 +2805,11 @@ function ThTooltip({ label, infoKey, sortActive, sortDir, onClick, style, align 
       ref={ref}
       onMouseEnter={() => info && showTooltip()}
       onMouseLeave={() => setOpen(false)}
-      onClick={() => { if (sortable && onClick) onClick(); if (info) { if (ref.current) setRect(ref.current.getBoundingClientRect()); setOpen((o) => !o); } }}
-      style={{ ...thStyle, ...style, cursor: sortable ? "pointer" : info ? "help" : "default", position: "relative", textAlign: align, whiteSpace: "nowrap" }}
+      onClick={() => { if (info) { if (ref.current) setRect(ref.current.getBoundingClientRect()); setOpen((o) => !o); } }}
+      style={{ ...thStyle, ...style, cursor: info ? "help" : "default", position: "relative", textAlign: align, whiteSpace: "nowrap" }}
     >
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, justifyContent: align === "right" ? "flex-end" : "flex-start", width: "100%", color: sortActive ? THEME.gold : undefined }}>
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, justifyContent: align === "right" ? "flex-end" : "flex-start", width: "100%" }}>
         {label}
-        {sortable && (
-          sortActive
-            ? <ChevronDown size={12} style={{ transform: sortDir === "asc" ? "rotate(180deg)" : "none" }} />
-            : <ArrowUpDown size={11} style={{ opacity: 0.3 }} />
-        )}
         {info && <Info size={10} style={{ opacity: 0.6 }} />}
       </span>
       {open && info && (
@@ -2857,9 +2851,21 @@ function RowMetricLabel({ label, infoKey }) {
   );
 }
 
-function FilterSidebar({ mode, selectedSectors, setSelectedSectors, capSet, setCapSet, peMin, setPeMin, peMax, setPeMax,
-  roeMin, setRoeMin, divMin, setDivMin, ret1yRange, setRet1yRange, onReset }) {
-  const numInputStyle = { width: 70, background: THEME.navyDeep, border: `1px solid ${THEME.hairline}`, color: THEME.ink, borderRadius: 4, padding: "5px 6px", fontSize: 12 };
+function MetricRangeFilter({ label, value, onChange, options }) {
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>{label}</div>
+      <select value={value} onChange={(event) => onChange(event.target.value)} style={{ ...selectStyle, width: "100%" }}>
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>{optionLabel}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function FilterSidebar({ priceRange, setPriceRange, mcapRange, setMcapRange, peRange, setPeRange,
+  chgRange, setChgRange, ret1yRange, setRet1yRange, onReset }) {
   return (
     <Panel style={{ padding: 16, width: 232, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 140 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
@@ -2867,84 +2873,32 @@ function FilterSidebar({ mode, selectedSectors, setSelectedSectors, capSet, setC
         <button onClick={onReset} style={{ background: "none", border: "none", color: THEME.gold, fontSize: 11, cursor: "pointer" }}>Reset</button>
       </div>
 
-      <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6, display: "flex", alignItems: "center" }}>
-        Market Capitalisation
-        <MetricExplain mode={mode} text="Large, Mid and Small describe a company’s market value and typical liquidity profile. Investors use these categories to understand relative stability, growth potential and trading risk." />
-      </div>
-      {["Large", "Mid", "Small"].map((c) => (
-        <label key={c} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, padding: "3px 0", cursor: "pointer" }}>
-          <input type="checkbox" checked={capSet[c]} onChange={(e) => setCapSet({ ...capSet, [c]: e.target.checked })} />
-          {c} Cap
-        </label>
-      ))}
-      <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, padding: "3px 0", cursor: "pointer", color: THEME.inkDim }}>
-        <input type="checkbox" checked={capSet.Micro} onChange={(e) => setCapSet({ ...capSet, Micro: e.target.checked })} />
-        Micro Cap
-      </label>
-      <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, margin: "16px 0 6px" }}>Sector Classification</div>
-      <div style={{ maxHeight: 210, overflowY: "auto", paddingRight: 4 }}>
-        <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, padding: "3px 0", cursor: "pointer" }}>
-          <input type="checkbox" checked={selectedSectors.length === 0} onChange={() => setSelectedSectors([])} />
-          All sectors
-        </label>
-        {SECTOR_LIST.map((sectorName) => (
-          <label key={sectorName} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, padding: "3px 0", cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={selectedSectors.includes(sectorName)}
-              onChange={() => setSelectedSectors(
-                selectedSectors.includes(sectorName)
-                  ? selectedSectors.filter((item) => item !== sectorName)
-                  : [...selectedSectors, sectorName]
-              )}
-            />
-            {sectorName}
-          </label>
-        ))}
-      </div>
-
-      <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, margin: "16px 0 6px" }}>P/E range</div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-        <input type="number" placeholder="Min" value={peMin} onChange={(e) => setPeMin(e.target.value)} style={numInputStyle} />
-        <span style={{ color: THEME.inkDim, fontSize: 11 }}>–</span>
-        <input type="number" placeholder="Max" value={peMax} onChange={(e) => setPeMax(e.target.value)} style={numInputStyle} />
-      </div>
-      <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, margin: "16px 0 6px" }}>1Y Return</div>
-      <select value={ret1yRange} onChange={(e) => setRet1yRange(e.target.value)} style={{ ...selectStyle, width: "100%" }}>
-        <option value="all">All returns</option>
-        <option value="negative">Negative (&lt; 0%)</option>
-        <option value="moderate">0% to 20%</option>
-        <option value="strong">Above 20%</option>
-      </select>
-
-      {mode === "research" && (
-        <>
-          <div style={{ borderTop: `1px solid ${THEME.hairline}`, margin: "18px 0 12px" }} />
-          <div style={{ fontSize: 11, fontWeight: 700, color: THEME.gold, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 10 }}>Advanced filters</div>
-
-          <div style={{ fontSize: 11.5, color: THEME.inkDim, marginBottom: 4 }}>Min ROE %</div>
-          <input type="number" value={roeMin} onChange={(e) => setRoeMin(e.target.value)} style={{ ...numInputStyle, width: "100%", marginBottom: 10 }} />
-
-          <div style={{ fontSize: 11.5, color: THEME.inkDim, marginBottom: 4 }}>Min dividend yield %</div>
-          <input type="number" value={divMin} onChange={(e) => setDivMin(e.target.value)} style={{ ...numInputStyle, width: "100%", marginBottom: 10 }} />
-
-        </>
-      )}
+      <MetricRangeFilter label="EOD Price" value={priceRange} onChange={setPriceRange} options={[
+        ["all", "All prices"], ["low", "Under ₹500"], ["mid", "₹500 to ₹2,000"], ["high", "Above ₹2,000"],
+      ]} />
+      <MetricRangeFilter label="Market Cap" value={mcapRange} onChange={setMcapRange} options={[
+        ["all", "All market caps"], ["low", "Under ₹20,000 Cr"], ["mid", "₹20,000 to ₹1,00,000 Cr"], ["high", "Above ₹1,00,000 Cr"],
+      ]} />
+      <MetricRangeFilter label="P/E" value={peRange} onChange={setPeRange} options={[
+        ["all", "All P/E ratios"], ["low", "Under 20"], ["mid", "20 to 40"], ["high", "Above 40"],
+      ]} />
+      <MetricRangeFilter label="CHG %" value={chgRange} onChange={setChgRange} options={[
+        ["all", "All daily changes"], ["negative", "Declining (< 0%)"], ["moderate", "0% to 1%"], ["strong", "Above 1%"],
+      ]} />
+      <MetricRangeFilter label="1Y Return" value={ret1yRange} onChange={setRet1yRange} options={[
+        ["all", "All returns"], ["negative", "Negative (< 0%)"], ["moderate", "0% to 20%"], ["strong", "Above 20%"],
+      ]} />
     </Panel>
   );
 }
 
 function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, toggleCompare }) {
   const [q, setQ] = useState("");
-  const [selectedSectors, setSelectedSectors] = useState([]);
-  const [capSet, setCapSet] = useState({ Large: true, Mid: true, Small: true, Micro: true });
-  const [peMin, setPeMin] = useState("");
-  const [peMax, setPeMax] = useState("");
-  const [roeMin, setRoeMin] = useState("");
-  const [divMin, setDivMin] = useState("");
+  const [priceRange, setPriceRange] = useState("all");
+  const [mcapRange, setMcapRange] = useState("all");
+  const [peRange, setPeRange] = useState("all");
+  const [chgRange, setChgRange] = useState("all");
   const [ret1yRange, setRet1yRange] = useState("all");
-  const [sortKey, setSortKey] = useState(null);
-  const [sortDir, setSortDir] = useState("desc");
   const [page, setPageN] = useState(1);
   const [liveStocks, setLiveStocks] = useState([]);
   const [stocksLoading, setStocksLoading] = useState(true);
@@ -3009,19 +2963,41 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
   }, [stockDefinitions, stockSymbols]);
 
   const resetFilters = () => {
-    setQ(""); setSelectedSectors([]); setCapSet({ Large: true, Mid: true, Small: true, Micro: true });
-    setPeMin(""); setPeMax(""); setRoeMin(""); setDivMin(""); setRet1yRange("all");
+    setQ(""); setPriceRange("all"); setMcapRange("all"); setPeRange("all");
+    setChgRange("all"); setRet1yRange("all");
     setPageN(1);
   };
 
   let rows = liveStocks.filter((s) => {
     const matchQ = !q || s.name.toLowerCase().includes(q.toLowerCase()) || s.ticker.toLowerCase().includes(q.toLowerCase());
-    const matchSector = selectedSectors.length === 0 || selectedSectors.includes(s.sector);
-    const matchCap = capSet[s.cap];
-    const matchPeMin = !peMin || (s.pe !== null && s.pe >= parseFloat(peMin));
-    const matchPeMax = !peMax || (s.pe !== null && s.pe <= parseFloat(peMax));
-    const matchRoe = !roeMin || (s.roe !== null && s.roe !== undefined && s.roe >= parseFloat(roeMin));
-    const matchDiv = !divMin || (s.divYield !== null && s.divYield >= parseFloat(divMin));
+    const matchPrice = priceRange === "all" || (
+      Number.isFinite(s.price) && (
+        (priceRange === "low" && s.price < 500) ||
+        (priceRange === "mid" && s.price >= 500 && s.price <= 2000) ||
+        (priceRange === "high" && s.price > 2000)
+      )
+    );
+    const matchMcap = mcapRange === "all" || (
+      Number.isFinite(s.mcap) && (
+        (mcapRange === "low" && s.mcap < 20000) ||
+        (mcapRange === "mid" && s.mcap >= 20000 && s.mcap <= 100000) ||
+        (mcapRange === "high" && s.mcap > 100000)
+      )
+    );
+    const matchPe = peRange === "all" || (
+      Number.isFinite(s.pe) && (
+        (peRange === "low" && s.pe < 20) ||
+        (peRange === "mid" && s.pe >= 20 && s.pe <= 40) ||
+        (peRange === "high" && s.pe > 40)
+      )
+    );
+    const matchChg = chgRange === "all" || (
+      Number.isFinite(s.chgPct) && (
+        (chgRange === "negative" && s.chgPct < 0) ||
+        (chgRange === "moderate" && s.chgPct >= 0 && s.chgPct <= 1) ||
+        (chgRange === "strong" && s.chgPct > 1)
+      )
+    );
     const matchRet = ret1yRange === "all" || (
       Number.isFinite(s.ret1y) && (
         (ret1yRange === "negative" && s.ret1y < 0) ||
@@ -3029,40 +3005,21 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
         (ret1yRange === "strong" && s.ret1y > 20)
       )
     );
-    return matchQ && matchSector && matchCap && matchPeMin && matchPeMax && matchRoe && matchDiv && matchRet;
+    return matchQ && matchPrice && matchMcap && matchPe && matchChg && matchRet;
   });
   rows = [...rows].sort((a, b) => {
-    if (!sortKey) {
-      const watchlistDifference =
-        Number(watchlist.includes(b.ticker)) -
-        Number(watchlist.includes(a.ticker));
+    const watchlistDifference =
+      Number(watchlist.includes(b.ticker)) -
+      Number(watchlist.includes(a.ticker));
 
-      if (watchlistDifference !== 0) {
-        return watchlistDifference;
-      }
-
-      return (b.mcap ?? -Infinity) - (a.mcap ?? -Infinity);
+    if (watchlistDifference !== 0) {
+      return watchlistDifference;
     }
 
-    const av = a[sortKey] ?? null;
-    const bv = b[sortKey] ?? null;
-
-    if (typeof av === "string" || typeof bv === "string") {
-      const comparison = String(av || "").localeCompare(String(bv || ""));
-      return sortDir === "desc" ? -comparison : comparison;
-    }
-
-    const numericA = av ?? -Infinity;
-    const numericB = bv ?? -Infinity;
-    return sortDir === "desc" ? numericB - numericA : numericA - numericB;
+    return (b.mcap ?? -Infinity) - (a.mcap ?? -Infinity);
   });
   const totalPages = Math.max(1, Math.ceil(rows.length / perPage));
   const pageRows = rows.slice((page - 1) * perPage, page * perPage);
-
-  const toggleSort = (key) => {
-    if (sortKey === key) setSortDir((d) => (d === "desc" ? "asc" : "desc"));
-    else { setSortKey(key); setSortDir("desc"); }
-  };
 
   const handleToggleWatch = (ticker) => {
     toggleWatch(ticker);
@@ -3100,14 +3057,14 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
         <div style={{ marginLeft: "auto", fontSize: 12, color: THEME.inkDim, alignSelf: "center" }}>{rows.length} matching companies</div>
       </div>
 
-      <ModeExplain mode={mode}>Use the filters on the left to narrow the universe. Click a metric header with a sort icon to reorder the table; selected information icons explain unfamiliar concepts. The star adds to Watchlist, the + adds to Compare (up to 5).</ModeExplain>
+      <ModeExplain mode={mode}>Use the metric filters on the left to narrow the universe; selected information icons explain unfamiliar concepts. The star adds to Watchlist, the + adds to Compare (up to 5).</ModeExplain>
 
       <div style={{ display: "flex", gap: 16, marginTop: 12, alignItems: "flex-start" }}>
-        <FilterSidebar mode={mode} selectedSectors={selectedSectors} setSelectedSectors={(value) => { setSelectedSectors(value); setPageN(1); }}
-          capSet={capSet} setCapSet={(v) => { setCapSet(v); setPageN(1); }}
-          peMin={peMin} setPeMin={(v) => { setPeMin(v); setPageN(1); }} peMax={peMax} setPeMax={(v) => { setPeMax(v); setPageN(1); }}
-          roeMin={roeMin} setRoeMin={(v) => { setRoeMin(v); setPageN(1); }}
-          divMin={divMin} setDivMin={(v) => { setDivMin(v); setPageN(1); }}
+        <FilterSidebar
+          priceRange={priceRange} setPriceRange={(value) => { setPriceRange(value); setPageN(1); }}
+          mcapRange={mcapRange} setMcapRange={(value) => { setMcapRange(value); setPageN(1); }}
+          peRange={peRange} setPeRange={(value) => { setPeRange(value); setPageN(1); }}
+          chgRange={chgRange} setChgRange={(value) => { setChgRange(value); setPageN(1); }}
           ret1yRange={ret1yRange} setRet1yRange={(value) => { setRet1yRange(value); setPageN(1); }}
           onReset={resetFilters} />
 
@@ -3126,8 +3083,8 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
                     c.key === "ticker" || c.key === "sector" ? (
                       <th key={c.key} style={{ ...thStyle, textAlign: c.align, padding: "12px 14px" }}>{c.label}</th>
                     ) : (
-                      <ThTooltip key={c.key} label={c.label} infoKey={c.info} sortActive={sortKey === c.key} sortDir={sortDir} onClick={() => toggleSort(c.key)}
-                        align={c.align} style={{ padding: "12px 14px" }} sortable={c.key !== "ret1y"} />
+                      <ThTooltip key={c.key} label={c.label} infoKey={c.info}
+                        align={c.align} style={{ padding: "12px 14px" }} />
                     )
                   ))}
                   <th style={thStyle}></th>
