@@ -1,4 +1,8 @@
 const axios = require("axios");
+const {
+  getCachedValue,
+  setCacheEntry,
+} = require("./cacheClient");
 
 const currentsProvider = require(
   "../news/providers/currents"
@@ -10,7 +14,10 @@ const MARKETAUX_URL =
 const CACHE_TTL_MS =
   30 * 60 * 1000;
 
-const newsCache = new Map();
+const CACHE_RETENTION_MS =
+  24 * 60 * 60 * 1000;
+
+const inFlightRequests = new Map();
 
 function getMarketauxApiKey() {
   const apiKey =
@@ -162,35 +169,71 @@ function getCacheKey({
   });
 }
 
-function getCachedArticles(cacheKey) {
-  const cachedEntry =
-    newsCache.get(cacheKey);
-
-  if (!cachedEntry) {
-    return null;
-  }
-
-  const expired =
-    Date.now() -
-      cachedEntry.createdAt >
-    CACHE_TTL_MS;
-
-  if (expired) {
-    newsCache.delete(cacheKey);
-    return null;
-  }
-
-  return cachedEntry.articles;
+function persistentCacheKey(cacheKey) {
+  return `news:${cacheKey}`;
 }
 
-function saveCachedArticles(
+async function getCachedArticles(
   cacheKey,
-  articles
+  maxAgeMs = CACHE_TTL_MS
 ) {
-  newsCache.set(cacheKey, {
-    createdAt: Date.now(),
+  return getCachedValue(
+    persistentCacheKey(cacheKey),
+    maxAgeMs
+  );
+}
+
+async function saveCachedArticles(cacheKey, articles) {
+  await setCacheEntry(
+    persistentCacheKey(cacheKey),
     articles,
+    CACHE_RETENTION_MS
+  );
+}
+
+async function getOrFetchArticles(cacheKey, fetchArticles) {
+  const cachedArticles =
+    await getCachedArticles(cacheKey);
+
+  if (cachedArticles) {
+    return cachedArticles;
+  }
+
+  if (inFlightRequests.has(cacheKey)) {
+    return inFlightRequests.get(cacheKey);
+  }
+
+  const request = (async () => {
+    const staleArticles = await getCachedArticles(
+      cacheKey,
+      CACHE_RETENTION_MS
+    );
+
+    try {
+      const articles = await fetchArticles();
+
+      if (articles.length > 0) {
+        await saveCachedArticles(cacheKey, articles);
+        return articles;
+      }
+
+      return staleArticles || [];
+    } catch (error) {
+      if (staleArticles) {
+        console.warn(
+          "News providers failed; using cached articles."
+        );
+        return staleArticles;
+      }
+
+      throw error;
+    }
+  })().finally(() => {
+    inFlightRequests.delete(cacheKey);
   });
+
+  inFlightRequests.set(cacheKey, request);
+  return request;
 }
 
 async function fetchMarketauxNews({
@@ -299,15 +342,8 @@ async function fetchCompanyNews(
     countries: "in",
   });
 
-  const cachedArticles =
-    getCachedArticles(cacheKey);
-
-  if (cachedArticles) {
-    return cachedArticles;
-  }
-
-  const results =
-    await Promise.allSettled([
+  return getOrFetchArticles(cacheKey, async () => {
+    const results = await Promise.allSettled([
       fetchMarketauxNews({
         search: companyName,
         numberOfDays: 30,
@@ -327,46 +363,39 @@ async function fetchCompanyNews(
     ]);
 
 
-  const marketauxArticles =
-    results[0].status === "fulfilled"
-      ? results[0].value
-      : [];
+    const marketauxArticles =
+      results[0].status === "fulfilled"
+        ? results[0].value
+        : [];
 
-  const currentsArticles =
-    results[1].status === "fulfilled"
-      ? results[1].value.map(
-          convertCurrentsToLegacy
-        )
-      : [];
+    const currentsArticles =
+      results[1].status === "fulfilled"
+        ? results[1].value.map(
+            convertCurrentsToLegacy
+          )
+        : [];
 
-  if (results[0].status === "rejected") {
-    console.error(
-      "Marketaux company news failed:",
-      results[0].reason?.message ||
-        results[0].reason
-    );
-  }
+    if (results[0].status === "rejected") {
+      console.error(
+        "Marketaux company news failed:",
+        results[0].reason?.message ||
+          results[0].reason
+      );
+    }
 
-  if (results[1].status === "rejected") {
-    console.error(
-      "Currents company news failed:",
-      results[1].reason?.message ||
-        results[1].reason
-    );
-  }
+    if (results[1].status === "rejected") {
+      console.error(
+        "Currents company news failed:",
+        results[1].reason?.message ||
+          results[1].reason
+      );
+    }
 
-  const articles =
-    removeExactDuplicateUrls([
+    return removeExactDuplicateUrls([
       ...marketauxArticles,
       ...currentsArticles,
     ]);
-
-  saveCachedArticles(
-    cacheKey,
-    articles
-  );
-
-  return articles;
+  });
 }
 
 async function fetchGlobalMarketNews(
@@ -379,15 +408,8 @@ async function fetchGlobalMarketNews(
     countries: "in",
   });
 
-  const cachedArticles =
-    getCachedArticles(cacheKey);
-
-  if (cachedArticles) {
-    return cachedArticles;
-  }
-
-  const results =
-    await Promise.allSettled([
+  return getOrFetchArticles(cacheKey, async () => {
+    const results = await Promise.allSettled([
       fetchMarketauxNews({
         search: searchQuery,
         numberOfDays: 30,
@@ -400,46 +422,39 @@ async function fetchGlobalMarketNews(
       }),
     ]);
 
-  const marketauxArticles =
-    results[0].status === "fulfilled"
-      ? results[0].value
-      : [];
+    const marketauxArticles =
+      results[0].status === "fulfilled"
+        ? results[0].value
+        : [];
 
-  const currentsArticles =
-    results[1].status === "fulfilled"
-      ? results[1].value.map(
-          convertCurrentsToLegacy
-        )
-      : [];
+    const currentsArticles =
+      results[1].status === "fulfilled"
+        ? results[1].value.map(
+            convertCurrentsToLegacy
+          )
+        : [];
 
-  if (results[0].status === "rejected") {
-    console.error(
-      "Marketaux market news failed:",
-      results[0].reason?.message ||
-        results[0].reason
-    );
-  }
+    if (results[0].status === "rejected") {
+      console.error(
+        "Marketaux market news failed:",
+        results[0].reason?.message ||
+          results[0].reason
+      );
+    }
 
-  if (results[1].status === "rejected") {
-    console.error(
-      "Currents market news failed:",
-      results[1].reason?.message ||
-        results[1].reason
-    );
-  }
+    if (results[1].status === "rejected") {
+      console.error(
+        "Currents market news failed:",
+        results[1].reason?.message ||
+          results[1].reason
+      );
+    }
 
-  const articles =
-    removeExactDuplicateUrls([
+    return removeExactDuplicateUrls([
       ...marketauxArticles,
       ...currentsArticles,
     ]);
-
-  saveCachedArticles(
-    cacheKey,
-    articles
-  );
-
-  return articles;
+  });
 }
 
 module.exports = {

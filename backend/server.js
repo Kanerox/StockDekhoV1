@@ -12,11 +12,14 @@ const { port } = require("./config/config");
 const {
   getMarketDataProviderName,
 } = require("./providers/marketData");
+const apiRateLimit = require("./middleware/apiRateLimit");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.set("trust proxy", 1);
+app.use("/api", apiRateLimit);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/events", eventsRoutes);
 app.use("/api/financials", financialsRoutes);
