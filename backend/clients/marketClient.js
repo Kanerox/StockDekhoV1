@@ -1,44 +1,20 @@
-const {
-  getYahooFinanceClient,
-} = require("./yahooClient");
+const { getYahooFinanceClient } = require("./yahooClient");
+const { getCachedValue, setCacheEntry } = require("./cacheClient");
 
-const FRESH_QUOTE_TTL_MS =
-  10 * 60 * 1000;
-
-const STALE_QUOTE_TTL_MS =
-  6 * 60 * 60 * 1000;
-
-const FUNDAMENTALS_TTL_MS =
-  24 * 60 * 60 * 1000;
-
-const STALE_FUNDAMENTALS_TTL_MS =
-  7 * 24 * 60 * 60 * 1000;
-
-const RATE_LIMIT_COOLDOWN_MS =
-  15 * 60 * 1000;
-
-const quoteCache = new Map();
-const fundamentalsCache = new Map();
+const FRESH_QUOTE_TTL_MS = 10 * 60 * 1000;
+const STALE_QUOTE_TTL_MS = 6 * 60 * 60 * 1000;
+const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
+const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
+const COOLDOWN_CACHE_KEY = "yahoo:blocked-until";
 
 const quoteRequestsInFlight = new Map();
-const fundamentalsRequestsInFlight =
-  new Map();
-
+const fundamentalsRequestsInFlight = new Map();
 let batchRequestInFlight = null;
-let yahooBlockedUntil = 0;
 
 function normalizeSymbol(symbol) {
-  const normalized = String(
-    symbol || ""
-  )
-    .trim()
-    .toUpperCase();
-
-  if (!normalized) {
-    throw new Error(
-      "A stock symbol is required"
-    );
-  }
+  const normalized = String(symbol || "").trim().toUpperCase();
+  if (!normalized) throw new Error("A stock symbol is required");
 
   if (
     normalized.startsWith("^") ||
@@ -51,84 +27,61 @@ function normalizeSymbol(symbol) {
   return `${normalized}.NS`;
 }
 
+function quoteCacheKey(symbol) {
+  return `quote:${symbol}`;
+}
+
+function fundamentalsCacheKey(symbol) {
+  return `fundamentals:${symbol}:financialData`;
+}
+
 function wait(milliseconds) {
-  return new Promise((resolve) =>
-    setTimeout(resolve, milliseconds)
-  );
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function isRateLimitError(error) {
-  const status =
-    error?.response?.status ||
-    error?.status ||
-    error?.statusCode;
-
-  const message = String(
-    error?.message || ""
-  ).toLowerCase();
+  const status = error?.response?.status || error?.status || error?.statusCode;
+  const message = String(error?.message || "").toLowerCase();
 
   return (
     status === 429 ||
     message.includes("429") ||
-    message.includes(
-      "too many requests"
-    ) ||
-    message.includes(
-      "failed to get crumb"
-    )
+    message.includes("too many requests") ||
+    message.includes("failed to get crumb")
   );
 }
 
-function startRateLimitCooldown() {
-  yahooBlockedUntil =
-    Date.now() +
-    RATE_LIMIT_COOLDOWN_MS;
+async function startRateLimitCooldown() {
+  const blockedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
+  await setCacheEntry(COOLDOWN_CACHE_KEY, blockedUntil, RATE_LIMIT_COOLDOWN_MS);
+  console.warn("Yahoo Finance rate limit detected. Pausing new Yahoo requests for 15 minutes.");
+}
 
-  console.warn(
-    "Yahoo Finance rate limit detected. " +
-      "Pausing new Yahoo requests for 15 minutes."
+async function isYahooCoolingDown() {
+  const blockedUntil = await getCachedValue(
+    COOLDOWN_CACHE_KEY,
+    RATE_LIMIT_COOLDOWN_MS
   );
+  return Number(blockedUntil) > Date.now();
 }
 
-function isYahooCoolingDown() {
-  return Date.now() < yahooBlockedUntil;
-}
-
-async function withRetry(
-  operation,
-  {
-    attempts = 2,
-    initialDelay = 800,
-    label = "Yahoo Finance request",
-  } = {}
-) {
+async function withRetry(operation, { attempts = 2, initialDelay = 800, label = "Yahoo Finance request" } = {}) {
   let lastError;
 
-  for (
-    let attempt = 1;
-    attempt <= attempts;
-    attempt += 1
-  ) {
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       return await operation();
     } catch (error) {
       lastError = error;
-
-      console.error(
-        `${label} failed on attempt ${attempt}/${attempts}:`,
-        error.message
-      );
+      console.error(`${label} failed on attempt ${attempt}/${attempts}:`, error.message);
 
       if (isRateLimitError(error)) {
-        startRateLimitCooldown();
+        await startRateLimitCooldown();
         throw error;
       }
 
       if (attempt < attempts) {
-        await wait(
-          initialDelay *
-            Math.pow(2, attempt - 1)
-        );
+        await wait(initialDelay * Math.pow(2, attempt - 1));
       }
     }
   }
@@ -136,427 +89,184 @@ async function withRetry(
   throw lastError;
 }
 
-function getCachedValue(
-  cache,
-  key,
-  maxAge
-) {
-  const cached = cache.get(key);
-
-  if (!cached) {
-    return null;
-  }
-
-  if (
-    Date.now() - cached.savedAt >
-    maxAge
-  ) {
-    return null;
-  }
-
-  return cached.value;
-}
-
-function saveCachedValue(
-  cache,
-  key,
-  value
-) {
-  cache.set(key, {
-    value,
-    savedAt: Date.now(),
-  });
-}
-
-function getStaleQuotes(symbols) {
-  return symbols
-    .map((symbol) =>
-      getCachedValue(
-        quoteCache,
-        symbol,
-        STALE_QUOTE_TTL_MS
-      )
+async function getStaleQuotes(symbols) {
+  const quotes = await Promise.all(
+    symbols.map((symbol) =>
+      getCachedValue(quoteCacheKey(symbol), STALE_QUOTE_TTL_MS)
     )
-    .filter(Boolean);
+  );
+  return quotes.filter(Boolean);
 }
 
-const fetchMarketData = async (
-  symbol
-) => {
-  const normalizedSymbol =
-    normalizeSymbol(symbol);
+async function fetchMarketData(symbol) {
+  const normalizedSymbol = normalizeSymbol(symbol);
+  const key = quoteCacheKey(normalizedSymbol);
+  const freshQuote = await getCachedValue(key, FRESH_QUOTE_TTL_MS);
+  if (freshQuote) return freshQuote;
 
-  const freshQuote =
-    getCachedValue(
-      quoteCache,
-      normalizedSymbol,
-      FRESH_QUOTE_TTL_MS
-    );
-
-  if (freshQuote) {
-    return freshQuote;
+  if (await isYahooCoolingDown()) {
+    const staleQuote = await getCachedValue(key, STALE_QUOTE_TTL_MS);
+    if (staleQuote) return staleQuote;
+    throw new Error("Yahoo Finance is temporarily rate limited");
   }
 
-  if (isYahooCoolingDown()) {
-    const staleQuote =
-      getCachedValue(
-        quoteCache,
-        normalizedSymbol,
-        STALE_QUOTE_TTL_MS
-      );
-
-    if (staleQuote) {
-      return staleQuote;
-    }
-
-    throw new Error(
-      "Yahoo Finance is temporarily rate limited"
-    );
-  }
-
-  if (
-    quoteRequestsInFlight.has(
-      normalizedSymbol
-    )
-  ) {
-    return quoteRequestsInFlight.get(
-      normalizedSymbol
-    );
+  if (quoteRequestsInFlight.has(normalizedSymbol)) {
+    return quoteRequestsInFlight.get(normalizedSymbol);
   }
 
   const requestPromise = (async () => {
     try {
       const quote = await withRetry(
-        () =>
-          getYahooFinanceClient().quote(
-            normalizedSymbol
-          ),
-        {
-          label:
-            `Yahoo quote ${normalizedSymbol}`,
-        }
+        () => getYahooFinanceClient().quote(normalizedSymbol),
+        { label: `Yahoo quote ${normalizedSymbol}` }
       );
 
       if (quote?.symbol) {
-        saveCachedValue(
-          quoteCache,
-          normalizeSymbol(quote.symbol),
-          quote
-        );
-      }
-
-      return quote;
-    } catch (error) {
-      const staleQuote =
-        getCachedValue(
-          quoteCache,
-          normalizedSymbol,
+        await setCacheEntry(
+          quoteCacheKey(normalizeSymbol(quote.symbol)),
+          quote,
           STALE_QUOTE_TTL_MS
         );
-
+      }
+      return quote;
+    } catch (error) {
+      const staleQuote = await getCachedValue(key, STALE_QUOTE_TTL_MS);
       if (staleQuote) {
-        console.warn(
-          `Using stale cached quote for ${normalizedSymbol}`
-        );
-
+        console.warn(`Using stale cached quote for ${normalizedSymbol}`);
         return staleQuote;
       }
-
       throw error;
     } finally {
-      quoteRequestsInFlight.delete(
-        normalizedSymbol
-      );
+      quoteRequestsInFlight.delete(normalizedSymbol);
     }
   })();
 
-  quoteRequestsInFlight.set(
-    normalizedSymbol,
-    requestPromise
+  quoteRequestsInFlight.set(normalizedSymbol, requestPromise);
+  return requestPromise;
+}
+
+async function collectCachedQuotes(symbols, maxAgeMs) {
+  const values = await Promise.all(
+    symbols.map((symbol) => getCachedValue(quoteCacheKey(symbol), maxAgeMs))
+  );
+  const cachedQuotes = values.filter(Boolean);
+  const missingSymbols = symbols.filter((symbol, index) => !values[index]);
+  return { cachedQuotes, missingSymbols };
+}
+
+async function fetchMarketDataBatch(symbols) {
+  const normalizedSymbols = [...new Set(symbols.map(normalizeSymbol))];
+  let { cachedQuotes, missingSymbols } = await collectCachedQuotes(
+    normalizedSymbols,
+    FRESH_QUOTE_TTL_MS
   );
 
-  return requestPromise;
-};
+  if (missingSymbols.length === 0) return cachedQuotes;
 
-const fetchMarketDataBatch = async (
-  symbols
-) => {
-  const normalizedSymbols = [
-    ...new Set(
-      symbols.map(normalizeSymbol)
-    ),
-  ];
-
-  const collectCachedData = () => {
-    const cachedQuotes = [];
-    const missingSymbols = [];
-
-    normalizedSymbols.forEach(
-      (symbol) => {
-        const quote =
-          getCachedValue(
-            quoteCache,
-            symbol,
-            FRESH_QUOTE_TTL_MS
-          );
-
-        if (quote) {
-          cachedQuotes.push(quote);
-        } else {
-          missingSymbols.push(symbol);
-        }
-      }
-    );
-
-    return {
-      cachedQuotes,
-      missingSymbols,
-    };
-  };
-
-  let {
-    cachedQuotes,
-    missingSymbols,
-  } = collectCachedData();
-
-  if (missingSymbols.length === 0) {
-    return cachedQuotes;
+  if (await isYahooCoolingDown()) {
+    const staleQuotes = await getStaleQuotes(missingSymbols);
+    if (cachedQuotes.length || staleQuotes.length) return [...cachedQuotes, ...staleQuotes];
+    throw new Error("Yahoo Finance is temporarily rate limited");
   }
 
-  if (isYahooCoolingDown()) {
-    const staleQuotes =
-      getStaleQuotes(missingSymbols);
-
-    if (
-      cachedQuotes.length > 0 ||
-      staleQuotes.length > 0
-    ) {
-      return [
-        ...cachedQuotes,
-        ...staleQuotes,
-      ];
-    }
-
-    throw new Error(
-      "Yahoo Finance is temporarily rate limited"
-    );
-  }
-
-  // Allow only one Yahoo batch request at a time.
-  // Other callers wait, then recheck the cache.
   if (batchRequestInFlight) {
     try {
       await batchRequestInFlight;
     } catch {
-      // Recheck the cache below.
+      // The cache and cooldown are checked again below.
     }
 
-    ({
-      cachedQuotes,
-      missingSymbols,
-    } = collectCachedData());
+    ({ cachedQuotes, missingSymbols } = await collectCachedQuotes(
+      normalizedSymbols,
+      FRESH_QUOTE_TTL_MS
+    ));
+    if (missingSymbols.length === 0) return cachedQuotes;
 
-    if (missingSymbols.length === 0) {
-      return cachedQuotes;
-    }
-
-    if (isYahooCoolingDown()) {
-      const staleQuotes =
-        getStaleQuotes(missingSymbols);
-
-      if (
-        cachedQuotes.length > 0 ||
-        staleQuotes.length > 0
-      ) {
-        return [
-          ...cachedQuotes,
-          ...staleQuotes,
-        ];
-      }
-
-      throw new Error(
-        "Yahoo Finance is temporarily rate limited"
-      );
+    if (await isYahooCoolingDown()) {
+      const staleQuotes = await getStaleQuotes(missingSymbols);
+      if (cachedQuotes.length || staleQuotes.length) return [...cachedQuotes, ...staleQuotes];
+      throw new Error("Yahoo Finance is temporarily rate limited");
     }
   }
 
-  batchRequestInFlight =
-    (async () => {
-      const result =
-        await withRetry(
-          () =>
-            getYahooFinanceClient().quote(
-              missingSymbols
-            ),
-          {
-            label:
-              "Yahoo batch quote request",
-          }
-        );
+  batchRequestInFlight = (async () => {
+    const result = await withRetry(
+      () => getYahooFinanceClient().quote(missingSymbols),
+      { label: "Yahoo batch quote request" }
+    );
+    const fetchedQuotes = (Array.isArray(result) ? result : [result]).filter(Boolean);
 
-      const fetchedQuotes =
-        Array.isArray(result)
-          ? result
-          : [result];
-
+    await Promise.all(
       fetchedQuotes
-        .filter(
-          (quote) =>
-            quote &&
-            typeof quote.symbol ===
-              "string"
+        .filter((quote) => typeof quote?.symbol === "string")
+        .map((quote) =>
+          setCacheEntry(
+            quoteCacheKey(normalizeSymbol(quote.symbol)),
+            quote,
+            STALE_QUOTE_TTL_MS
+          )
         )
-        .forEach((quote) => {
-          saveCachedValue(
-            quoteCache,
-            normalizeSymbol(
-              quote.symbol
-            ),
-            quote
-          );
-        });
-
-      return fetchedQuotes.filter(Boolean);
-    })();
+    );
+    return fetchedQuotes;
+  })();
 
   try {
-    const fetchedQuotes =
-      await batchRequestInFlight;
-
-    return [
-      ...cachedQuotes,
-      ...fetchedQuotes,
-    ];
+    const fetchedQuotes = await batchRequestInFlight;
+    return [...cachedQuotes, ...fetchedQuotes];
   } catch (error) {
-    const staleQuotes =
-      getStaleQuotes(missingSymbols);
-
-    if (
-      cachedQuotes.length > 0 ||
-      staleQuotes.length > 0
-    ) {
-      console.warn(
-        "Yahoo batch request failed; using cached market data."
-      );
-
-      return [
-        ...cachedQuotes,
-        ...staleQuotes,
-      ];
+    const staleQuotes = await getStaleQuotes(missingSymbols);
+    if (cachedQuotes.length || staleQuotes.length) {
+      console.warn("Yahoo batch request failed; using cached market data.");
+      return [...cachedQuotes, ...staleQuotes];
     }
-
     throw error;
   } finally {
     batchRequestInFlight = null;
   }
-};
+}
 
-const fetchPeerFundamentals =
-  async (symbol) => {
-    const normalizedSymbol =
-      normalizeSymbol(symbol);
+async function fetchPeerFundamentals(symbol) {
+  const normalizedSymbol = normalizeSymbol(symbol);
+  const key = fundamentalsCacheKey(normalizedSymbol);
+  const freshSummary = await getCachedValue(key, FUNDAMENTALS_TTL_MS);
+  if (freshSummary) return freshSummary;
 
-    const cacheKey =
-      `${normalizedSymbol}:financialData`;
+  if (await isYahooCoolingDown()) {
+    const staleSummary = await getCachedValue(key, STALE_FUNDAMENTALS_TTL_MS);
+    if (staleSummary) return staleSummary;
+    throw new Error("Yahoo Finance is temporarily rate limited");
+  }
 
-    const freshSummary =
-      getCachedValue(
-        fundamentalsCache,
-        cacheKey,
-        FUNDAMENTALS_TTL_MS
+  if (fundamentalsRequestsInFlight.has(key)) {
+    return fundamentalsRequestsInFlight.get(key);
+  }
+
+  const requestPromise = (async () => {
+    try {
+      const summary = await withRetry(
+        () =>
+          getYahooFinanceClient().quoteSummary(normalizedSymbol, {
+            modules: ["financialData"],
+          }),
+        { attempts: 1, label: `Yahoo fundamentals ${normalizedSymbol}` }
       );
-
-    if (freshSummary) {
-      return freshSummary;
-    }
-
-    if (isYahooCoolingDown()) {
-      const staleSummary =
-        getCachedValue(
-          fundamentalsCache,
-          cacheKey,
-          STALE_FUNDAMENTALS_TTL_MS
-        );
-
+      await setCacheEntry(key, summary, STALE_FUNDAMENTALS_TTL_MS);
+      return summary;
+    } catch (error) {
+      const staleSummary = await getCachedValue(key, STALE_FUNDAMENTALS_TTL_MS);
       if (staleSummary) {
+        console.warn(`Using stale fundamentals for ${normalizedSymbol}`);
         return staleSummary;
       }
-
-      throw new Error(
-        "Yahoo Finance is temporarily rate limited"
-      );
+      throw error;
+    } finally {
+      fundamentalsRequestsInFlight.delete(key);
     }
+  })();
 
-    if (
-      fundamentalsRequestsInFlight.has(
-        cacheKey
-      )
-    ) {
-      return fundamentalsRequestsInFlight.get(
-        cacheKey
-      );
-    }
-
-    const requestPromise =
-      (async () => {
-        try {
-          const summary =
-            await withRetry(
-              () =>
-                getYahooFinanceClient()
-                  .quoteSummary(
-                    normalizedSymbol,
-                    {
-                      modules: [
-                        "financialData",
-                      ],
-                    }
-                  ),
-              {
-                attempts: 1,
-                label:
-                  `Yahoo fundamentals ${normalizedSymbol}`,
-              }
-            );
-
-          saveCachedValue(
-            fundamentalsCache,
-            cacheKey,
-            summary
-          );
-
-          return summary;
-        } catch (error) {
-          const staleSummary =
-            getCachedValue(
-              fundamentalsCache,
-              cacheKey,
-              STALE_FUNDAMENTALS_TTL_MS
-            );
-
-          if (staleSummary) {
-            console.warn(
-              `Using stale fundamentals for ${normalizedSymbol}`
-            );
-
-            return staleSummary;
-          }
-
-          throw error;
-        } finally {
-          fundamentalsRequestsInFlight.delete(
-            cacheKey
-          );
-        }
-      })();
-
-    fundamentalsRequestsInFlight.set(
-      cacheKey,
-      requestPromise
-    );
-
-    return requestPromise;
-  };
+  fundamentalsRequestsInFlight.set(key, requestPromise);
+  return requestPromise;
+}
 
 module.exports = {
   fetchMarketData,
