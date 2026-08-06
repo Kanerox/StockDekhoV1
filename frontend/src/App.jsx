@@ -2864,13 +2864,35 @@ function MetricRangeFilter({ label, value, onChange, options }) {
   );
 }
 
-function FilterSidebar({ priceRange, setPriceRange, mcapRange, setMcapRange, peRange, setPeRange,
+function FilterSidebar({ selectedSectors, setSelectedSectors, priceRange, setPriceRange, mcapRange, setMcapRange, peRange, setPeRange,
   chgRange, setChgRange, ret1yRange, setRet1yRange, onReset }) {
   return (
     <Panel style={{ padding: 16, width: 232, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 140 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
         <div style={{ fontSize: 12.5, fontWeight: 700 }}>Filters</div>
         <button onClick={onReset} style={{ background: "none", border: "none", color: THEME.gold, fontSize: 11, cursor: "pointer" }}>Reset</button>
+      </div>
+
+      <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, margin: "16px 0 6px" }}>Sector Classification</div>
+      <div style={{ maxHeight: 210, overflowY: "auto", paddingRight: 4 }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, padding: "3px 0", cursor: "pointer" }}>
+          <input type="checkbox" checked={selectedSectors.length === 0} onChange={() => setSelectedSectors([])} />
+          All sectors
+        </label>
+        {SECTOR_LIST.map((sectorName) => (
+          <label key={sectorName} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, padding: "3px 0", cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={selectedSectors.includes(sectorName)}
+              onChange={() => setSelectedSectors(
+                selectedSectors.includes(sectorName)
+                  ? selectedSectors.filter((item) => item !== sectorName)
+                  : [...selectedSectors, sectorName]
+              )}
+            />
+            {sectorName}
+          </label>
+        ))}
       </div>
 
       <MetricRangeFilter label="EOD Price" value={priceRange} onChange={setPriceRange} options={[
@@ -2894,6 +2916,7 @@ function FilterSidebar({ priceRange, setPriceRange, mcapRange, setMcapRange, peR
 
 function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, toggleCompare }) {
   const [q, setQ] = useState("");
+  const [selectedSectors, setSelectedSectors] = useState([]);
   const [priceRange, setPriceRange] = useState("all");
   const [mcapRange, setMcapRange] = useState("all");
   const [peRange, setPeRange] = useState("all");
@@ -2963,13 +2986,14 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
   }, [stockDefinitions, stockSymbols]);
 
   const resetFilters = () => {
-    setQ(""); setPriceRange("all"); setMcapRange("all"); setPeRange("all");
+    setQ(""); setSelectedSectors([]); setPriceRange("all"); setMcapRange("all"); setPeRange("all");
     setChgRange("all"); setRet1yRange("all");
     setPageN(1);
   };
 
   let rows = liveStocks.filter((s) => {
     const matchQ = !q || s.name.toLowerCase().includes(q.toLowerCase()) || s.ticker.toLowerCase().includes(q.toLowerCase());
+    const matchSector = selectedSectors.length === 0 || selectedSectors.includes(s.sector);
     const matchPrice = priceRange === "all" || (
       Number.isFinite(s.price) && (
         (priceRange === "low" && s.price < 500) ||
@@ -3005,7 +3029,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
         (ret1yRange === "strong" && s.ret1y > 20)
       )
     );
-    return matchQ && matchPrice && matchMcap && matchPe && matchChg && matchRet;
+    return matchQ && matchSector && matchPrice && matchMcap && matchPe && matchChg && matchRet;
   });
   rows = [...rows].sort((a, b) => {
     const watchlistDifference =
@@ -3061,6 +3085,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
 
       <div style={{ display: "flex", gap: 16, marginTop: 12, alignItems: "flex-start" }}>
         <FilterSidebar
+          selectedSectors={selectedSectors} setSelectedSectors={(value) => { setSelectedSectors(value); setPageN(1); }}
           priceRange={priceRange} setPriceRange={(value) => { setPriceRange(value); setPageN(1); }}
           mcapRange={mcapRange} setMcapRange={(value) => { setMcapRange(value); setPageN(1); }}
           peRange={peRange} setPeRange={(value) => { setPeRange(value); setPageN(1); }}
