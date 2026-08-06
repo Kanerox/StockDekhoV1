@@ -142,12 +142,7 @@ const getStockUniverseFromService = async (symbols) => {
     throw new Error("At least one stock symbol is required");
   }
 
-  const [quotes, fundamentalResults] = await Promise.all([
-    fetchMarketDataBatch(uniqueSymbols),
-    Promise.allSettled(
-      uniqueSymbols.map((symbol) => fetchPeerFundamentals(symbol))
-    ),
-  ]);
+const quotes = await fetchMarketDataBatch(uniqueSymbols);
 
 const quoteByTicker = new Map(
   quotes
@@ -166,16 +161,7 @@ const quoteByTicker = new Map(
     const quote = quoteByTicker.get(
   tickerFromYahooSymbol(ticker)
 );
-    const summary =
-      fundamentalResults[index]?.status === "fulfilled"
-        ? fundamentalResults[index].value
-        : null;
-    const debtToEquity = valueOrNull(
-      summary?.financialData?.debtToEquity
-    );
-    const returnOnEquity = valueOrNull(
-      summary?.financialData?.returnOnEquity
-    );
+    
     const price = valueOrNull(quote?.regularMarketPrice);
     const volume = valueOrNull(quote?.regularMarketVolume);
     const marketCap = valueOrNull(quote?.marketCap);
@@ -197,12 +183,13 @@ const quoteByTicker = new Map(
           ? null
           : (price * volume) / 10000000,
       pe: valueOrNull(quote?.trailingPE),
-      pb: valueOrNull(quote?.priceToBook),
-      bookValue: valueOrNull(quote?.bookValue),
-      roe:
-        returnOnEquity === null ? null : returnOnEquity * 100,
-      divYield: valueOrNull(quote?.dividendYield),
-      de: debtToEquity === null ? null : debtToEquity / 100,
+pb: valueOrNull(quote?.priceToBook),
+bookValue: valueOrNull(quote?.bookValue),
+
+// Load these only on the company page.
+roe: null,
+divYield: valueOrNull(quote?.dividendYield),
+de: null,
       ret1y: valueOrNull(quote?.fiftyTwoWeekChangePercent),
     };
   });
