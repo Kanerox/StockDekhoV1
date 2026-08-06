@@ -2757,7 +2757,7 @@ function FeaturedChartCard({
 // Plain-English metric explanations used for column-header tooltips on the Stocks screener.
 const METRIC_INFO = {
   price: { what: "The last traded (EOD) price on NSE.", why: "The reference point for everything else on this row.", how: "Not meaningful alone — always read alongside valuation and quality metrics." },
-  chgPct: { what: "Change versus the previous session's close.", why: "Shows short-term momentum for the stock.", how: "A single day's move says little about the business — treat as context, not a signal." },
+  chgPct: { what: "The daily change in the stock price versus the previous session's close.", why: "Investors use it to understand the direction and scale of the latest market move.", how: "A single day's move is short-term context, not a view of business quality." },
   mcap: { what: "Market capitalisation: share price × total shares outstanding.", why: "Indicates company size and typically its liquidity and volatility profile.", how: "Larger caps are usually more stable; smaller caps can be more volatile and less liquid." },
   tradedVal: { what: "Total value of shares traded on NSE that day.", why: "A proxy for how liquid — how easy to buy/sell without moving the price — a stock is.", how: "Very low traded value can mean wider spreads and higher execution risk." },
   pe: { what: "Price-to-Earnings ratio: share price divided by earnings per share.", why: "A common shorthand for how expensive a stock is relative to its profit.", how: "Compare within the same sector — 'expensive' varies a lot by industry and growth rate." },
@@ -2856,7 +2856,7 @@ function RowMetricLabel({ label, infoKey }) {
 }
 
 function FilterSidebar({ mode, selectedSectors, setSelectedSectors, capSet, setCapSet, peMin, setPeMin, peMax, setPeMax,
-  roeMin, setRoeMin, divMin, setDivMin, deMax, setDeMax, ret1yMin, setRet1yMin, onReset }) {
+  roeMin, setRoeMin, divMin, setDivMin, ret1yRange, setRet1yRange, onReset }) {
   const numInputStyle = { width: 70, background: THEME.navyDeep, border: `1px solid ${THEME.hairline}`, color: THEME.ink, borderRadius: 4, padding: "5px 6px", fontSize: 12 };
   return (
     <Panel style={{ padding: 16, width: 232, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 140 }}>
@@ -2909,6 +2909,14 @@ function FilterSidebar({ mode, selectedSectors, setSelectedSectors, capSet, setC
       </div>
       <ModeExplain mode={mode}>P/E compares price to profit. A "low" or "high" P/E only means something relative to the sector and growth rate — there's no universal good number.</ModeExplain>
 
+      <div style={{ fontSize: 11, fontWeight: 700, color: THEME.inkDim, textTransform: "uppercase", letterSpacing: 0.4, margin: "16px 0 6px" }}>1Y Return</div>
+      <select value={ret1yRange} onChange={(e) => setRet1yRange(e.target.value)} style={{ ...selectStyle, width: "100%" }}>
+        <option value="all">All returns</option>
+        <option value="negative">Negative (&lt; 0%)</option>
+        <option value="moderate">0% to 20%</option>
+        <option value="strong">Above 20%</option>
+      </select>
+
       {mode === "research" && (
         <>
           <div style={{ borderTop: `1px solid ${THEME.hairline}`, margin: "18px 0 12px" }} />
@@ -2920,11 +2928,6 @@ function FilterSidebar({ mode, selectedSectors, setSelectedSectors, capSet, setC
           <div style={{ fontSize: 11.5, color: THEME.inkDim, marginBottom: 4 }}>Min dividend yield %</div>
           <input type="number" value={divMin} onChange={(e) => setDivMin(e.target.value)} style={{ ...numInputStyle, width: "100%", marginBottom: 10 }} />
 
-          <div style={{ fontSize: 11.5, color: THEME.inkDim, marginBottom: 4 }}>Max debt/equity</div>
-          <input type="number" value={deMax} onChange={(e) => setDeMax(e.target.value)} style={{ ...numInputStyle, width: "100%", marginBottom: 10 }} />
-
-          <div style={{ fontSize: 11.5, color: THEME.inkDim, marginBottom: 4 }}>Min 1Y return %</div>
-          <input type="number" value={ret1yMin} onChange={(e) => setRet1yMin(e.target.value)} style={{ ...numInputStyle, width: "100%" }} />
         </>
       )}
     </Panel>
@@ -2939,8 +2942,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
   const [peMax, setPeMax] = useState("");
   const [roeMin, setRoeMin] = useState("");
   const [divMin, setDivMin] = useState("");
-  const [deMax, setDeMax] = useState("");
-  const [ret1yMin, setRet1yMin] = useState("");
+  const [ret1yRange, setRet1yRange] = useState("all");
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState("desc");
   const [page, setPageN] = useState(1);
@@ -3008,7 +3010,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
 
   const resetFilters = () => {
     setQ(""); setSelectedSectors([]); setCapSet({ Large: true, Mid: true, Small: true, Micro: true });
-    setPeMin(""); setPeMax(""); setRoeMin(""); setDivMin(""); setDeMax(""); setRet1yMin("");
+    setPeMin(""); setPeMax(""); setRoeMin(""); setDivMin(""); setRet1yRange("all");
     setPageN(1);
   };
 
@@ -3020,9 +3022,14 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
     const matchPeMax = !peMax || (s.pe !== null && s.pe <= parseFloat(peMax));
     const matchRoe = !roeMin || (s.roe !== null && s.roe !== undefined && s.roe >= parseFloat(roeMin));
     const matchDiv = !divMin || (s.divYield !== null && s.divYield >= parseFloat(divMin));
-    const matchDe = !deMax || (s.de !== null && s.de !== undefined && s.de <= parseFloat(deMax));
-    const matchRet = !ret1yMin || (s.ret1y !== null && s.ret1y >= parseFloat(ret1yMin));
-    return matchQ && matchSector && matchCap && matchPeMin && matchPeMax && matchRoe && matchDiv && matchDe && matchRet;
+    const matchRet = ret1yRange === "all" || (
+      Number.isFinite(s.ret1y) && (
+        (ret1yRange === "negative" && s.ret1y < 0) ||
+        (ret1yRange === "moderate" && s.ret1y >= 0 && s.ret1y <= 20) ||
+        (ret1yRange === "strong" && s.ret1y > 20)
+      )
+    );
+    return matchQ && matchSector && matchCap && matchPeMin && matchPeMax && matchRoe && matchDiv && matchRet;
   });
   rows = [...rows].sort((a, b) => {
     if (!sortKey) {
@@ -3068,10 +3075,9 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
     { key: "ticker", label: "Company", info: null, width: 240, align: "left" },
     { key: "sector", label: "Sector", info: null, width: 168, align: "left" },
     { key: "price", label: "EOD Price", info: null, width: 104, align: "right" },
-    { key: "chgPct", label: "Chg %", info: null, width: 96, align: "right" },
     { key: "mcap", label: "Mkt Cap", info: "mcap", width: 116, align: "right" },
     { key: "pe", label: "P/E", info: null, width: 72, align: "right" },
-    { key: "de", label: "D/E", info: null, width: 72, align: "right" },
+    { key: "chgPct", label: "Chg %", info: "chgPct", width: 96, align: "right" },
     { key: "ret1y", label: "1Y Return", info: null, width: 100, align: "right" },
   ];
 
@@ -3101,8 +3107,8 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
           capSet={capSet} setCapSet={(v) => { setCapSet(v); setPageN(1); }}
           peMin={peMin} setPeMin={(v) => { setPeMin(v); setPageN(1); }} peMax={peMax} setPeMax={(v) => { setPeMax(v); setPageN(1); }}
           roeMin={roeMin} setRoeMin={(v) => { setRoeMin(v); setPageN(1); }}
-          divMin={divMin} setDivMin={(v) => { setDivMin(v); setPageN(1); }} deMax={deMax} setDeMax={(v) => { setDeMax(v); setPageN(1); }}
-          ret1yMin={ret1yMin} setRet1yMin={(v) => { setRet1yMin(v); setPageN(1); }}
+          divMin={divMin} setDivMin={(v) => { setDivMin(v); setPageN(1); }}
+          ret1yRange={ret1yRange} setRet1yRange={(value) => { setRet1yRange(value); setPageN(1); }}
           onReset={resetFilters} />
 
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -3117,7 +3123,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
                 <tr style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
                   <th style={thStyle}></th>
                   {cols.map((c) => (
-                    c.key === "ticker" || c.key === "sector" ? (
+                    c.key === "ticker" || c.key === "sector" || c.key === "ret1y" ? (
                       <th key={c.key} style={{ ...thStyle, textAlign: c.align, padding: "12px 14px" }}>{c.label}</th>
                     ) : (
                       <ThTooltip key={c.key} label={c.label} infoKey={c.info} sortActive={sortKey === c.key} sortDir={sortDir} onClick={() => toggleSort(c.key)}
@@ -3137,10 +3143,9 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
                     </td>
                     <td style={{ ...stocksTd, overflow: "hidden", textOverflow: "ellipsis" }}>{s.sector}</td>
                     <td style={{ ...stocksTd, textAlign: "right" }} className="sd-mono">{Number.isFinite(s.price) ? `₹${fmtNum(s.price)}` : "—"}</td>
-                    <td style={{ ...stocksTd, textAlign: "right" }}>{Number.isFinite(s.chgPct) ? <Move value={s.chgPct} /> : "—"}</td>
                     <td style={{ ...stocksTd, textAlign: "right" }} className="sd-mono">{Number.isFinite(s.mcap) ? fmtCr(s.mcap) : "—"}</td>
                     <td style={{ ...stocksTd, textAlign: "right" }} className="sd-mono">{Number.isFinite(s.pe) ? fmtNum(s.pe, 1) : "—"}</td>
-                    <td style={{ ...stocksTd, textAlign: "right" }} className="sd-mono">{Number.isFinite(s.de) ? fmtNum(s.de, 2) : "—"}</td>
+                    <td style={{ ...stocksTd, textAlign: "right" }}>{Number.isFinite(s.chgPct) ? <Move value={s.chgPct} /> : "—"}</td>
                     <td style={{ ...stocksTd, textAlign: "right" }}>{Number.isFinite(s.ret1y) ? <Move value={s.ret1y} /> : "—"}</td>
                     <td style={{ ...stocksTd, textAlign: "center" }}>
                       <button onClick={() => toggleCompare(s.ticker)} className="sd-focusable" title="Add to compare" style={{
