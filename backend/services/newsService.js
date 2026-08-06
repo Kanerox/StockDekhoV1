@@ -628,6 +628,21 @@ function getStoryWordSet(title = "") {
           word.length > 3 &&
           !ignoredWords.has(word)
       )
+      .map((word) => {
+        if (word.endsWith("ies") && word.length > 5) {
+          return `${word.slice(0, -3)}y`;
+        }
+
+        if (
+          word.endsWith("s") &&
+          !word.endsWith("ss") &&
+          word.length > 4
+        ) {
+          return word.slice(0, -1);
+        }
+
+        return word;
+      })
   );
 }
 
@@ -1423,6 +1438,158 @@ if (accepted.length < limit) {
   return accepted.slice(0, limit);
 }
 
+function getCompanyArticleScore(item) {
+  const source = String(
+    item.cleanedArticle?.source || ""
+  ).toLowerCase();
+
+  const title = String(
+    item.cleanedArticle?.title || ""
+  ).toLowerCase();
+
+  const publicationDate = new Date(
+    item.article?.pubDate || 0
+  );
+
+  let score = 0;
+
+  for (const [sourceName, sourceScore] of Object.entries(
+    MARKET_SOURCE_SCORES
+  )) {
+    if (source.includes(sourceName)) {
+      score += sourceScore;
+      break;
+    }
+  }
+
+  const materialCompanyTerms = [
+    "earnings",
+    "results",
+    "profit",
+    "revenue",
+    "guidance",
+    "order",
+    "contract",
+    "acquisition",
+    "merger",
+    "dividend",
+    "buyback",
+    "regulatory",
+    "sebi",
+    "rbi",
+    "capacity",
+    "investment",
+  ];
+
+  score +=
+    materialCompanyTerms.filter((term) =>
+      title.includes(term)
+    ).length * 6;
+
+  if (
+    isMeaningfulSummary(
+      item.cleanedArticle?.title,
+      item.cleanedArticle?.snippet
+    )
+  ) {
+    score += 8;
+  }
+
+  if (!Number.isNaN(publicationDate.getTime())) {
+    const ageInDays =
+      (Date.now() - publicationDate.getTime()) /
+      (1000 * 60 * 60 * 24);
+
+    score += Math.max(0, 20 - ageInDays);
+  }
+
+  return score;
+}
+
+function selectCompanyArticles(candidates, limit = 8) {
+  const rankedCandidates = [...candidates].sort(
+    (itemA, itemB) => {
+      const scoreDifference =
+        getCompanyArticleScore(itemB) -
+        getCompanyArticleScore(itemA);
+
+      if (scoreDifference !== 0) {
+        return scoreDifference;
+      }
+
+      return (
+        new Date(itemB.article.pubDate) -
+        new Date(itemA.article.pubDate)
+      );
+    }
+  );
+
+  const selected = [];
+  const selectedTitles = [];
+  const seenLinks = new Set();
+  const sourceCounts = new Map();
+
+  function trySelect(item, enforceSourceDiversity) {
+    const title = String(
+      item.cleanedArticle?.title || ""
+    ).trim();
+
+    const link = String(
+      item.article?.link || ""
+    ).trim();
+
+    const source = normalizeSourceForMatching(
+      item.cleanedArticle?.source || "unknown"
+    );
+
+    if (!title || (link && seenLinks.has(link))) {
+      return false;
+    }
+
+    if (
+      selectedTitles.some((acceptedTitle) =>
+        areSimilarStories(acceptedTitle, title)
+      )
+    ) {
+      return false;
+    }
+
+    if (
+      enforceSourceDiversity &&
+      (sourceCounts.get(source) || 0) >= 3
+    ) {
+      return false;
+    }
+
+    selected.push(item);
+    selectedTitles.push(title);
+
+    if (link) {
+      seenLinks.add(link);
+    }
+
+    sourceCounts.set(
+      source,
+      (sourceCounts.get(source) || 0) + 1
+    );
+
+    return true;
+  }
+
+  for (const item of rankedCandidates) {
+    if (selected.length >= limit) break;
+    trySelect(item, true);
+  }
+
+  for (const item of rankedCandidates) {
+    if (selected.length >= limit) break;
+    if (selected.includes(item)) continue;
+    trySelect(item, false);
+  }
+
+  return selected;
+}
+
 async function getNiftyMarketEventsFromService() {
   const topicResults =
     await Promise.allSettled(
@@ -1435,21 +1602,6 @@ async function getNiftyMarketEventsFromService() {
         })
       )
     );
- topicResults.forEach((result, index) => {
-  const topic = NIFTY_MARKET_TOPICS[index]?.topic || "Unknown";
-
-  if (result.status === "fulfilled") {
-    console.log(
-      `${topic}: ${result.value.articles.length} articles`
-    );
-  } else {
-    console.error(
-      `${topic} news request failed:`,
-      result.reason?.message || result.reason
-    );
-  }
-});
-
   const candidates = topicResults.flatMap(
     (result) => {
       if (result.status !== "fulfilled") {
@@ -1497,7 +1649,6 @@ async function getNiftyMarketEventsFromService() {
         .slice(0, 25);
     }
   );
-console.log("Total candidates:", candidates.length);
   const selectedArticles = selectTopMarketArticles(
   candidates,
   30
@@ -1508,26 +1659,6 @@ selectedArticles.sort(
     new Date(itemB.article.pubDate) -
     new Date(itemA.article.pubDate)
 );
-
-console.log("Selected:", selectedArticles.length);
-selectedArticles.forEach((item, i) => {
-  console.log(
-    `${i + 1}. [${item.topic}] ${item.cleanedArticle.source} | ${item.cleanedArticle.title}`
-  );
-});
-console.log(
-  "Candidates by topic:",
-  candidates.reduce((acc, item) => {
-    acc[item.topic] = (acc[item.topic] || 0) + 1;
-    return acc;
-  }, {})
-);
-
-selectedArticles.forEach((item, index) => {
-  console.log(
-    `${index + 1}. [${item.topic}] ${item.cleanedArticle.source} -> ${item.cleanedArticle.title}`
-  );
-});
 
 const articles = selectedArticles.map(
   ({ article, cleanedArticle, topic }, index) => ({
@@ -1749,7 +1880,7 @@ const companyName =
   const articles =
     await fetchCompanyNews(companyName);
 
-  const currentArticles = articles
+  const candidates = articles
     .filter((article) => {
       if (!article.pubDate) {
         return false;
@@ -1768,16 +1899,16 @@ const companyName =
         )
       );
     })
-    .sort(
-      (articleA, articleB) =>
-        new Date(articleB.pubDate) -
-        new Date(articleA.pubDate)
-    )
-    .slice(0, 8)
-    .map((article, index) => {
-      const cleanedArticle =
-        cleanGoogleNewsArticle(article);
-       
+    .map((article) => ({
+      article,
+      cleanedArticle:
+        cleanGoogleNewsArticle(article),
+    }));
+
+  const currentArticles = selectCompanyArticles(
+    candidates,
+    8
+  ).map(({ article, cleanedArticle }, index) => {
 
       const analysis = analyseArticle(
         cleanedArticle.title,
