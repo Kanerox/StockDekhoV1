@@ -2796,6 +2796,7 @@ const METRIC_INFO = {
   mcap: { what: "Market capitalisation: share price × total shares outstanding.", why: "Indicates company size and typically its liquidity and volatility profile.", how: "Larger caps are usually more stable; smaller caps can be more volatile and less liquid." },
   tradedVal: { what: "Total value of shares traded on NSE that day.", why: "A proxy for how liquid — how easy to buy/sell without moving the price — a stock is.", how: "Very low traded value can mean wider spreads and higher execution risk." },
   pe: { what: "Price-to-Earnings ratio: share price divided by earnings per share.", why: "A common shorthand for how expensive a stock is relative to its profit.", how: "Compare within the same sector — 'expensive' varies a lot by industry and growth rate." },
+  bookValue: { what: "Book value per share: the company's net assets divided by its outstanding shares.", why: "Investors use it to compare the market price with the accounting value attributable to each share.", how: "It is most useful for asset-heavy businesses and should be compared with sector peers." },
   pb: { what: "Price-to-Book ratio: share price divided by book value (net assets) per share.", why: "Shows how the market values a company relative to its accounting net worth.", how: "More useful for asset-heavy businesses like banks; less meaningful for asset-light services firms." },
   roe: { what: "Return on Equity: net profit as a % of shareholder equity.", why: "Measures how efficiently a company generates profit from shareholders' capital.", how: "Higher and more consistent ROE over time generally signals a more efficient, better-run business." },
   roce: { what: "Return on Capital Employed: operating profit as a % of capital used in the business.", why: "Measures how efficiently a company turns capital into operating profit.", how: "Higher and more stable ROCE over time generally signals a more efficient business." },
@@ -5870,7 +5871,7 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
                   const bw = bestWorst(m.key);
                   return (
                     <tr key={m.key} style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
-                      <td style={tdStyle}><RowMetricLabel label={m.label} infoKey={m.key === "divYield" ? "divYield" : null} /></td>
+                      <td style={tdStyle}><RowMetricLabel label={m.label} infoKey={m.key} /></td>
                       {stocks.map((s) => {
                         const liveStock = liveStocks.find((item) => item.ticker === s.ticker);
                         const v = liveStock?.[m.key];
