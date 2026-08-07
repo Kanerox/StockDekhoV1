@@ -5,7 +5,7 @@ const {
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 
 const FRESH_HISTORY_TTL_MS = 6 * 60 * 60 * 1000;
-const STALE_HISTORY_TTL_MS = 48 * 60 * 60 * 1000;
+const STALE_HISTORY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
 const requestsInFlight = new Map();
 
@@ -35,8 +35,41 @@ function historyCacheKey(symbol, period1, period2) {
   return providerName === "yahoo" ? key : `${providerName}:${key}`;
 }
 
+function latestHistoryCacheKey(symbol) {
+  const key = `history:${symbol}:1d:latest`;
+  const providerName = getMarketDataProviderName();
+  return providerName === "yahoo" ? key : `${providerName}:${key}`;
+}
+
 function cooldownCacheKey() {
-  return `${getMarketDataProviderName()}:blocked-until`;
+  return `${getMarketDataProviderName()}:history-blocked-until`;
+}
+
+function pricesWithinRange(prices, period1, period2) {
+  const start = new Date(period1).getTime();
+  const end = new Date(period2).getTime();
+  return (Array.isArray(prices) ? prices : []).filter((point) => {
+    const time = new Date(point.date).getTime();
+    return Number.isFinite(time) && time >= start && time < end;
+  });
+}
+
+async function getLatestCachedPrices(symbol, period1, period2) {
+  const latest = await getCachedValue(
+    latestHistoryCacheKey(symbol),
+    STALE_HISTORY_TTL_MS
+  );
+  const prices = pricesWithinRange(latest, period1, period2);
+  return prices.length >= 2 ? prices : null;
+}
+
+function mergePrices(existingPrices, newPrices) {
+  const byDate = new Map();
+  [...(Array.isArray(existingPrices) ? existingPrices : []), ...newPrices]
+    .forEach((point) => byDate.set(dateKey(point.date), point));
+  return [...byDate.values()].sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
 }
 
 function isRateLimitError(error) {
@@ -67,6 +100,12 @@ async function fetchHistoricalPrices(symbol, period1, period2) {
   if (await isYahooCoolingDown()) {
     const stalePrices = await getCachedValue(key, STALE_HISTORY_TTL_MS);
     if (stalePrices) return stalePrices;
+    const latestPrices = await getLatestCachedPrices(
+      normalizedSymbol,
+      period1,
+      period2
+    );
+    if (latestPrices) return latestPrices;
     throw new Error("Yahoo Finance is temporarily rate limited");
   }
 
@@ -88,13 +127,36 @@ async function fetchHistoricalPrices(symbol, period1, period2) {
           adjustedClose: Number.isFinite(quote.adjclose) ? quote.adjclose : quote.close,
         }));
 
-      await setCacheEntry(key, prices, STALE_HISTORY_TTL_MS);
+      const existingLatest = await getCachedValue(
+        latestHistoryCacheKey(normalizedSymbol),
+        STALE_HISTORY_TTL_MS
+      );
+      const mergedLatest = mergePrices(existingLatest, prices);
+
+      await Promise.all([
+        setCacheEntry(key, prices, STALE_HISTORY_TTL_MS),
+        setCacheEntry(
+          latestHistoryCacheKey(normalizedSymbol),
+          mergedLatest,
+          STALE_HISTORY_TTL_MS
+        ),
+      ]);
       return prices;
     } catch (error) {
       const stalePrices = await getCachedValue(key, STALE_HISTORY_TTL_MS);
       if (stalePrices) {
         console.warn(`Using stale historical prices for ${normalizedSymbol}`);
         return stalePrices;
+      }
+
+      const latestPrices = await getLatestCachedPrices(
+        normalizedSymbol,
+        period1,
+        period2
+      );
+      if (latestPrices) {
+        console.warn(`Using latest cached historical prices for ${normalizedSymbol}`);
+        return latestPrices;
       }
 
       if (isRateLimitError(error)) {
