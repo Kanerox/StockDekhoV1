@@ -1,12 +1,12 @@
-import apiClient from "./apiClient";
+import { cachedGet } from "./apiClient";
 
 export async function getSectors() {
-  const response = await apiClient.get("/sectors");
+  const response = await cachedGet("/sectors");
   return response.data.sectors || [];
 }
 
 export async function getSectorDetail(sector, range) {
-  const response = await apiClient.get(
+  const response = await cachedGet(
     `/sectors/${encodeURIComponent(sector)}`,
     {
       params: { range },

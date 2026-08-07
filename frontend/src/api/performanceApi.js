@@ -1,4 +1,4 @@
-import apiClient from "./apiClient";
+import { cachedGet } from "./apiClient";
 
 export async function getPerformanceHistory(symbol, range, customRange = {}) {
   const params = { range };
@@ -8,6 +8,6 @@ export async function getPerformanceHistory(symbol, range, customRange = {}) {
     params.end = customRange.end;
   }
 
-  const response = await apiClient.get(`/history/${symbol}`, { params });
+  const response = await cachedGet(`/history/${symbol}`, { params });
   return response.data;
 }

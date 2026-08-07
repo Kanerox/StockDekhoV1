@@ -390,11 +390,15 @@ function isCompanyRelevantArticle(
   const cleanedArticle =
     cleanGoogleNewsArticle(article);
 
-  // Match only against user-visible editorial text.
-  // Avoid provider metadata or extended content that may
-  // contain unrelated entity names.
-  const searchableText = [
-    cleanedArticle.title,
+  const titleText = String(
+    cleanedArticle.title || ""
+  )
+    .toLowerCase()
+    .replace(/[^\w\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const summaryText = [
     cleanedArticle.snippet,
     article.contentSnippet,
   ]
@@ -455,14 +459,14 @@ function isCompanyRelevantArticle(
         .split(/\s+/)
         .join("\\s+")}\\b`,
       "i"
-    ).test(searchableText);
+    ).test(titleText);
 
   const symbolMatch =
     normalizedSymbol.length >= 3 &&
     new RegExp(
       `\\b${normalizedSymbol}\\b`,
       "i"
-    ).test(searchableText);
+    ).test(titleText);
 
   const matchedSignificantWords =
     significantCompanyWords.filter(
@@ -470,7 +474,7 @@ function isCompanyRelevantArticle(
         new RegExp(
           `\\b${word}\\b`,
           "i"
-        ).test(searchableText)
+        ).test(titleText)
     );
 
   const strongWordMatch =
@@ -479,10 +483,22 @@ function isCompanyRelevantArticle(
       : significantCompanyWords.length >= 2 &&
         matchedSignificantWords.length >= 2;
 
+  const companyPattern = normalizedCompanyName
+    .split(/\s+/)
+    .join("\\s+");
+
+  const relationshipMatch =
+    Boolean(companyPattern) &&
+    new RegExp(
+      `(?:part\\s+of|subsidiary\\s+of|unit\\s+of|arm\\s+of|owned\\s+by)\\s+(?:the\\s+)?${companyPattern}|${companyPattern}\\s+(?:subsidiary|unit|arm)`,
+      "i"
+    ).test(summaryText);
+
   return (
     fullCompanyMatch ||
     symbolMatch ||
-    strongWordMatch
+    strongWordMatch ||
+    relationshipMatch
   );
 }
 
@@ -714,6 +730,10 @@ function isRelevantToGlobalTopic(
   cleanedArticle,
   topic
 ) {
+  const titleText = String(
+    cleanedArticle.title || ""
+  ).toLowerCase();
+
   const text = [
     cleanedArticle.title,
     cleanedArticle.snippet,
@@ -866,11 +886,51 @@ if (
   return false;
 } 
 
-  if (
-    !requiredTerms.some((term) =>
-      text.includes(term)
-    )
-  ) {
+  const containsTerm = (value, term) => {
+    const escapedTerm = String(term)
+      .trim()
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\\ /g, "\\s+");
+
+    return new RegExp(
+      `(^|[^a-z0-9])${escapedTerm}([^a-z0-9]|$)`,
+      "i"
+    ).test(value);
+  };
+
+  const hasTopicTermInTitle = requiredTerms.some((term) =>
+    containsTerm(titleText, term)
+  );
+
+  const marketContextTerms = [
+    "market",
+    "markets",
+    "stock",
+    "stocks",
+    "share",
+    "shares",
+    "investment",
+    "investors",
+    "spending",
+    "trade",
+    "tariff",
+    "price",
+    "prices",
+    "rate",
+    "rates",
+    "yield",
+    "economy",
+    "economic",
+    "earnings",
+    "revenue",
+    "profit",
+  ];
+
+  const hasMarketContextInTitle = marketContextTerms.some(
+    (term) => containsTerm(titleText, term)
+  );
+
+  if (!hasTopicTermInTitle || !hasMarketContextInTitle) {
     return false;
   }
 
@@ -889,6 +949,13 @@ if (
     "movie",
     "celebrity",
     "personal finance",
+    "gold rate today",
+    "gold, silver prices today",
+    "term insurance",
+    "bigger loan",
+    "loan offers",
+    "premature redemption",
+    "warm-up match",
   ];
 
   return !blockedGlobalNoiseTerms.some(
@@ -1006,6 +1073,84 @@ async function getGlobalMarketNewsFromService() {
   };
 }
 
+function isRelevantToVixTopic(article, cleanedArticle, topic) {
+  const title = String(
+    cleanedArticle.title || ""
+  ).toLowerCase();
+
+  const text = [
+    cleanedArticle.title,
+    cleanedArticle.snippet,
+    article.contentSnippet,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  const blockedNoiseTerms = [
+    "warm-up match",
+    "cricket",
+    "football",
+    "term insurance",
+    "personal finance",
+    "premature redemption",
+    "bank holiday",
+    "political party",
+    "organisational units",
+    "loan recovery",
+    "mobile phones",
+    "laptop",
+    "wealth trick",
+    "aiff",
+  ];
+
+  if (blockedNoiseTerms.some((term) => text.includes(term))) {
+    return false;
+  }
+
+  const topicTerms = {
+    "Market Volatility": [
+      "india vix", "volatility", "nifty", "sensex", "stock market", "equities",
+    ],
+    "Global Risk": [
+      "global markets", "stocks", "dow", "s&p", "kospi", "dollar", "bonds", "selloff", "volatility",
+    ],
+    "Central Banks": [
+      "interest rate", "repo rate", "monetary policy", "liquidity", "inflation", "fcnr", "rupee", "bond yield",
+    ],
+    "Foreign Flows": [
+      "fii", "foreign investor", "foreign money", "capital flow", "inflows", "outflows",
+    ],
+    "Crude & Rupee": [
+      "crude", "oil", "rupee", "hormuz", "opec",
+    ],
+    Earnings: [
+      "earnings", "results", "profit", "revenue", "guidance", "shares",
+    ],
+    "Policy & Economy": [
+      "inflation", "gdp", "budget", "tariff", "economy", "economic policy",
+    ],
+    "Options Market": [
+      "options", "derivatives", "f&o", "futures", "option premiums",
+    ],
+  };
+
+  const requiredTerms = topicTerms[topic] || [];
+  const hasTopicTerm = requiredTerms.some((term) =>
+    title.includes(term)
+  );
+
+  const marketContextTerms = [
+    "market", "markets", "stock", "stocks", "share", "shares", "nifty", "sensex",
+    "investor", "investment", "trader", "fii", "rupee", "rate", "yield", "inflow",
+  ];
+
+  return (
+    hasTopicTerm &&
+    marketContextTerms.some((term) => title.includes(term))
+  );
+}
+
 async function getVixMarketNewsFromService() {
   const topicResults =
     await Promise.allSettled(
@@ -1041,6 +1186,7 @@ async function getVixMarketNewsFromService() {
           ({
             article,
             cleanedArticle,
+            topic,
           }) =>
             !isBlockedGlobalArticle(
               article,
@@ -1051,6 +1197,11 @@ async function getVixMarketNewsFromService() {
             ) &&
             !isBlockedLiveHeadline(
               cleanedArticle.title
+            ) &&
+            isRelevantToVixTopic(
+              article,
+              cleanedArticle,
+              topic
             )
         )
         .sort(
@@ -1694,11 +1845,30 @@ function analyseArticle(title, snippet) {
     snippet || ""
   }`.toLowerCase();
 
+  const hasPhrase = (phrase) => {
+    const escapedPhrase = String(phrase)
+      .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      .replace(/\s+/g, "\\s+");
+
+    return new RegExp(
+      `(^|[^a-z0-9])${escapedPhrase}([^a-z0-9]|$)`,
+      "i"
+    ).test(text);
+  };
+
+  const hasAnyPhrase = (phrases) =>
+    phrases.some(hasPhrase);
+
   if (
-    text.includes("subscriber") ||
-    text.includes("customer") ||
-    text.includes("user base") ||
-    text.includes("market share")
+    hasAnyPhrase([
+      "subscriber growth",
+      "subscriber additions",
+      "customer growth",
+      "adds customers",
+      "user base grows",
+      "market share gains",
+      "market share rises",
+    ])
   ) {
     return {
       sentiment: "Positive",
@@ -1711,10 +1881,12 @@ function analyseArticle(title, snippet) {
   }
 
   if (
-    text.includes("acquisition") ||
-    text.includes("acquire") ||
-    text.includes("merger") ||
-    text.includes("stake purchase")
+    hasAnyPhrase([
+      "acquisition",
+      "acquire",
+      "merger",
+      "stake purchase",
+    ])
   ) {
     return {
       sentiment: "Neutral",
@@ -1727,11 +1899,12 @@ function analyseArticle(title, snippet) {
   }
 
   if (
-    text.includes("capacity") ||
-    text.includes("plant") ||
-    text.includes("factory") ||
-    text.includes("expansion") ||
-    text.includes("manufacturing facility")
+    hasAnyPhrase([
+      "capacity expansion",
+      "new plant",
+      "new factory",
+      "manufacturing facility",
+    ])
   ) {
     return {
       sentiment: "Positive",
@@ -1744,12 +1917,14 @@ function analyseArticle(title, snippet) {
   }
 
   if (
-    text.includes("profit rises") ||
-    text.includes("profit increases") ||
-    text.includes("record profit") ||
-    text.includes("earnings beat") ||
-    text.includes("revenue rises") ||
-    text.includes("revenue growth")
+    hasAnyPhrase([
+      "profit rises",
+      "profit increases",
+      "record profit",
+      "earnings beat",
+      "revenue rises",
+      "revenue growth",
+    ])
   ) {
     return {
       sentiment: "Positive",
@@ -1762,12 +1937,14 @@ function analyseArticle(title, snippet) {
   }
 
   if (
-    text.includes("profit falls") ||
-    text.includes("profit declines") ||
-    text.includes("earnings miss") ||
-    text.includes("revenue falls") ||
-    text.includes("revenue declines") ||
-    text.includes("loss widens")
+    hasAnyPhrase([
+      "profit falls",
+      "profit declines",
+      "earnings miss",
+      "revenue falls",
+      "revenue declines",
+      "loss widens",
+    ])
   ) {
     return {
       sentiment: "Negative",
@@ -1780,10 +1957,12 @@ function analyseArticle(title, snippet) {
   }
 
   if (
-    text.includes("order win") ||
-    text.includes("wins order") ||
-    text.includes("contract awarded") ||
-    text.includes("new contract")
+    hasAnyPhrase([
+      "order win",
+      "wins order",
+      "contract awarded",
+      "new contract",
+    ])
   ) {
     return {
       sentiment: "Positive",
@@ -1796,10 +1975,12 @@ function analyseArticle(title, snippet) {
   }
 
   if (
-    text.includes("debt") ||
-    text.includes("borrowing") ||
-    text.includes("loan") ||
-    text.includes("refinancing")
+    hasAnyPhrase([
+      "debt",
+      "borrowing",
+      "loan",
+      "refinancing",
+    ])
   ) {
     return {
       sentiment: "Neutral",
@@ -1812,9 +1993,11 @@ function analyseArticle(title, snippet) {
   }
 
   if (
-    text.includes("dividend") ||
-    text.includes("buyback") ||
-    text.includes("share repurchase")
+    hasAnyPhrase([
+      "dividend",
+      "buyback",
+      "share repurchase",
+    ])
   ) {
     return {
       sentiment: "Positive",
@@ -1827,11 +2010,13 @@ function analyseArticle(title, snippet) {
   }
 
   if (
-    text.includes("regulatory") ||
-    text.includes("penalty") ||
-    text.includes("fine") ||
-    text.includes("probe") ||
-    text.includes("tax demand")
+    hasAnyPhrase([
+      "regulatory",
+      "penalty",
+      "fine",
+      "probe",
+      "tax demand",
+    ])
   ) {
     return {
       sentiment: "Negative",
@@ -1844,10 +2029,12 @@ function analyseArticle(title, snippet) {
   }
 
   if (
-    text.includes("profit") ||
-    text.includes("earnings") ||
-    text.includes("results") ||
-    text.includes("quarter")
+    hasAnyPhrase([
+      "profit",
+      "earnings",
+      "results",
+      "quarter",
+    ])
   ) {
     return {
       sentiment: "Neutral",

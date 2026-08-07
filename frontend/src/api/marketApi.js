@@ -1,8 +1,8 @@
-import apiClient from "./apiClient";
+import { cachedGet } from "./apiClient";
 
 export async function getStockQuote(symbol) {
   try {
-    const response = await apiClient.get(`/market/${symbol}`);
+    const response = await cachedGet(`/market/${symbol}`);
     return response.data;
   } catch (error) {
     console.error("Failed to fetch stock quote:", error);
@@ -12,7 +12,7 @@ export async function getStockQuote(symbol) {
 
 export async function getPeerComparison(symbols) {
   try {
-    const response = await apiClient.get("/market/peers", {
+    const response = await cachedGet("/market/peers", {
       params: {
         symbols: symbols.join(","),
       },
@@ -27,7 +27,7 @@ export async function getPeerComparison(symbols) {
 
 export async function getStockUniverse(symbols) {
   try {
-    const response = await apiClient.get("/market/stocks", {
+    const response = await cachedGet("/market/stocks", {
       params: {
         symbols: symbols.join(","),
       },
@@ -44,7 +44,7 @@ export async function getMarketPerformers(
   range = "1M"
 ) {
   try {
-    const response = await apiClient.get(
+    const response = await cachedGet(
       "/market/performers",
       {
         params: {

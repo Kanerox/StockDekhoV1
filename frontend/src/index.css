@@ -16,3 +16,67 @@ body {
   background: #0b1220;
   overflow-x: hidden;
 }
+
+@media (max-width: 768px) {
+  .sd-header-main {
+    flex-wrap: wrap;
+    gap: 8px !important;
+    padding: 8px 12px !important;
+  }
+
+  .sd-header-nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .sd-header-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .sd-header-nav button {
+    flex: 0 0 auto;
+  }
+
+  .sd-header-search {
+    min-width: 0;
+    max-width: none !important;
+    margin-left: 0 !important;
+  }
+
+  .sd-mode-switch {
+    margin-left: auto;
+  }
+
+  .sd-grid-2,
+  .sd-grid-3,
+  .sd-featured-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .sd-grid-4,
+  .sd-grid-5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .sd-stocks-layout {
+    flex-direction: column;
+  }
+
+  .sd-filter-sidebar {
+    position: static !important;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .sd-grid-4,
+  .sd-grid-5 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .sd-mode-switch button {
+    padding: 6px 8px !important;
+  }
+}

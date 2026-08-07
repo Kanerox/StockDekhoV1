@@ -1190,13 +1190,13 @@ function Header({
   return (
     <div style={{ position: "sticky", top: 0, zIndex: 40, background: THEME.navy, borderBottom: `1px solid ${THEME.hairline}` }}>
       <DemoBanner />
-      <div style={{ display: "flex", alignItems: "center", gap: 22, padding: "10px 20px" }}>
+      <div className="sd-header-main" style={{ display: "flex", alignItems: "center", gap: 22, padding: "10px 20px" }}>
         <div onClick={() => setPage("markets")} style={{ cursor: "pointer", display: "flex", alignItems: "baseline", gap: 0, flexShrink: 0 }}>
           <span className="sd-serif" style={{ fontSize: 21, fontWeight: 700, color: THEME.cream, letterSpacing: 0.3 }}>StockDekho</span>
           <span style={{ color: THEME.gold, fontSize: 42, lineHeight: 0, position: "relative", top: 1, marginLeft: 1 }}>.</span>
         </div>
 
-        <nav style={{ display: "flex", gap: 4 }}>
+        <nav className="sd-header-nav" style={{ display: "flex", gap: 4 }}>
           {navItems.map((n) => (
             <button key={n.key} onClick={() => setPage(n.key)} className="sd-focusable" style={{
               background: "none", border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 600,
@@ -1216,7 +1216,7 @@ function Header({
           ))}
         </nav>
 
-        <div style={{ position: "relative", flex: 1, maxWidth: 380, marginLeft: 12 }}>
+        <div className="sd-header-search" style={{ position: "relative", flex: 1, maxWidth: 380, marginLeft: 12 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, background: THEME.panel, border: `1px solid ${THEME.hairline}`, borderRadius: 5, padding: "7px 10px" }}>
             <Search size={14} color={THEME.inkDim} />
             <input
@@ -1246,7 +1246,7 @@ function Header({
           )}
         </div>
 
-        <div style={{ display: "flex", background: THEME.panel, border: `1px solid ${THEME.hairline}`, borderRadius: 20, padding: 3, flexShrink: 0 }}>
+        <div className="sd-mode-switch" style={{ display: "flex", background: THEME.panel, border: `1px solid ${THEME.hairline}`, borderRadius: 20, padding: 3, flexShrink: 0 }}>
           <button onClick={() => setMode("explore")} className="sd-focusable" style={{
             border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: 16, fontSize: 12, fontWeight: 700,
             background: mode === "explore" ? THEME.gold : "transparent", color: mode === "explore" ? THEME.navyDeep : THEME.inkDim,
@@ -1317,6 +1317,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
   const [error, setError] = useState("");
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
+  const [newsError, setNewsError] = useState("");
   const [newsOpen, setNewsOpen] = useState(null);
 
   useEffect(() => {
@@ -1363,6 +1364,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
     async function loadIndexNews() {
       if (isVix) {
         setNewsLoading(true);
+        setNewsError("");
 
         try {
           const data = await getVixMarketNews();
@@ -1376,7 +1378,10 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
             );
           }
         } catch (requestError) {
-          if (!cancelled) setNews([]);
+          if (!cancelled) {
+            setNews([]);
+            setNewsError("Unable to load current volatility news. Please try again shortly.");
+          }
         } finally {
           if (!cancelled) setNewsLoading(false);
         }
@@ -1385,6 +1390,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
       }
 
       if (isDemo) {
+        setNewsError("");
         setNews(
           demoConfig.news.map(([title, teaser], index) => ({
             id: `${indexKey}-demo-news-${index}`,
@@ -1400,10 +1406,12 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
 
       if (!newsSymbols) {
         setNews([]);
+        setNewsError("");
         return;
       }
 
       setNewsLoading(true);
+      setNewsError("");
       const results = await Promise.allSettled(
         newsSymbols.split(",").map(async (ticker) => ({
           ticker,
@@ -1439,6 +1447,9 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
           }));
 
         setNews(articles);
+        if (results.every((result) => result.status === "rejected")) {
+          setNewsError("Unable to load current constituent news. Please try again shortly.");
+        }
         setNewsLoading(false);
       }
     }
@@ -1527,7 +1538,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
         )}
       </Panel>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 14 }}>
+      <div className="sd-grid-4" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 14 }}>
         {[
           [`${range} performance`, null, indexData?.periodReturn],
           ["Today's change", null, indexData?.changePercent],
@@ -1635,9 +1646,14 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
                 {isVix ? "Loading current volatility drivers..." : "Loading current constituent news..."}
               </Panel>
             )}
-            {!newsLoading && news.length === 0 && (
+            {!newsLoading && newsError && (
+              <Panel style={{ padding: 20, textAlign: "center", color: THEME.down }}>
+                {newsError}
+              </Panel>
+            )}
+            {!newsLoading && !newsError && news.length === 0 && (
               <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim }}>
-                {isVix ? "No current volatility-driver news is available." : "No current constituent news is available."}
+                {isVix ? "No current volatility-driver news is available. Check again later." : "No current constituent news is available. Check again later."}
               </Panel>
             )}
           </div>
@@ -1720,7 +1736,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
   );
 }
 
-function EventStrip({ mode, onOpen, events, loading }) {
+function EventStrip({ mode, onOpen, events, loading, error }) {
   const [expanded, setExpanded] = useState(false);
   const visibleEvents = events.slice(0, expanded ? 15 : 5);
 
@@ -1764,9 +1780,14 @@ function EventStrip({ mode, onOpen, events, loading }) {
             Loading current market events...
           </div>
         )}
-        {!loading && visibleEvents.length === 0 && (
+        {!loading && error && (
+          <div style={{ padding: 20, color: THEME.down, fontSize: 12 }}>
+            {error}
+          </div>
+        )}
+        {!loading && !error && visibleEvents.length === 0 && (
           <div style={{ padding: 20, color: THEME.inkDim, fontSize: 12 }}>
-            No current market events are available.
+            No current market events are available. Check again later.
           </div>
         )}
       </div>
@@ -1781,8 +1802,10 @@ function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, tog
   const [niftyDetail, setNiftyDetail] = useState(null);
   const [marketEvents, setMarketEvents] = useState([]);
   const [marketEventsLoading, setMarketEventsLoading] = useState(true);
+  const [marketEventsError, setMarketEventsError] = useState("");
   const [sectorData, setSectorData] = useState([]);
   const [sectorLoading, setSectorLoading] = useState(true);
+  const [sectorError, setSectorError] = useState("");
   const [heatRange, setHeatRange] = useState("1M");
   const [perfTab, setPerfTab] = useState("This Week");
   const [eventOpen, setEventOpen] = useState(null);
@@ -1934,6 +1957,7 @@ useEffect(() => {
 
   async function loadMarketContext() {
     setMarketEventsLoading(true);
+    setMarketEventsError("");
 
     try {
       const [detailResult, eventsResult] =
@@ -1956,6 +1980,10 @@ useEffect(() => {
         eventsResult.status === "fulfilled"
           ? eventsResult.value?.articles || []
           : [];
+
+      if (eventsResult.status === "rejected") {
+        setMarketEventsError("Unable to load current market events. Please try again shortly.");
+      }
 
       const blockedMarketEventTerms = [
         "share price",
@@ -2034,6 +2062,7 @@ date: formatNewsDate(
       if (!cancelled) {
         setNiftyDetail(null);
         setMarketEvents([]);
+        setMarketEventsError("Unable to load current market events. Please try again shortly.");
       }
     } finally {
       if (!cancelled) {
@@ -2054,6 +2083,7 @@ useEffect(() => {
 
   async function loadSectorData() {
     setSectorLoading(true);
+    setSectorError("");
 
     try {
       const data = await getSectors();
@@ -2071,6 +2101,7 @@ useEffect(() => {
 
       if (!cancelled) {
         setSectorData([]);
+        setSectorError("Unable to load live sector performance. Please try again shortly.");
       }
     } finally {
       if (!cancelled) {
@@ -2214,7 +2245,7 @@ console.log(response);
         </div>
       </Panel>
 
-      <EventStrip mode={mode} onOpen={setEventOpen} events={marketEvents} loading={marketEventsLoading} />
+      <EventStrip mode={mode} onOpen={setEventOpen} events={marketEvents} loading={marketEventsLoading} error={marketEventsError} />
 
       {eventOpen && (
         <div onClick={() => setEventOpen(null)} style={{ position: "fixed", inset: 0, background: "rgba(5,8,14,0.65)", zIndex: 60, display: "flex", justifyContent: "flex-end" }}>
@@ -2286,6 +2317,10 @@ console.log(response);
     }}
   >
     Loading live sector performance...
+  </Panel>
+) : sectorError ? (
+  <Panel style={{ padding: 30, marginBottom: 26, textAlign: "center", color: THEME.down }}>
+    {sectorError}
   </Panel>
 ) : (
   <div
@@ -2388,7 +2423,7 @@ console.log(response);
       <ModeExplain mode={mode}>
   Rankings use Yahoo Finance historical prices for the selected period. The market-cap filter is based on StockDekho's current stock classifications.
 </ModeExplain>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12, marginBottom: 26 }}>
+      <div className="sd-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12, marginBottom: 26 }}>
   {!performersLoading && sortedByRet.length > 0 && (
   <>
     <RankTable
@@ -2414,6 +2449,7 @@ console.log(response);
 
       <SectionHeading title="Most active by traded value" />
       <div
+  className="sd-featured-grid"
   style={{
     fontSize: 11,
     color: THEME.inkDim,
@@ -2867,7 +2903,7 @@ function MetricRangeFilter({ label, value, onChange, options }) {
 function FilterSidebar({ selectedSectors, setSelectedSectors, priceRange, setPriceRange, mcapRange, setMcapRange, peRange, setPeRange,
   chgRange, setChgRange, ret1yRange, setRet1yRange, onReset }) {
   return (
-    <Panel style={{ padding: 16, width: 232, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 140 }}>
+    <Panel className="sd-filter-sidebar" style={{ padding: 16, width: 232, flexShrink: 0, alignSelf: "flex-start", position: "sticky", top: 140 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
         <div style={{ fontSize: 12.5, fontWeight: 700 }}>Filters</div>
         <button onClick={onReset} style={{ background: "none", border: "none", color: THEME.gold, fontSize: 11, cursor: "pointer" }}>Reset</button>
@@ -3083,7 +3119,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
 
       <ModeExplain mode={mode}>Use the metric filters on the left to narrow the universe; selected information icons explain unfamiliar concepts. The star adds to Watchlist, the + adds to Compare (up to 5).</ModeExplain>
 
-      <div style={{ display: "flex", gap: 16, marginTop: 12, alignItems: "flex-start" }}>
+      <div className="sd-stocks-layout" style={{ display: "flex", gap: 16, marginTop: 12, alignItems: "flex-start" }}>
         <FilterSidebar
           selectedSectors={selectedSectors} setSelectedSectors={(value) => { setSelectedSectors(value); setPageN(1); }}
           priceRange={priceRange} setPriceRange={(value) => { setPriceRange(value); setPageN(1); }}
@@ -3138,7 +3174,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
                   </tr>
                 ))}
                 {!stocksLoading && !stocksError && pageRows.length === 0 && (
-                  <tr><td colSpan={cols.length + 2} style={{ ...tdStyle, textAlign: "center", color: THEME.inkDim, padding: 30 }}>No companies match these filters.</td></tr>
+                  <tr><td colSpan={cols.length + 2} style={{ ...tdStyle, textAlign: "center", color: THEME.inkDim, padding: 30 }}>No companies match these filters. Adjust a range or select Reset to view the full list.</td></tr>
                 )}
                 {stocksLoading && (
                   <tr><td colSpan={cols.length + 2} style={{ ...tdStyle, textAlign: "center", color: THEME.inkDim, padding: 30 }}>Loading live Yahoo Finance data...</td></tr>
@@ -3288,6 +3324,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
   const [error, setError] = useState("");
   const [sectorNews, setSectorNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
+  const [newsError, setNewsError] = useState("");
   const [newsOpen, setNewsOpen] = useState(null);
 
   useEffect(() => {
@@ -3328,10 +3365,12 @@ function SectorDetail({ sector, mode, openCompany, back }) {
     async function loadSectorNews() {
       if (!newsSymbols) {
         setSectorNews([]);
+        setNewsError("");
         return;
       }
 
       setNewsLoading(true);
+      setNewsError("");
 
       const symbols = newsSymbols.split(",");
       const results = await Promise.allSettled(
@@ -3369,6 +3408,9 @@ function SectorDetail({ sector, mode, openCompany, back }) {
           }));
 
         setSectorNews(articles);
+        if (results.every((result) => result.status === "rejected")) {
+          setNewsError("Unable to load current sector news. Please try again shortly.");
+        }
         setNewsLoading(false);
       }
     }
@@ -3398,7 +3440,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
         <ChevronLeft size={14} /> Back to sectors
       </button>
       <SectionHeading eyebrow="Sector Classification" title={sector} />
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+      <div className="sd-grid-2" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
         <Panel style={{ padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 8 }}>
             <div style={{ fontSize: 13, fontWeight: 700 }}>
@@ -3460,8 +3502,11 @@ function SectorDetail({ sector, mode, openCompany, back }) {
         {newsLoading && (
           <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim, fontSize: 12.5 }}>Loading current constituent news...</Panel>
         )}
-        {!newsLoading && sectorNews.length === 0 && (
-          <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim, fontSize: 12.5 }}>No current constituent news is available.</Panel>
+        {!newsLoading && newsError && (
+          <Panel style={{ padding: 20, textAlign: "center", color: THEME.down, fontSize: 12.5 }}>{newsError}</Panel>
+        )}
+        {!newsLoading && !newsError && sectorNews.length === 0 && (
+          <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim, fontSize: 12.5 }}>No current constituent news is available. Check again later.</Panel>
         )}
       </div>
 
@@ -3563,13 +3608,10 @@ function CompanyOverviewTab({ ticker, liveNews, newsLoading, newsError }) {
   link: article.link,
 }));
 
-  const news =
-    formattedLiveNews.length > 0
-      ? formattedLiveNews
-      : companyNews(ticker);
+  const news = formattedLiveNews;
 
   return (
-    <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+    <div className="sd-grid-2" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
       <Panel style={{ padding: 16 }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Business overview</div>
         <p style={{ fontSize: 13, color: THEME.creamDim, lineHeight: 1.6, margin: 0 }}>{profile.overview}</p>
@@ -3599,7 +3641,22 @@ function CompanyOverviewTab({ ticker, liveNews, newsLoading, newsError }) {
           <div style={{ fontSize: 13, fontWeight: 700 }}>Company news</div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {news.map((n) => (
+          {newsLoading && (
+            <div style={{ padding: 18, textAlign: "center", color: THEME.inkDim, fontSize: 12 }}>
+              Loading current company news...
+            </div>
+          )}
+          {!newsLoading && newsError && (
+            <div style={{ padding: 18, textAlign: "center", color: THEME.down, fontSize: 12 }}>
+              {newsError} Please try again shortly.
+            </div>
+          )}
+          {!newsLoading && !newsError && news.length === 0 && (
+            <div style={{ padding: 18, textAlign: "center", color: THEME.inkDim, fontSize: 12 }}>
+              No relevant company news is currently available. Check again later.
+            </div>
+          )}
+          {!newsLoading && !newsError && news.map((n) => (
             <div key={n.id} onClick={() => setOpenArticle(n)} className="sd-row-hover" style={{
               cursor: "pointer", border: `1px solid ${THEME.hairline}`, borderRadius: 5, padding: 12,
             }}>
@@ -3993,7 +4050,7 @@ function CompanyPage({ ticker, mode, watchlist, toggleWatch, compareList, toggle
   const [newsLoading, setNewsLoading] = useState(true);
   const [newsError, setNewsError] = useState("");
   const [financialsData, setFinancialsData] = useState(null);
-  const [financialsLoading, setFinancialsLoading] = useState(true);
+  const [financialsLoading, setFinancialsLoading] = useState(false);
   const [financialsError, setFinancialsError] = useState("");
   const [performanceData, setPerformanceData] = useState(null);
   const [performanceLoading, setPerformanceLoading] = useState(true);
@@ -4016,14 +4073,11 @@ useEffect(() => {
     try {
       setNewsLoading(true);
       setNewsError("");
-      setFinancialsLoading(true);
-      setFinancialsError("");
 
-      const [stockResult, newsResult, financialsResult] =
+      const [stockResult, newsResult] =
         await Promise.allSettled([
           getStockQuote(ticker),
           getCompanyNews(ticker),
-          getCompanyFinancials(ticker),
         ]);
 
       if (!isMounted) return;
@@ -4040,13 +4094,6 @@ useEffect(() => {
         setNewsError("Unable to load live company news.");
       }
 
-      if (financialsResult.status === "fulfilled") {
-        setFinancialsData(financialsResult.value);
-      } else {
-        console.error(financialsResult.reason);
-        setFinancialsData(null);
-        setFinancialsError("Unable to load financial statements.");
-      }
     } catch (error) {
       console.error(error);
 
@@ -4054,12 +4101,9 @@ useEffect(() => {
 
       setNewsData(null);
       setNewsError("Unable to load live company news.");
-      setFinancialsData(null);
-setFinancialsError("Unable to load financial statements.");
     } finally {
       if (isMounted) {
        setNewsLoading(false);
-setFinancialsLoading(false);
       }
     }
   }
@@ -4070,6 +4114,46 @@ setFinancialsLoading(false);
     isMounted = false;
   };
 }, [ticker]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (tab !== "Financials") {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    async function fetchFinancialsData() {
+      try {
+        setFinancialsLoading(true);
+        setFinancialsError("");
+
+        const data = await getCompanyFinancials(ticker);
+
+        if (isMounted) {
+          setFinancialsData(data);
+        }
+      } catch (error) {
+        console.error("Unable to load financial statements:", error);
+
+        if (isMounted) {
+          setFinancialsData(null);
+          setFinancialsError("Unable to load financial statements.");
+        }
+      } finally {
+        if (isMounted) {
+          setFinancialsLoading(false);
+        }
+      }
+    }
+
+    fetchFinancialsData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [ticker, tab]);
 
   useEffect(() => {
     let isMounted = true;
@@ -4322,7 +4406,7 @@ setFinancialsLoading(false);
                   </div>
                 )}
               </Panel>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginTop: 14 }}>
+              <div className="sd-grid-5" style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 10, marginTop: 14 }}>
                 {[
                   ["Return", formatMetric(performanceMetrics.returnPercent, 1, "%")],
                   ["Max drawdown", formatMetric(performanceMetrics.maxDrawdown, 1, "%")],
@@ -4361,6 +4445,7 @@ setFinancialsLoading(false);
       </div>
     ) : (
       <div
+        className="sd-grid-3"
         style={{
           display: "grid",
           gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -4443,7 +4528,7 @@ setFinancialsLoading(false);
   </div>
 )}
 {tab === "Valuation & Quality" && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <div className="sd-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <Panel style={{ padding: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Valuation</div>
             {[
@@ -5112,7 +5197,12 @@ function PeerTab({ sector, ticker, openCompany }) {
         )}
         {!loading && error && (
           <div style={{ padding: 18, fontSize: 12, color: THEME.down }}>
-            {error}
+            {error} Please try again shortly.
+          </div>
+        )}
+        {!loading && !error && peers.length === 0 && (
+          <div style={{ padding: 18, fontSize: 12, color: THEME.inkDim }}>
+            No comparable companies are currently available for this sector.
           </div>
         )}
       </Panel>
@@ -5861,7 +5951,7 @@ function CurrencyDetail({ currency, back }) {
         <ChevronLeft size={14} /> Back to currencies
       </button>
       <SectionHeading eyebrow="Reference rate" title={`${c.code}/INR`} />
-      <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
+      <div className="sd-grid-2" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
         <Panel style={{ padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
             <div>
@@ -6285,12 +6375,12 @@ function Footer() {
   const [drawer, setDrawer] = useState(null);
   const links = ["Data sources", "Methodology", "Metric definitions", "Risk disclosures", "Corporate-action treatment", "End-of-day data timing"];
   const content = {
-    "Data sources": "Benchmark indices, 5 large-cap stock prices and 5 currency pairs are live-anchored from public market-data sources gathered via web search on 26 Jul 2026, for the last completed NSE/BSE session. All other prices, financials, ownership records and historical series are demo/illustrative and internally seeded for consistency.",
-    Methodology: "Performance statistics (CAGR, drawdown, volatility, beta) shown on company and compare pages use illustrative demo calculations against a demo benchmark series, not certified index methodology.",
-    "Metric definitions": "Hover the (i) icon next to a metric in Explore mode for a plain-English definition.",
+    "Data sources": "EOD quotes, fundamentals and historical series are retrieved through Yahoo Finance and cached by StockDekho. News is aggregated from configured news providers and filtered for relevance. Unsupported indices and explicitly marked fields remain illustrative demo data.",
+    Methodology: "Returns, drawdown, volatility and beta are calculated from the available daily historical series. Comparisons provide research context only and are not certified index calculations or recommendations.",
+    "Metric definitions": "Hover or tap a visible (i) icon for a concise definition, why investors use the metric and how to interpret it.",
     "Risk disclosures": "Equity investments carry risk of loss. Past performance is not indicative of future results. This Artifact is for information and research purposes only.",
-    "Corporate-action treatment": "Demo corporate actions (dividends, splits) are illustrative and not adjusted into historical series with certified precision.",
-    "End-of-day data timing": "NSE/BSE trading runs 09:15–15:30 IST. 'EOD' here refers to the last completed session's closing values where sourced live, or an illustrative equivalent otherwise.",
+    "Corporate-action treatment": "Historical performance uses adjusted closing prices where the provider supplies them. Explicitly labelled demo fields should not be treated as verified corporate-action records.",
+    "End-of-day data timing": "NSE/BSE trading runs 09:15–15:30 IST. EOD values refer to the latest completed session available from the data provider; timestamps are shown in IST where available.",
   };
   return (
     <div style={{ borderTop: `1px solid ${THEME.hairline}`, background: THEME.navyDeep, padding: "22px 20px 40px" }}>
@@ -6306,7 +6396,7 @@ function Footer() {
         </div>
         <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 14 }}>
           Eventual live deployment would require appropriately licensed market-data sources. StockDekho does not claim direct exchange integration or regulatory registration.
-          {" "}© 2026 StockDekho (demo) <span style={{ color: THEME.hairline }}>·</span> <span style={{ color: THEME.gold }}>A product by Kane Basu</span>
+          {" "}© 2026 StockDekho (prototype) <span style={{ color: THEME.hairline }}>·</span> <span style={{ color: THEME.gold }}>A product by Kane Basu</span>
         </div>
       </div>
       {drawer && (
