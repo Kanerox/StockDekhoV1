@@ -1767,9 +1767,9 @@ function EventStrip({ mode, onOpen, events, loading, error }) {
           <div key={e.id} onClick={() => onOpen(e)} className="sd-row-hover" style={{
             cursor: "pointer", minWidth: 0, border: `1px solid ${THEME.hairline}`, borderRadius: 5, padding: 12,
           }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10.5 }}>
-              <span style={{ color: THEME.gold, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5 }}>{e.cat}</span>
-              <span style={{ color: THEME.inkDim }}>{e.date}</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "4px 10px", fontSize: 10.5 }}>
+              <span style={{ color: THEME.gold, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, flexShrink: 0 }}>{e.cat}</span>
+              <span style={{ color: THEME.inkDim, marginLeft: "auto", minWidth: 0, textAlign: "right", lineHeight: 1.3 }}>{e.date}</span>
             </div>
             <div style={{ fontSize: 13, fontWeight: 600, marginTop: 6, lineHeight: 1.35 }}>{e.title}</div>
             <div style={{ fontSize: 11.5, color: THEME.inkDim, marginTop: 6, lineHeight: 1.4 }}>{e.desc}</div>
