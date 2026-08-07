@@ -5691,6 +5691,7 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
   const [histories, setHistories] = useState({});
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [historyError, setHistoryError] = useState("");
   const stocks = compareList.map((t) => STOCKS_BY_TICKER[t]).filter(Boolean);
   const results = q ? RAW_STOCKS.filter((s) => (s.name.toLowerCase().includes(q.toLowerCase()) || s.ticker.toLowerCase().includes(q.toLowerCase())) && !compareList.includes(s.ticker)).slice(0, 6) : [];
 
@@ -5702,26 +5703,37 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
         setLiveStocks([]);
         setHistories({});
         setLoadError("");
+        setHistoryError("");
         return;
       }
 
       setLoading(true);
       setLoadError("");
+      setHistoryError("");
 
       try {
-        const [universe, historyResults] = await Promise.all([
-          getStockUniverse(compareList),
-          Promise.all(
-            compareList.map(async (ticker) => {
-              const history = await getPerformanceHistory(ticker, range);
-              return [ticker, history];
-            })
-          ),
-        ]);
+        const universe = await getStockUniverse(compareList);
+        const historyResults = await Promise.allSettled(
+          compareList.map(async (ticker) => {
+            const history = await getPerformanceHistory(ticker, range);
+            return [ticker, history];
+          })
+        );
+
+        const availableHistories = historyResults
+          .filter((result) => result.status === "fulfilled")
+          .map((result) => result.value);
 
         if (!cancelled) {
           setLiveStocks(universe);
-          setHistories(Object.fromEntries(historyResults));
+          setHistories(Object.fromEntries(availableHistories));
+          if (availableHistories.length < compareList.length) {
+            setHistoryError(
+              availableHistories.length === 0
+                ? "Historical comparison is temporarily unavailable. The live company metrics below are still available."
+                : "Some historical series are temporarily unavailable. Available companies are shown below."
+            );
+          }
         }
       } catch (error) {
         if (!cancelled) {
@@ -5811,6 +5823,10 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
               <div style={{ height: 280, display: "flex", alignItems: "center", justifyContent: "center", color: THEME.down, fontSize: 12 }}>
                 {loadError}
               </div>
+            ) : historyError && Object.keys(histories).length === 0 ? (
+              <div style={{ height: 280, display: "flex", alignItems: "center", justifyContent: "center", color: THEME.inkDim, fontSize: 12, textAlign: "center", padding: 20 }}>
+                {historyError}
+              </div>
             ) : (
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart>
@@ -5836,6 +5852,9 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
                   })}
                 </LineChart>
               </ResponsiveContainer>
+            )}
+            {historyError && Object.keys(histories).length > 0 && (
+              <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 8 }}>{historyError}</div>
             )}
             <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 6 }}>Adjusted closing prices supplied by Yahoo Finance and rebased to 0 at the selected period start.</div>
           </Panel>
