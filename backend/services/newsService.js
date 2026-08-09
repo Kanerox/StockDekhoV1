@@ -349,6 +349,16 @@ function isMeaningfulSummary(title, snippet) {
     return false;
   }
 
+  const summaryBoilerplateTerms = [
+    "live events as a reliable and trusted news source",
+    "you can now subscribe",
+    "add now",
+  ];
+
+  if (summaryBoilerplateTerms.some((term) => cleanSnippet.includes(term))) {
+    return false;
+  }
+
   if (
     cleanSnippet === "com" ||
     cleanSnippet === "in" ||
