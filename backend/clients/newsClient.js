@@ -1,4 +1,5 @@
 const axios = require("axios");
+const Parser = require("rss-parser");
 const {
   getCachedValue,
   setCacheEntry,
@@ -18,6 +19,7 @@ const CACHE_RETENTION_MS =
   24 * 60 * 60 * 1000;
 
 const inFlightRequests = new Map();
+const rssParser = new Parser();
 
 function getMarketauxApiKey() {
   const apiKey =
@@ -155,6 +157,56 @@ function convertCurrentsToLegacy(
   };
 }
 
+async function fetchGoogleNewsRss(searchQuery, numberOfDays = 14) {
+  const query = `${String(searchQuery || "").trim()} when:${numberOfDays}d`;
+  const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-IN&gl=IN&ceid=IN:en`;
+
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; StockDekho/1.0)",
+        Accept: "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8",
+      },
+      responseType: "text",
+      timeout: 15000,
+    });
+    const feed = await rssParser.parseString(response.data);
+
+    return (feed.items || []).map((item) => ({
+      guid: item.guid || item.link || null,
+      title: item.title || "Untitled article",
+      link: item.link || "",
+      pubDate: item.isoDate || item.pubDate || null,
+      creator: item.creator || "",
+      source: item.creator || "",
+      contentSnippet: item.contentSnippet || item.content || "",
+      content: item.content || item.contentSnippet || "",
+      imageUrl: null,
+      entities: [],
+      provider: "google-news-rss",
+    }));
+  } catch (error) {
+    console.error("Google News RSS request failed:", error.message);
+    return [];
+  }
+}
+
+function settleWithin(promise, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => resolve([]), timeoutMs);
+    Promise.resolve(promise).then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      }
+    );
+  });
+}
+
 function getCacheKey({
   type,
   search,
@@ -256,7 +308,8 @@ async function fetchMarketauxNews({
             normalizedSearch ||
             undefined,
 
-          countries,
+          countries:
+            countries || undefined,
           language: "en",
 
           published_after:
@@ -404,22 +457,30 @@ async function fetchGlobalMarketNews(
   const cacheKey = getCacheKey({
     type: "global",
     search: searchQuery,
-    numberOfDays: 30,
-    countries: "in",
+    numberOfDays: 14,
+    countries: "global",
   });
 
   return getOrFetchArticles(cacheKey, async () => {
     const results = await Promise.allSettled([
-      fetchMarketauxNews({
-        search: searchQuery,
-        numberOfDays: 30,
-        countries: "in",
-      }),
+      settleWithin(
+        fetchMarketauxNews({
+          search: searchQuery,
+          numberOfDays: 14,
+          countries: "",
+        }),
+        8000
+      ),
 
-      currentsProvider.getGlobalMarketNews({
-        topics: [searchQuery],
-        limit: 20,
-      }),
+      settleWithin(
+        currentsProvider.getGlobalMarketNews({
+          topics: [normalizeSearchQuery(searchQuery)],
+          limit: 20,
+        }),
+        8000
+      ),
+
+      settleWithin(fetchGoogleNewsRss(searchQuery, 14), 12000),
     ]);
 
     const marketauxArticles =
@@ -432,6 +493,11 @@ async function fetchGlobalMarketNews(
         ? results[1].value.map(
             convertCurrentsToLegacy
           )
+        : [];
+
+    const googleNewsArticles =
+      results[2].status === "fulfilled"
+        ? results[2].value
         : [];
 
     if (results[0].status === "rejected") {
@@ -450,9 +516,17 @@ async function fetchGlobalMarketNews(
       );
     }
 
+    if (results[2].status === "rejected") {
+      console.error(
+        "Google News RSS market news failed:",
+        results[2].reason?.message || results[2].reason
+      );
+    }
+
     return removeExactDuplicateUrls([
       ...marketauxArticles,
       ...currentsArticles,
+      ...googleNewsArticles,
     ]);
   });
 }

@@ -198,6 +198,13 @@ const TRUSTED_GLOBAL_SOURCES = [
   "businessline",
   "financial express",
   "yahoo finance",
+  "the globe and mail",
+  "firstpost",
+  "investing.com",
+  "the guardian",
+  "new york times",
+  "wsj",
+  "tradingview",
   "business-standard.com",
   "economictimes.indiatimes.com",
   "thehindubusinessline.com",
@@ -926,11 +933,11 @@ if (
     "profit",
   ];
 
-  const hasMarketContextInTitle = marketContextTerms.some(
-    (term) => containsTerm(titleText, term)
+  const hasMarketContext = marketContextTerms.some(
+    (term) => containsTerm(text, term)
   );
 
-  if (!hasTopicTermInTitle || !hasMarketContextInTitle) {
+  if (!hasTopicTermInTitle || !hasMarketContext) {
     return false;
   }
 
@@ -985,7 +992,7 @@ async function getGlobalMarketNewsFromService() {
         .filter((article) =>
           isWithinLastDays(
             article.pubDate,
-            7
+            14
           )
         )
        .map((article) => {
@@ -1067,7 +1074,7 @@ async function getGlobalMarketNewsFromService() {
   );
 
   return {
-    range: "Last 7 days",
+    range: "Last 14 days",
     articleCount: articles.length,
     articles,
   };

@@ -3,9 +3,10 @@ const {
   getMarketDataProviderName,
 } = require("../providers/marketData");
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
+const { fetchHistoricalPrices } = require("./historyClient");
 
 const FRESH_QUOTE_TTL_MS = 10 * 60 * 1000;
-const STALE_QUOTE_TTL_MS = 6 * 60 * 60 * 1000;
+const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
@@ -109,6 +110,73 @@ async function getStaleQuotes(symbols) {
   return quotes.filter(Boolean);
 }
 
+async function fetchHistoryBackedQuote(symbol) {
+  const normalizedSymbol = normalizeSymbol(symbol);
+  const period2 = new Date();
+  period2.setDate(period2.getDate() + 1);
+  const period1 = new Date();
+  period1.setFullYear(period1.getFullYear() - 1);
+
+  const prices = await fetchHistoricalPrices(
+    normalizedSymbol,
+    period1,
+    period2
+  );
+  const validPrices = prices.filter((point) =>
+    Number.isFinite(point?.close)
+  );
+
+  if (validPrices.length < 2) {
+    throw new Error(`Insufficient historical prices for ${normalizedSymbol}`);
+  }
+
+  const first = validPrices[0];
+  const previous = validPrices[validPrices.length - 2];
+  const latest = validPrices[validPrices.length - 1];
+  const closes = validPrices.map((point) => point.close);
+  const adjustedFirst = Number.isFinite(first.adjustedClose)
+    ? first.adjustedClose
+    : first.close;
+  const adjustedLatest = Number.isFinite(latest.adjustedClose)
+    ? latest.adjustedClose
+    : latest.close;
+  const change = latest.close - previous.close;
+
+  const quote = {
+    symbol: normalizedSymbol,
+    regularMarketPrice: latest.close,
+    regularMarketPreviousClose: previous.close,
+    regularMarketChange: change,
+    regularMarketChangePercent:
+      previous.close === 0 ? null : (change / previous.close) * 100,
+    fiftyTwoWeekLow: Math.min(...closes),
+    fiftyTwoWeekHigh: Math.max(...closes),
+    fiftyTwoWeekChangePercent:
+      adjustedFirst === 0
+        ? null
+        : ((adjustedLatest / adjustedFirst) - 1) * 100,
+    regularMarketTime: latest.date,
+    currency: "INR",
+    quoteSourceName: "Yahoo Finance historical EOD",
+  };
+
+  await setCacheEntry(
+    quoteCacheKey(normalizedSymbol),
+    quote,
+    STALE_QUOTE_TTL_MS
+  );
+  return quote;
+}
+
+async function getHistoryBackedQuotes(symbols) {
+  const results = await Promise.allSettled(
+    symbols.map(fetchHistoryBackedQuote)
+  );
+  return results
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => result.value);
+}
+
 async function fetchMarketData(symbol) {
   const normalizedSymbol = normalizeSymbol(symbol);
   const key = quoteCacheKey(normalizedSymbol);
@@ -118,7 +186,7 @@ async function fetchMarketData(symbol) {
   if (await isYahooCoolingDown()) {
     const staleQuote = await getCachedValue(key, STALE_QUOTE_TTL_MS);
     if (staleQuote) return staleQuote;
-    throw new Error("Yahoo Finance is temporarily rate limited");
+    return fetchHistoryBackedQuote(normalizedSymbol);
   }
 
   if (quoteRequestsInFlight.has(normalizedSymbol)) {
@@ -146,6 +214,8 @@ async function fetchMarketData(symbol) {
         console.warn(`Using stale cached quote for ${normalizedSymbol}`);
         return staleQuote;
       }
+      const historyQuote = await fetchHistoryBackedQuote(normalizedSymbol);
+      if (historyQuote) return historyQuote;
       throw error;
     } finally {
       quoteRequestsInFlight.delete(normalizedSymbol);
@@ -176,7 +246,13 @@ async function fetchMarketDataBatch(symbols) {
 
   if (await isYahooCoolingDown()) {
     const staleQuotes = await getStaleQuotes(missingSymbols);
-    if (cachedQuotes.length || staleQuotes.length) return [...cachedQuotes, ...staleQuotes];
+    const staleTickers = new Set(staleQuotes.map((quote) => normalizeSymbol(quote.symbol)));
+    const historyQuotes = await getHistoryBackedQuotes(
+      missingSymbols.filter((symbol) => !staleTickers.has(symbol))
+    );
+    if (cachedQuotes.length || staleQuotes.length || historyQuotes.length) {
+      return [...cachedQuotes, ...staleQuotes, ...historyQuotes];
+    }
     throw new Error("Yahoo Finance is temporarily rate limited");
   }
 
@@ -195,7 +271,13 @@ async function fetchMarketDataBatch(symbols) {
 
     if (await isYahooCoolingDown()) {
       const staleQuotes = await getStaleQuotes(missingSymbols);
-      if (cachedQuotes.length || staleQuotes.length) return [...cachedQuotes, ...staleQuotes];
+      const staleTickers = new Set(staleQuotes.map((quote) => normalizeSymbol(quote.symbol)));
+      const historyQuotes = await getHistoryBackedQuotes(
+        missingSymbols.filter((symbol) => !staleTickers.has(symbol))
+      );
+      if (cachedQuotes.length || staleQuotes.length || historyQuotes.length) {
+        return [...cachedQuotes, ...staleQuotes, ...historyQuotes];
+      }
       throw new Error("Yahoo Finance is temporarily rate limited");
     }
   }
@@ -226,9 +308,13 @@ async function fetchMarketDataBatch(symbols) {
     return [...cachedQuotes, ...fetchedQuotes];
   } catch (error) {
     const staleQuotes = await getStaleQuotes(missingSymbols);
-    if (cachedQuotes.length || staleQuotes.length) {
+    const staleTickers = new Set(staleQuotes.map((quote) => normalizeSymbol(quote.symbol)));
+    const historyQuotes = await getHistoryBackedQuotes(
+      missingSymbols.filter((symbol) => !staleTickers.has(symbol))
+    );
+    if (cachedQuotes.length || staleQuotes.length || historyQuotes.length) {
       console.warn("Yahoo batch request failed; using cached market data.");
-      return [...cachedQuotes, ...staleQuotes];
+      return [...cachedQuotes, ...staleQuotes, ...historyQuotes];
     }
     throw error;
   } finally {
