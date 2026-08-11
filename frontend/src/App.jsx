@@ -6056,10 +6056,7 @@ function CurrencyDetail({ currency, back }) {
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${THEME.hairline}`, fontSize: 12.5 }}>
             <span style={{ color: THEME.inkDim }}>Latest change</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
-              <span style={{ fontSize: 10.5, color: THEME.inkDim }}>Daily</span>
-              {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} /> : <span>—</span>}
-            </div>
+            {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} /> : <span>—</span>}
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${THEME.hairline}`, fontSize: 12.5 }}>
             <span style={{ color: THEME.inkDim }}>52W range</span>
@@ -6223,7 +6220,10 @@ const globalMarketNews = globalNewsData.map((article) => ({
             <div className="sd-mono" style={{ fontSize: 20, marginTop: 8 }}>
               {Number.isFinite(c.rate) ? `₹${fmtNum(c.rate, c.code === "JPY" ? 3 : 2)}` : "—"}
             </div>
-            {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} /> : <span>—</span>}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+              <span style={{ fontSize: 10.5, color: THEME.inkDim }}>Daily</span>
+              {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} /> : <span>—</span>}
+            </div>
             {c.spark.length > 1 && <Sparkline data={c.spark} width={140} height={30} />}
             <div style={{ fontSize: 10, color: THEME.inkDim, marginTop: 4 }}>
               {Number.isFinite(c.low52) && Number.isFinite(c.high52)
