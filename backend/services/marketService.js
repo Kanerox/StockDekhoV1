@@ -55,29 +55,6 @@ function valueOrNull(value) {
     : null;
 }
 
-function getOneYearPeriod() {
-  const period2 = new Date();
-  const period1 = new Date();
-  period1.setFullYear(period1.getFullYear() - 1);
-
-  return { period1, period2 };
-}
-
-function calculateOneYearReturn(prices) {
-  if (!Array.isArray(prices) || prices.length < 2) {
-    return null;
-  }
-
-  const firstPrice = prices[0].adjustedClose;
-  const lastPrice = prices[prices.length - 1].adjustedClose;
-
-  if (!Number.isFinite(firstPrice) || !Number.isFinite(lastPrice) || firstPrice === 0) {
-    return null;
-  }
-
-  return ((lastPrice / firstPrice) - 1) * 100;
-}
-
 const getPeerComparisonFromService = async (symbols) => {
   const uniqueSymbols = [...new Set(
     symbols
@@ -89,14 +66,14 @@ const getPeerComparisonFromService = async (symbols) => {
     throw new Error("At least one peer symbol is required");
   }
 
-  const { period1, period2 } = getOneYearPeriod();
+  const quotes = await fetchMarketDataBatch(uniqueSymbols);
+  const quoteByTicker = new Map(
+    quotes.map((quote) => [tickerFromYahooSymbol(quote.symbol), quote])
+  );
 
   return Promise.all(
     uniqueSymbols.map(async (symbol) => {
-      const [quote, prices] = await Promise.all([
-        fetchMarketData(symbol),
-        fetchHistoricalPrices(symbol, period1, period2),
-      ]);
+      const quote = quoteByTicker.get(tickerFromYahooSymbol(symbol)) || {};
       const summary = await fetchPeerFundamentals(symbol).catch(() => null);
 
       const returnOnEquity = valueOrNull(
@@ -124,7 +101,7 @@ const getPeerComparisonFromService = async (symbols) => {
         debtToEquity:
           debtToEquity === null ? null : debtToEquity / 100,
         dividendYield: valueOrNull(quote.dividendYield),
-        oneYearReturn: calculateOneYearReturn(prices),
+        oneYearReturn: valueOrNull(quote.fiftyTwoWeekChangePercent),
         asOf: quote.regularMarketTime || null,
         dataProvider: getMarketDataProviderName(),
       };

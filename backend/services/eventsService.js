@@ -1,4 +1,5 @@
 const { fetchCompanyEvents } = require("../clients/eventsClient");
+const { fetchMarketData } = require("../clients/marketClient");
 
 function numberOrNull(value) {
   return Number.isFinite(value) ? value : null;
@@ -12,7 +13,37 @@ function dateOrNull(value) {
 }
 
 async function getCompanyEvents(symbol) {
-  const result = await fetchCompanyEvents(symbol);
+  let result;
+  let partial = false;
+
+  try {
+    result = await fetchCompanyEvents(symbol);
+  } catch (error) {
+    const quote = await fetchMarketData(symbol);
+    partial = true;
+    result = {
+      calendarEvents: {
+        earnings: {
+          earningsDate: [
+            quote.earningsTimestamp ||
+              quote.earningsTimestampStart ||
+              quote.earningsTimestampEnd,
+          ].filter(Boolean),
+        },
+        exDividendDate: quote.exDividendDate,
+      },
+      summaryDetail: {
+        currency: quote.currency,
+        exDividendDate: quote.exDividendDate,
+        dividendRate: quote.dividendRate,
+        dividendYield: Number.isFinite(quote.dividendYield)
+          ? quote.dividendYield / 100
+          : null,
+        payoutRatio: quote.payoutRatio,
+      },
+      earningsHistory: { history: [] },
+    };
+  }
   const calendar = result.calendarEvents || {};
   const earnings = calendar.earnings || {};
   const summary = result.summaryDetail || {};
@@ -21,6 +52,7 @@ async function getCompanyEvents(symbol) {
   return {
     symbol: String(symbol).trim().toUpperCase(),
     currency: summary.currency || "INR",
+    availability: partial ? "partial" : "full",
     upcomingEarnings: {
       date: dateOrNull(earnings.earningsDate?.[0]),
       isEstimate: Boolean(earnings.isEarningsDateEstimate),
