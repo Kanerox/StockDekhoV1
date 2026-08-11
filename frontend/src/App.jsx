@@ -907,6 +907,14 @@ function isCurrencyMarketOpen(now = new Date()) {
   return false;
 }
 
+function hasFreshCurrencyQuote(currency, now = new Date()) {
+  if (!isCurrencyMarketOpen(now)) return false;
+  const marketTime = new Date(currency?.marketTime).getTime();
+  if (!Number.isFinite(marketTime)) return false;
+  const age = now.getTime() - marketTime;
+  return age >= -5 * 60 * 1000 && age <= 30 * 60 * 1000;
+}
+
 function LiveTag({ live, approx, small, statusLabel }) {
   if (live) {
     const label = statusLabel || (approx ? "Live · approx" : "Live EOD");
@@ -1312,12 +1320,12 @@ function IndexCard({ idx, onOpen }) {
       className="sd-row-hover"
       style={{
       cursor: "pointer", border: `1px solid ${THEME.hairline}`, borderRadius: 6, padding: "12px 14px",
-      background: THEME.panel, width: 184, minWidth: 184, height: 128, display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0,
+      background: THEME.panel, width: 184, minWidth: 184, height: 136, display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: THEME.creamDim, lineHeight: 1.3, minHeight: 32, display: "flex", alignItems: "flex-start" }}>{idx.name}</div>
-          <div className="sd-mono" style={{ fontSize: 17, marginTop: 3 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: THEME.creamDim, lineHeight: 1.3, maxWidth: 124, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{idx.name}</div>
+          <div className="sd-mono" style={{ fontSize: 17, marginTop: 12 }}>
             {idx.isVix ? fmtNum(idx.value) : fmtInt(Math.round(idx.value))}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 1 }}>
@@ -2721,7 +2729,7 @@ function FeaturedChartCard({
             />
           )}
 
-          <LiveTag live small statusLabel={isIndianMarketOpen() ? "Live" : "EOD"} />
+          <LiveTag live small statusLabel={dataType === "currency" ? "EOD" : isIndianMarketOpen() ? "Live" : "EOD"} />
         </div>
       </div>
 
@@ -6028,7 +6036,7 @@ function CurrencyDetail({ currency, back }) {
                 {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} size={12.5} /> : "—"}
               </div>
             </div>
-            <LiveTag live statusLabel={isCurrencyMarketOpen() ? "Live" : "EOD"} />
+            <LiveTag live statusLabel={hasFreshCurrencyQuote(c) ? "Live" : "EOD"} />
           </div>
           <div style={{ marginBottom: 12 }}>
             <ReturnRangeSelector active={period} onSelect={setPeriod} />
@@ -6163,6 +6171,7 @@ function CurrenciesPage() {
       low52: live?.fiftyTwoWeekLow ?? null,
       high52: live?.fiftyTwoWeekHigh ?? null,
       spark: live?.sparkline || [],
+      marketTime: live?.marketTime || null,
       sourceDate: formatCurrencyMarketTime(live?.marketTime),
     };
   });
@@ -6214,13 +6223,13 @@ const globalMarketNews = globalNewsData.map((article) => ({
           <Panel key={c.code} onClick={() => setActiveCode(c.code)} className="sd-row-hover" style={{ padding: 14, cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <div style={{ fontWeight: 700, fontSize: 13.5 }}>{c.code}/INR</div>
-              <LiveTag live small statusLabel={isCurrencyMarketOpen() ? "Live" : "EOD"} />
+              <LiveTag live small statusLabel={hasFreshCurrencyQuote(c) ? "Live" : "EOD"} />
             </div>
             <div style={{ fontSize: 11, color: THEME.inkDim }}>{c.name}</div>
-            <div className="sd-mono" style={{ fontSize: 20, marginTop: 8 }}>
+            <div className="sd-mono" style={{ fontSize: 20, marginTop: 6 }}>
               {Number.isFinite(c.rate) ? `₹${fmtNum(c.rate, c.code === "JPY" ? 3 : 2)}` : "—"}
             </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1, marginBottom: 8 }}>
               <span style={{ fontSize: 10.5, color: THEME.inkDim }}>Daily</span>
               {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} /> : <span>—</span>}
             </div>
