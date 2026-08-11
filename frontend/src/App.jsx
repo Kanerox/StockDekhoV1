@@ -874,16 +874,33 @@ function GlobalStyle() {
   );
 }
 
-function LiveTag({ live, approx, small }) {
+function isIndianMarketOpen(now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(now).map((part) => [part.type, part.value])
+  );
+  const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
+  return ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(parts.weekday) &&
+    minuteOfDay >= 9 * 60 + 15 &&
+    minuteOfDay < 15 * 60 + 30;
+}
+
+function LiveTag({ live, approx, small, statusLabel }) {
   if (live) {
+    const label = statusLabel || (approx ? "Live · approx" : "Live EOD");
     return (
-      <span title={approx ? "Live-anchored (approximate reference level)" : "Live-anchored EOD snapshot"}
+      <span title={statusLabel === "Live" ? "Market is currently open" : statusLabel === "EOD" ? "Latest end-of-day value" : approx ? "Live-anchored (approximate reference level)" : "Live-anchored EOD snapshot"}
         style={{
           fontSize: small ? 9 : 10, letterSpacing: 0.5, textTransform: "uppercase", fontWeight: 700,
           color: THEME.up, border: `1px solid ${THEME.up}55`, borderRadius: 3, padding: small ? "1px 5px" : "2px 6px",
           background: "rgba(63,167,114,0.08)", whiteSpace: "nowrap", flexShrink: 0,
         }}>
-        {approx ? "Live · approx" : "Live EOD"}
+        {label}
       </span>
     );
   }
@@ -899,6 +916,9 @@ function LiveTag({ live, approx, small }) {
 }
 
 function Move({ value, suffix = "%", size = 13 }) {
+  if (!Number.isFinite(value)) {
+    return <span style={{ color: THEME.inkDim, fontSize: size }}>—</span>;
+  }
   const up = value >= 0;
   return (
     <span style={{ color: up ? THEME.up : THEME.down, fontWeight: 600, fontSize: size, display: "inline-flex", alignItems: "center", gap: 3 }}>
@@ -1288,7 +1308,11 @@ function IndexCard({ idx, onOpen }) {
             <Move value={idx.changePercent} size={11} />
           </div>
         </div>
-        <LiveTag live={!isDemo} small />
+        <LiveTag
+          live={!isDemo}
+          small
+          statusLabel={isDemo ? undefined : isIndianMarketOpen() ? "Live" : "EOD"}
+        />
       </div>
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
