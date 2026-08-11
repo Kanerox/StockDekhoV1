@@ -20,15 +20,19 @@ async function getCompanyEvents(symbol) {
     result = await fetchCompanyEvents(symbol);
   } catch (error) {
     const quote = await fetchMarketData(symbol);
+    const earningsCandidates = [
+      quote.earningsTimestamp,
+      quote.earningsTimestampStart,
+      quote.earningsTimestampEnd,
+    ].filter((value) => {
+      const time = new Date(value).getTime();
+      return Number.isFinite(time) && time > Date.now();
+    });
     partial = true;
     result = {
       calendarEvents: {
         earnings: {
-          earningsDate: [
-            quote.earningsTimestamp ||
-              quote.earningsTimestampStart ||
-              quote.earningsTimestampEnd,
-          ].filter(Boolean),
+          earningsDate: earningsCandidates.slice(0, 1),
         },
         exDividendDate: quote.exDividendDate,
       },
