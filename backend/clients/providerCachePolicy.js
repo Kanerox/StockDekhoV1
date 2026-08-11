@@ -10,8 +10,8 @@ function providerCacheKey(key) {
   return providerName === "yahoo" ? key : `${providerName}:${key}`;
 }
 
-function cooldownCacheKey() {
-  return `${getMarketDataProviderName()}:blocked-until`;
+function cooldownCacheKey(scope = "general") {
+  return `${getMarketDataProviderName()}:${scope}:blocked-until`;
 }
 
 function isRateLimitError(error) {
@@ -26,18 +26,18 @@ function isRateLimitError(error) {
   );
 }
 
-async function isProviderCoolingDown() {
+async function isProviderCoolingDown(scope) {
   const blockedUntil = await getCachedValue(
-    cooldownCacheKey(),
+    cooldownCacheKey(scope),
     RATE_LIMIT_COOLDOWN_MS
   );
   return Number(blockedUntil) > Date.now();
 }
 
-async function startProviderCooldown() {
+async function startProviderCooldown(scope) {
   const blockedUntil = Date.now() + RATE_LIMIT_COOLDOWN_MS;
   await setCacheEntry(
-    cooldownCacheKey(),
+    cooldownCacheKey(scope),
     blockedUntil,
     RATE_LIMIT_COOLDOWN_MS
   );

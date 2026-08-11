@@ -24,7 +24,7 @@ async function fetchCompanyEvents(symbol) {
   const fresh = await getCachedValue(key, FRESH_EVENTS_TTL_MS);
   if (fresh) return fresh;
 
-  if (await isProviderCoolingDown()) {
+  if (await isProviderCoolingDown("events")) {
     const stale = await getCachedValue(key, STALE_EVENTS_TTL_MS);
     if (stale) return stale;
     throw new Error("Market data provider is temporarily rate limited");
@@ -40,7 +40,7 @@ async function fetchCompanyEvents(symbol) {
       await setCacheEntry(key, result, STALE_EVENTS_TTL_MS);
       return result;
     } catch (error) {
-      if (isRateLimitError(error)) await startProviderCooldown();
+      if (isRateLimitError(error)) await startProviderCooldown("events");
       const stale = await getCachedValue(key, STALE_EVENTS_TTL_MS);
       if (stale) return stale;
       throw error;

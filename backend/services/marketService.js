@@ -93,11 +93,11 @@ const getPeerComparisonFromService = async (symbols) => {
 
   return Promise.all(
     uniqueSymbols.map(async (symbol) => {
-      const [quote, summary, prices] = await Promise.all([
+      const [quote, prices] = await Promise.all([
         fetchMarketData(symbol),
-        fetchPeerFundamentals(symbol),
         fetchHistoricalPrices(symbol, period1, period2),
       ]);
+      const summary = await fetchPeerFundamentals(symbol).catch(() => null);
 
       const returnOnEquity = valueOrNull(
         summary?.financialData?.returnOnEquity

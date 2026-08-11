@@ -1283,14 +1283,18 @@ function IndexCard({ idx, onOpen }) {
           <div className="sd-mono" style={{ fontSize: 17, marginTop: 3 }}>
             {idx.isVix ? fmtNum(idx.value) : fmtInt(Math.round(idx.value))}
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 1 }}>
+            <span style={{ fontSize: 9.5, color: THEME.inkDim }}>Daily</span>
+            <Move value={idx.changePercent} size={11} />
+          </div>
         </div>
         <LiveTag live={!isDemo} small />
       </div>
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
-            <div style={{ fontSize: 9.5, color: THEME.inkDim, marginBottom: 1 }}>1M return</div>
-            <Move value={idx.oneMonthReturn} size={12} />
+          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <span style={{ fontSize: 9.5, color: THEME.inkDim }}>1M return</span>
+            <Move value={idx.oneMonthReturn} size={11} />
           </div>
           <Sparkline data={idx.sparkline || []} width={70} height={24} />
         </div>

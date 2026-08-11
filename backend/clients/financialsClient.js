@@ -31,7 +31,7 @@ async function fetchAnnualFinancialStatement(symbol, module) {
   const fresh = await getCachedValue(key, FRESH_FINANCIALS_TTL_MS);
   if (fresh) return fresh;
 
-  if (await isProviderCoolingDown()) {
+  if (await isProviderCoolingDown("financials")) {
     const stale = await getCachedValue(key, STALE_FINANCIALS_TTL_MS);
     if (stale) return stale;
     throw new Error("Market data provider is temporarily rate limited");
@@ -50,7 +50,7 @@ async function fetchAnnualFinancialStatement(symbol, module) {
       await setCacheEntry(key, records, STALE_FINANCIALS_TTL_MS);
       return records;
     } catch (error) {
-      if (isRateLimitError(error)) await startProviderCooldown();
+      if (isRateLimitError(error)) await startProviderCooldown("financials");
       const stale = await getCachedValue(key, STALE_FINANCIALS_TTL_MS);
       if (stale) return stale;
       throw error;
