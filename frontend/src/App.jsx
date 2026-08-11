@@ -890,6 +890,23 @@ function isIndianMarketOpen(now = new Date()) {
     minuteOfDay < 15 * 60 + 30;
 }
 
+function isCurrencyMarketOpen(now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "America/New_York",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(now).map((part) => [part.type, part.value])
+  );
+  const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
+  if (["Mon", "Tue", "Wed", "Thu"].includes(parts.weekday)) return true;
+  if (parts.weekday === "Sun") return minuteOfDay >= 17 * 60;
+  if (parts.weekday === "Fri") return minuteOfDay < 17 * 60;
+  return false;
+}
+
 function LiveTag({ live, approx, small, statusLabel }) {
   if (live) {
     const label = statusLabel || (approx ? "Live · approx" : "Live EOD");
@@ -1316,11 +1333,11 @@ function IndexCard({ idx, onOpen }) {
       </div>
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ fontSize: 9.5, color: THEME.inkDim }}>1M return</span>
-            <Move value={idx.oneMonthReturn} size={11} />
+          <div style={{ display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap", flexShrink: 0 }}>
+            <span style={{ fontSize: 9.5, color: THEME.inkDim, whiteSpace: "nowrap" }}>1M return</span>
+            <Move value={idx.oneMonthReturn} size={10} />
           </div>
-          <Sparkline data={idx.sparkline || []} width={70} height={24} />
+          <Sparkline data={idx.sparkline || []} width={48} height={24} />
         </div>
         <div style={{ fontSize: 10, color: THEME.inkDim, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {isDemo
@@ -1519,7 +1536,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
               <h1 className="sd-serif" style={{ fontSize: 24, margin: 0 }}>
                 {indexData?.name || "Indian benchmark"}
               </h1>
-              <LiveTag live={!isDemo} />
+              <LiveTag live={!isDemo} statusLabel={isDemo ? undefined : isIndianMarketOpen() ? "Live" : "EOD"} />
             </div>
             <p style={{ fontSize: 12.5, color: THEME.creamDim, lineHeight: 1.55, margin: "10px 0 0" }}>
               {indexData?.description || "Loading benchmark description..."}
@@ -2704,7 +2721,7 @@ function FeaturedChartCard({
             />
           )}
 
-          <LiveTag live small />
+          <LiveTag live small statusLabel={isIndianMarketOpen() ? "Live" : "EOD"} />
         </div>
       </div>
 
@@ -4335,7 +4352,7 @@ useEffect(() => {
              <h1 className="sd-serif" style={{ fontSize: 24, margin: 0 }}>
   {quote.company || s.name}
 </h1>
-              <LiveTag live={s.live} />
+              <LiveTag live={s.live} statusLabel={s.live ? isIndianMarketOpen() ? "Live" : "EOD" : undefined} />
             </div>
             <div style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: 4 }}>
   {quote.symbol || s.ticker}· {quote.exchange || "NSE"} · {s.sector} · {s.cap} Cap
@@ -6008,7 +6025,7 @@ function CurrencyDetail({ currency, back }) {
               </div>
               {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} size={12.5} /> : "—"}
             </div>
-            <LiveTag live />
+            <LiveTag live statusLabel={isCurrencyMarketOpen() ? "Live" : "EOD"} />
           </div>
           <div style={{ marginBottom: 12 }}>
             <ReturnRangeSelector active={period} onSelect={setPeriod} />
@@ -6194,7 +6211,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
           <Panel key={c.code} onClick={() => setActiveCode(c.code)} className="sd-row-hover" style={{ padding: 14, cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <div style={{ fontWeight: 700, fontSize: 13.5 }}>{c.code}/INR</div>
-              <LiveTag live small />
+              <LiveTag live small statusLabel={isCurrencyMarketOpen() ? "Live" : "EOD"} />
             </div>
             <div style={{ fontSize: 11, color: THEME.inkDim }}>{c.name}</div>
             <div className="sd-mono" style={{ fontSize: 20, marginTop: 8 }}>
