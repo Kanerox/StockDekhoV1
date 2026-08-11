@@ -1312,7 +1312,7 @@ function IndexCard({ idx, onOpen }) {
       className="sd-row-hover"
       style={{
       cursor: "pointer", border: `1px solid ${THEME.hairline}`, borderRadius: 6, padding: "12px 14px",
-      background: THEME.panel, width: 176, minWidth: 176, height: 128, display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0,
+      background: THEME.panel, width: 184, minWidth: 184, height: 128, display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
@@ -1332,12 +1332,12 @@ function IndexCard({ idx, onOpen }) {
         />
       </div>
       <div>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 44px", columnGap: 12, alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap", flexShrink: 0 }}>
             <span style={{ fontSize: 9.5, color: THEME.inkDim, whiteSpace: "nowrap" }}>1M return</span>
             <Move value={idx.oneMonthReturn} size={10} />
           </div>
-          <Sparkline data={idx.sparkline || []} width={48} height={24} />
+          <Sparkline data={idx.sparkline || []} width={44} height={24} />
         </div>
         <div style={{ fontSize: 10, color: THEME.inkDim, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {isDemo
@@ -6023,7 +6023,10 @@ function CurrencyDetail({ currency, back }) {
               <div className="sd-mono" style={{ fontSize: 24 }}>
                 {Number.isFinite(c.rate) ? `₹${fmtNum(c.rate, precision)}` : "—"}
               </div>
-              {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} size={12.5} /> : "—"}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                <span style={{ fontSize: 10.5, color: THEME.inkDim }}>Daily</span>
+                {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} size={12.5} /> : "—"}
+              </div>
             </div>
             <LiveTag live statusLabel={isCurrencyMarketOpen() ? "Live" : "EOD"} />
           </div>
@@ -6053,7 +6056,10 @@ function CurrencyDetail({ currency, back }) {
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${THEME.hairline}`, fontSize: 12.5 }}>
             <span style={{ color: THEME.inkDim }}>Latest change</span>
-            {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} /> : <span>—</span>}
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+              <span style={{ fontSize: 10.5, color: THEME.inkDim }}>Daily</span>
+              {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} /> : <span>—</span>}
+            </div>
           </div>
           <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: `1px solid ${THEME.hairline}`, fontSize: 12.5 }}>
             <span style={{ color: THEME.inkDim }}>52W range</span>
