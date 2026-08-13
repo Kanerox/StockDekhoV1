@@ -917,7 +917,7 @@ function hasFreshCurrencyQuote(currency, now = new Date()) {
 
 function LiveTag({ live, approx, small, statusLabel }) {
   if (live) {
-    const label = statusLabel || (approx ? "Live · approx" : "Live EOD");
+    const label = statusLabel || (approx ? "Live · approx" : isIndianMarketOpen() ? "Live" : "EOD");
     return (
       <span title={statusLabel === "Live" ? "Market is currently open" : statusLabel === "EOD" ? "Latest end-of-day value" : approx ? "Live-anchored (approximate reference level)" : "Live-anchored EOD snapshot"}
         style={{
@@ -938,6 +938,12 @@ function LiveTag({ live, approx, small, statusLabel }) {
       Demo
     </span>
   );
+}
+
+function marketProviderLabel(value) {
+  return String(value || "").toLowerCase() === "upstox"
+    ? "Upstox"
+    : "Yahoo Finance";
 }
 
 function Move({ value, suffix = "%", size = 13 }) {
@@ -1550,7 +1556,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
               {indexData?.description || "Loading benchmark description..."}
             </p>
             <div style={{ fontSize: 11.5, color: THEME.inkDim, marginTop: 8 }}>
-              {isDemo ? "Illustrative benchmark · Demo data" : "Benchmark index · Yahoo Finance EOD data"}
+              {isDemo ? "Illustrative benchmark · Demo data" : `Benchmark index · ${marketProviderLabel(indexData?.dataProvider)} market data`}
             </div>
           </div>
           <div style={{ textAlign: "right" }}>
@@ -1610,7 +1616,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
       <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 12 }}>
         {isDemo
           ? "Chart levels and performance metrics are simulated for demonstration purposes and are not historical market data."
-          : "Historical closing levels and performance metrics are calculated from Yahoo Finance data."}
+          : `Historical closing levels and performance metrics are calculated from ${marketProviderLabel(indexData?.dataProvider)} data.`}
       </div>
 
       {isVix && (
@@ -1940,7 +1946,7 @@ const mostActive = [...performerStocks]
     : "Loading the latest Indian market leadership snapshot";
   const leadershipSummary = nifty50 && sensex && leadingStock && laggingStock
     ? `The Nifty 50 ${nifty50.changePercent >= 0 ? "rose" : "fell"} ${Math.abs(nifty50.changePercent).toFixed(2)}% while the Sensex ${sensex.changePercent >= 0 ? "gained" : "declined"} ${Math.abs(sensex.changePercent).toFixed(2)}%. ${leadingStock.name} led the Nifty constituents with a ${leadingStock.chgPct >= 0 ? "gain" : "move"} of ${Math.abs(leadingStock.chgPct).toFixed(2)}%, while ${laggingStock.name} was the weakest at ${laggingStock.chgPct.toFixed(2)}%. Index breadth was ${advancing} advancing, ${unchanged} unchanged and ${declining} declining.`
-    : "Current Nifty 50 leadership and breadth data are loading from Yahoo Finance.";
+    : "Current Nifty 50 leadership and breadth data are loading from the market-data provider.";
   const sectorByKey = new Map(
   sectorData.map((sector) => [
     sector.key,
@@ -2474,7 +2480,7 @@ console.log(response);
           <div style={{ display: "flex", gap: 6 }}>{Object.keys(perfMap).map((t) => <Pill key={t} active={perfTab === t} onClick={() => setPerfTab(t)}>{t}</Pill>)}</div>
         </div>} />
       <ModeExplain mode={mode}>
-  Rankings use Yahoo Finance historical prices for the selected period. The market-cap filter is based on StockDekho's current stock classifications.
+  Rankings use provider-supplied historical prices for the selected period. The market-cap filter is based on StockDekho's current stock classifications.
 </ModeExplain>
       <div className="sd-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12, marginBottom: 26 }}>
   {!performersLoading && sortedByRet.length > 0 && (
@@ -2510,7 +2516,7 @@ console.log(response);
     marginBottom: 12,
   }}
 >
-  Ranked by the estimated value of shares traded in the current session, using Yahoo Finance data.
+  Ranked by the estimated value of shares traded in the current session, using the latest available market data.
 </div>
       <RankTable title="" rows={mostActive} metricKey="tradedVal" metricLabel="Traded value (₹Cr)" openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} wide />
 
@@ -2829,7 +2835,7 @@ function FeaturedChartCard({
           marginTop: 6,
         }}
       >
-        Yahoo Finance historical data
+        Market-provider historical data
         {latestDate
           ? ` · latest available session ${latestDate}`
           : ""}
@@ -3157,7 +3163,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
       <SectionHeading eyebrow="Screener" title="All NSE Stocks" />
       <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16, maxWidth: 760 }}>
         Represents the broader universe of NSE-listed equities across market-cap bands — not only Nifty 50 constituents.
-        This V1 tracks a representative universe using the latest available Yahoo Finance market data; a live product
+        This V1 tracks a representative universe using the latest available Upstox market data; a live product
         would use the complete licensed NSE-listed equity universe under <span className="sd-underline-link">Sector Classification</span>.
         {stocksAsOf && <> Data as of {formatMarketAsOf(stocksAsOf)}.</>}
       </p>
@@ -3231,7 +3237,7 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
                   <tr><td colSpan={cols.length + 2} style={{ ...tdStyle, textAlign: "center", color: THEME.inkDim, padding: 30 }}>No companies match these filters. Adjust a range or select Reset to view the full list.</td></tr>
                 )}
                 {stocksLoading && (
-                  <tr><td colSpan={cols.length + 2} style={{ ...tdStyle, textAlign: "center", color: THEME.inkDim, padding: 30 }}>Loading live Yahoo Finance data...</td></tr>
+                  <tr><td colSpan={cols.length + 2} style={{ ...tdStyle, textAlign: "center", color: THEME.inkDim, padding: 30 }}>Loading current market data...</td></tr>
                 )}
                 {!stocksLoading && stocksError && (
                   <tr><td colSpan={cols.length + 2} style={{ ...tdStyle, textAlign: "center", color: THEME.down, padding: 30 }}>{stocksError}</td></tr>
@@ -4360,7 +4366,7 @@ useEffect(() => {
              <h1 className="sd-serif" style={{ fontSize: 24, margin: 0 }}>
   {quote.company || s.name}
 </h1>
-              <LiveTag live={s.live} statusLabel={s.live ? isIndianMarketOpen() ? "Live" : "EOD" : undefined} />
+              <LiveTag live={Boolean(stockData)} statusLabel={stockData ? isIndianMarketOpen() ? "Live" : "EOD" : undefined} />
             </div>
             <div style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: 4 }}>
   {quote.symbol || s.ticker}· {quote.exchange || "NSE"} · {s.sector} · {s.cap} Cap
@@ -4405,7 +4411,7 @@ useEffect(() => {
     paddingTop: 10,
   }}
 >
-  Market data sourced from Yahoo Finance · As of {formatMarketAsOf(quote.asOf)}. For research purposes only. Not investment advice.
+  Market data sourced from {marketProviderLabel(quote.dataProvider)} · As of {formatMarketAsOf(quote.asOf)}. For research purposes only. Not investment advice.
 </div>
       </Panel>
 
@@ -4480,7 +4486,7 @@ useEffect(() => {
                 ))}
               </div>
               <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 10 }}>
-                Daily historical prices from Yahoo Finance. Return and drawdown use the selected {returnType.toLowerCase()} series; volatility is annualised from daily returns and beta is measured against the Nifty 50.
+                Daily historical prices from {marketProviderLabel(quote.dataProvider)}. Return and drawdown use the selected {returnType.toLowerCase()} series; volatility is annualised from daily returns and beta is measured against the Nifty 50.
               </div>
             </>
           )}
@@ -5209,7 +5215,7 @@ function PeerTab({ sector, ticker, openCompany }) {
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: THEME.inkDim, marginBottom: 12 }}>Live Yahoo Finance data for StockDekho companies within {sector}. Higher or lower values are shown for context only — not a ranking of which company is "better".</div>
+      <div style={{ fontSize: 11, color: THEME.inkDim, marginBottom: 12 }}>Latest available market data for StockDekho companies within {sector}. Higher or lower values are shown for context only — not a ranking of which company is "better".</div>
       <Panel style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 720 }}>
           <thead><tr style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
@@ -5910,7 +5916,7 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
             {historyError && Object.keys(histories).length > 0 && (
               <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 8 }}>{historyError}</div>
             )}
-            <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 6 }}>Adjusted closing prices supplied by Yahoo Finance and rebased to 0 at the selected period start.</div>
+            <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 6 }}>Provider-supplied closing prices rebased to 0 at the selected period start.</div>
           </Panel>
 
           <Panel style={{ overflowX: "auto" }}>
@@ -6455,7 +6461,7 @@ function Footer() {
   const [drawer, setDrawer] = useState(null);
   const links = ["Data sources", "Methodology", "Metric definitions", "Risk disclosures", "Corporate-action treatment", "End-of-day data timing"];
   const content = {
-    "Data sources": "EOD quotes, fundamentals and historical series are retrieved through Yahoo Finance and cached by StockDekho. News is aggregated from configured news providers and filtered for relevance. Unsupported indices and explicitly marked fields remain illustrative demo data.",
+    "Data sources": "Indian equity and index quotes and historical series are retrieved primarily through Upstox and cached by StockDekho, with Yahoo Finance retained as a fallback and for selected fundamentals and events. Currency reference rates use Yahoo Finance. News is aggregated from configured news providers and filtered for relevance. Explicitly marked fields remain illustrative demo data.",
     Methodology: "Returns, drawdown, volatility and beta are calculated from the available daily historical series. Comparisons provide research context only and are not certified index calculations or recommendations.",
     "Metric definitions": "Hover or tap a visible (i) icon for a concise definition, why investors use the metric and how to interpret it.",
     "Risk disclosures": "Equity investments carry risk of loss. Past performance is not indicative of future results. This Artifact is for information and research purposes only.",

@@ -12,6 +12,11 @@ function dateOrNull(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function futureDateOrNull(value) {
+  const date = dateOrNull(value);
+  return date && new Date(date).getTime() > Date.now() ? date : null;
+}
+
 async function getCompanyEvents(symbol) {
   let result;
   let partial = false;
@@ -58,7 +63,7 @@ async function getCompanyEvents(symbol) {
     currency: summary.currency || "INR",
     availability: partial ? "partial" : "full",
     upcomingEarnings: {
-      date: dateOrNull(earnings.earningsDate?.[0]),
+      date: futureDateOrNull(earnings.earningsDate?.[0]),
       isEstimate: Boolean(earnings.isEarningsDateEstimate),
       epsEstimate: numberOrNull(earnings.earningsAverage),
       epsLow: numberOrNull(earnings.earningsLow),

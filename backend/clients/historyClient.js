@@ -4,7 +4,8 @@ const {
 } = require("../providers/marketData");
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 
-const FRESH_HISTORY_TTL_MS = 6 * 60 * 60 * 1000;
+const YAHOO_FRESH_HISTORY_TTL_MS = 6 * 60 * 60 * 1000;
+const UPSTOX_FRESH_HISTORY_TTL_MS = 30 * 60 * 1000;
 const STALE_HISTORY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
 const requestsInFlight = new Map();
@@ -94,7 +95,10 @@ async function startRateLimitCooldown() {
 async function fetchHistoricalPrices(symbol, period1, period2) {
   const normalizedSymbol = normalizeSymbol(symbol);
   const key = historyCacheKey(normalizedSymbol, period1, period2);
-  const freshPrices = await getCachedValue(key, FRESH_HISTORY_TTL_MS);
+  const freshTtl = getMarketDataProviderName() === "upstox"
+    ? UPSTOX_FRESH_HISTORY_TTL_MS
+    : YAHOO_FRESH_HISTORY_TTL_MS;
+  const freshPrices = await getCachedValue(key, freshTtl);
   if (freshPrices) return freshPrices;
 
   if (await isYahooCoolingDown()) {
