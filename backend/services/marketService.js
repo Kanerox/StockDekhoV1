@@ -120,7 +120,7 @@ const getStockUniverseFromService = async (symbols) => {
     symbols
       .map((symbol) => String(symbol || "").trim().toUpperCase())
       .filter(Boolean)
-  )].slice(0, 50);
+  )].slice(0, 200);
 
   if (uniqueSymbols.length === 0) {
     throw new Error("At least one stock symbol is required");

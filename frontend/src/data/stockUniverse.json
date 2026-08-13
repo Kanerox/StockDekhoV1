@@ -1,0 +1,1202 @@
+[
+  {
+    "ticker": "360ONE",
+    "name": "360 ONE WAM Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "ABB",
+    "name": "ABB India Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "APLAPOLLO",
+    "name": "APL Apollo Tubes Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "AUBANK",
+    "name": "AU Small Finance Bank Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "ADANIENSOL",
+    "name": "Adani Energy Solutions Ltd.",
+    "sector": "Utilities",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ADANIENT",
+    "name": "Adani Enterprises Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ADANIGREEN",
+    "name": "Adani Green Energy Ltd.",
+    "sector": "Utilities",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ADANIPORTS",
+    "name": "Adani Ports and Special Economic Zone Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ADANIPOWER",
+    "name": "Adani Power Ltd.",
+    "sector": "Utilities",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ATGL",
+    "name": "Adani Total Gas Ltd.",
+    "sector": "Energy",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "ABCAPITAL",
+    "name": "Aditya Birla Capital Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "ALKEM",
+    "name": "Alkem Laboratories Ltd.",
+    "sector": "Health Care",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "AMBUJACEM",
+    "name": "Ambuja Cements Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "APOLLOHOSP",
+    "name": "Apollo Hospitals Enterprise Ltd.",
+    "sector": "Health Care",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ASHOKLEY",
+    "name": "Ashok Leyland Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "ASIANPAINT",
+    "name": "Asian Paints Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ASTRAL",
+    "name": "Astral Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "AUROPHARMA",
+    "name": "Aurobindo Pharma Ltd.",
+    "sector": "Health Care",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "DMART",
+    "name": "Avenue Supermarts Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "AXISBANK",
+    "name": "Axis Bank Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "BSE",
+    "name": "BSE Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "BAJAJ-AUTO",
+    "name": "Bajaj Auto Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "BAJFINANCE",
+    "name": "Bajaj Finance Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "BAJAJFINSV",
+    "name": "Bajaj Finserv Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "BAJAJHLDNG",
+    "name": "Bajaj Holdings & Investment Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "BANKBARODA",
+    "name": "Bank of Baroda",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "BANKINDIA",
+    "name": "Bank of India",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "BDL",
+    "name": "Bharat Dynamics Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "BEL",
+    "name": "Bharat Electronics Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "BHARATFORG",
+    "name": "Bharat Forge Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "BHEL",
+    "name": "Bharat Heavy Electricals Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "BPCL",
+    "name": "Bharat Petroleum Corporation Ltd.",
+    "sector": "Energy",
+    "cap": "Large"
+  },
+  {
+    "ticker": "BHARTIARTL",
+    "name": "Bharti Airtel Ltd.",
+    "sector": "Communication Services",
+    "cap": "Large"
+  },
+  {
+    "ticker": "GROWW",
+    "name": "Billionbrains Garage Ventures Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "BIOCON",
+    "name": "Biocon Ltd.",
+    "sector": "Health Care",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "BLUESTARCO",
+    "name": "Blue Star Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "BOSCHLTD",
+    "name": "Bosch Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "BRITANNIA",
+    "name": "Britannia Industries Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Large"
+  },
+  {
+    "ticker": "CGPOWER",
+    "name": "CG Power and Industrial Solutions Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "CANBK",
+    "name": "Canara Bank",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "CHOLAFIN",
+    "name": "Cholamandalam Investment and Finance Company Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "CIPLA",
+    "name": "Cipla Ltd.",
+    "sector": "Health Care",
+    "cap": "Large"
+  },
+  {
+    "ticker": "COALINDIA",
+    "name": "Coal India Ltd.",
+    "sector": "Energy",
+    "cap": "Large"
+  },
+  {
+    "ticker": "COCHINSHIP",
+    "name": "Cochin Shipyard Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "COFORGE",
+    "name": "Coforge Ltd.",
+    "sector": "Information Technology",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "COLPAL",
+    "name": "Colgate Palmolive (India) Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "CONCOR",
+    "name": "Container Corporation of India Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "COROMANDEL",
+    "name": "Coromandel International Ltd.",
+    "sector": "Materials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "CUMMINSIND",
+    "name": "Cummins India Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "DLF",
+    "name": "DLF Ltd.",
+    "sector": "Real Estate",
+    "cap": "Large"
+  },
+  {
+    "ticker": "DABUR",
+    "name": "Dabur India Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "DIVISLAB",
+    "name": "Divi's Laboratories Ltd.",
+    "sector": "Health Care",
+    "cap": "Large"
+  },
+  {
+    "ticker": "DIXON",
+    "name": "Dixon Technologies (India) Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "DRREDDY",
+    "name": "Dr. Reddy's Laboratories Ltd.",
+    "sector": "Health Care",
+    "cap": "Large"
+  },
+  {
+    "ticker": "EICHERMOT",
+    "name": "Eicher Motors Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ETERNAL",
+    "name": "Eternal Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "EXIDEIND",
+    "name": "Exide Industries Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "NYKAA",
+    "name": "FSN E-Commerce Ventures Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "FEDERALBNK",
+    "name": "Federal Bank Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "FORTIS",
+    "name": "Fortis Healthcare Ltd.",
+    "sector": "Health Care",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "GAIL",
+    "name": "GAIL (India) Ltd.",
+    "sector": "Energy",
+    "cap": "Large"
+  },
+  {
+    "ticker": "GVT&D",
+    "name": "GE Vernova T&D India Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "GMRAIRPORT",
+    "name": "GMR Airports Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "GLENMARK",
+    "name": "Glenmark Pharmaceuticals Ltd.",
+    "sector": "Health Care",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "GODFRYPHLP",
+    "name": "Godfrey Phillips India Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "GODREJCP",
+    "name": "Godrej Consumer Products Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Large"
+  },
+  {
+    "ticker": "GODREJPROP",
+    "name": "Godrej Properties Ltd.",
+    "sector": "Real Estate",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "GRASIM",
+    "name": "Grasim Industries Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "HCLTECH",
+    "name": "HCL Technologies Ltd.",
+    "sector": "Information Technology",
+    "cap": "Large"
+  },
+  {
+    "ticker": "HDFCAMC",
+    "name": "HDFC Asset Management Company Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "HDFCBANK",
+    "name": "HDFC Bank Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "HDFCLIFE",
+    "name": "HDFC Life Insurance Company Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "HAVELLS",
+    "name": "Havells India Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "HEROMOTOCO",
+    "name": "Hero MotoCorp Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "HINDALCO",
+    "name": "Hindalco Industries Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "HAL",
+    "name": "Hindustan Aeronautics Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "HINDPETRO",
+    "name": "Hindustan Petroleum Corporation Ltd.",
+    "sector": "Energy",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "HINDUNILVR",
+    "name": "Hindustan Unilever Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Large"
+  },
+  {
+    "ticker": "HINDZINC",
+    "name": "Hindustan Zinc Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "POWERINDIA",
+    "name": "Hitachi Energy India Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "HUDCO",
+    "name": "Housing & Urban Development Corporation Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "HYUNDAI",
+    "name": "Hyundai Motor India Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ICICIBANK",
+    "name": "ICICI Bank Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ICICIGI",
+    "name": "ICICI Lombard General Insurance Company Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "ICICIAMC",
+    "name": "ICICI Prudential Asset Management Company Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "IDFCFIRSTB",
+    "name": "IDFC First Bank Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "ITC",
+    "name": "ITC Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Large"
+  },
+  {
+    "ticker": "INDIANB",
+    "name": "Indian Bank",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "INDHOTEL",
+    "name": "Indian Hotels Co. Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "IOC",
+    "name": "Indian Oil Corporation Ltd.",
+    "sector": "Energy",
+    "cap": "Large"
+  },
+  {
+    "ticker": "IRCTC",
+    "name": "Indian Railway Catering And Tourism Corporation Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "IRFC",
+    "name": "Indian Railway Finance Corporation Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "IREDA",
+    "name": "Indian Renewable Energy Development Agency Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "INDUSTOWER",
+    "name": "Indus Towers Ltd.",
+    "sector": "Communication Services",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "INDUSINDBK",
+    "name": "IndusInd Bank Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "NAUKRI",
+    "name": "Info Edge (India) Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "INFY",
+    "name": "Infosys Ltd.",
+    "sector": "Information Technology",
+    "cap": "Large"
+  },
+  {
+    "ticker": "INDIGO",
+    "name": "InterGlobe Aviation Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "JSWENERGY",
+    "name": "JSW Energy Ltd.",
+    "sector": "Utilities",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "JSWSTEEL",
+    "name": "JSW Steel Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "JINDALSTEL",
+    "name": "Jindal Steel Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "JIOFIN",
+    "name": "Jio Financial Services Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "JUBLFOOD",
+    "name": "Jubilant Foodworks Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "KEI",
+    "name": "KEI Industries Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "KPITTECH",
+    "name": "KPIT Technologies Ltd.",
+    "sector": "Information Technology",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "KALYANKJIL",
+    "name": "Kalyan Jewellers India Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "KOTAKBANK",
+    "name": "Kotak Mahindra Bank Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "LTF",
+    "name": "L&T Finance Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "LGEINDIA",
+    "name": "LG Electronics India Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "LICHSGFIN",
+    "name": "LIC Housing Finance Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "LTM",
+    "name": "LTM Ltd.",
+    "sector": "Information Technology",
+    "cap": "Large"
+  },
+  {
+    "ticker": "LT",
+    "name": "Larsen & Toubro Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "LAURUSLABS",
+    "name": "Laurus Labs Ltd.",
+    "sector": "Health Care",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "LENSKART",
+    "name": "Lenskart Solutions Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "LODHA",
+    "name": "Lodha Developers Ltd.",
+    "sector": "Real Estate",
+    "cap": "Large"
+  },
+  {
+    "ticker": "LUPIN",
+    "name": "Lupin Ltd.",
+    "sector": "Health Care",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "MRF",
+    "name": "MRF Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "M&MFIN",
+    "name": "Mahindra & Mahindra Financial Services Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "M&M",
+    "name": "Mahindra & Mahindra Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "MANKIND",
+    "name": "Mankind Pharma Ltd.",
+    "sector": "Health Care",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "MARICO",
+    "name": "Marico Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "MARUTI",
+    "name": "Maruti Suzuki India Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "MFSL",
+    "name": "Max Financial Services Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "MAXHEALTH",
+    "name": "Max Healthcare Institute Ltd.",
+    "sector": "Health Care",
+    "cap": "Large"
+  },
+  {
+    "ticker": "MAZDOCK",
+    "name": "Mazagoan Dock Shipbuilders Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "MOTILALOFS",
+    "name": "Motilal Oswal Financial Services Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "MPHASIS",
+    "name": "MphasiS Ltd.",
+    "sector": "Information Technology",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "MCX",
+    "name": "Multi Commodity Exchange of India Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "MUTHOOTFIN",
+    "name": "Muthoot Finance Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "NHPC",
+    "name": "NHPC Ltd.",
+    "sector": "Utilities",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "NMDC",
+    "name": "NMDC Ltd.",
+    "sector": "Materials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "NTPC",
+    "name": "NTPC Ltd.",
+    "sector": "Utilities",
+    "cap": "Large"
+  },
+  {
+    "ticker": "NATIONALUM",
+    "name": "National Aluminium Co. Ltd.",
+    "sector": "Materials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "NESTLEIND",
+    "name": "Nestle India Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Large"
+  },
+  {
+    "ticker": "OBEROIRLTY",
+    "name": "Oberoi Realty Ltd.",
+    "sector": "Real Estate",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "ONGC",
+    "name": "Oil & Natural Gas Corporation Ltd.",
+    "sector": "Energy",
+    "cap": "Large"
+  },
+  {
+    "ticker": "OIL",
+    "name": "Oil India Ltd.",
+    "sector": "Energy",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "PAYTM",
+    "name": "One 97 Communications Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "OFSS",
+    "name": "Oracle Financial Services Software Ltd.",
+    "sector": "Information Technology",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "POLICYBZR",
+    "name": "PB Fintech Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "PIIND",
+    "name": "PI Industries Ltd.",
+    "sector": "Materials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "PAGEIND",
+    "name": "Page Industries Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "PATANJALI",
+    "name": "Patanjali Foods Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "PERSISTENT",
+    "name": "Persistent Systems Ltd.",
+    "sector": "Information Technology",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "PHOENIXLTD",
+    "name": "Phoenix Mills Ltd.",
+    "sector": "Real Estate",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "PIDILITIND",
+    "name": "Pidilite Industries Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "POLYCAB",
+    "name": "Polycab India Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "PFC",
+    "name": "Power Finance Corporation Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "POWERGRID",
+    "name": "Power Grid Corporation of India Ltd.",
+    "sector": "Utilities",
+    "cap": "Large"
+  },
+  {
+    "ticker": "PREMIERENE",
+    "name": "Premier Energies Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "PRESTIGE",
+    "name": "Prestige Estates Projects Ltd.",
+    "sector": "Real Estate",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "PNB",
+    "name": "Punjab National Bank",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "RECLTD",
+    "name": "REC Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "RADICO",
+    "name": "Radico Khaitan Ltd",
+    "sector": "Consumer Staples",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "RVNL",
+    "name": "Rail Vikas Nigam Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "RELIANCE",
+    "name": "Reliance Industries Ltd.",
+    "sector": "Energy",
+    "cap": "Large"
+  },
+  {
+    "ticker": "SBICARD",
+    "name": "SBI Cards and Payment Services Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "SBILIFE",
+    "name": "SBI Life Insurance Company Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "SRF",
+    "name": "SRF Ltd.",
+    "sector": "Materials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "MOTHERSON",
+    "name": "Samvardhana Motherson International Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "SHREECEM",
+    "name": "Shree Cement Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "SHRIRAMFIN",
+    "name": "Shriram Finance Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "ENRIN",
+    "name": "Siemens Energy India Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "SIEMENS",
+    "name": "Siemens Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "SOLARINDS",
+    "name": "Solar Industries India Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "SBIN",
+    "name": "State Bank of India",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "SAIL",
+    "name": "Steel Authority of India Ltd.",
+    "sector": "Materials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "SUNPHARMA",
+    "name": "Sun Pharmaceutical Industries Ltd.",
+    "sector": "Health Care",
+    "cap": "Large"
+  },
+  {
+    "ticker": "SUPREMEIND",
+    "name": "Supreme Industries Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "SUZLON",
+    "name": "Suzlon Energy Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "SWIGGY",
+    "name": "Swiggy Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "TVSMOTOR",
+    "name": "TVS Motor Company Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TATACAP",
+    "name": "Tata Capital Ltd.",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TATACOMM",
+    "name": "Tata Communications Ltd.",
+    "sector": "Communication Services",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "TCS",
+    "name": "Tata Consultancy Services Ltd.",
+    "sector": "Information Technology",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TATACONSUM",
+    "name": "Tata Consumer Products Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TATAELXSI",
+    "name": "Tata Elxsi Ltd.",
+    "sector": "Information Technology",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "TATAINVEST",
+    "name": "Tata Investment Corporation Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "TMCV",
+    "name": "Tata Motors Ltd.",
+    "sector": "Industrials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TMPV",
+    "name": "Tata Motors Passenger Vehicles Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TATAPOWER",
+    "name": "Tata Power Co. Ltd.",
+    "sector": "Utilities",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TATASTEEL",
+    "name": "Tata Steel Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TECHM",
+    "name": "Tech Mahindra Ltd.",
+    "sector": "Information Technology",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TITAN",
+    "name": "Titan Company Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TORNTPHARM",
+    "name": "Torrent Pharmaceuticals Ltd.",
+    "sector": "Health Care",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TRENT",
+    "name": "Trent Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Large"
+  },
+  {
+    "ticker": "TIINDIA",
+    "name": "Tube Investments of India Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "UPL",
+    "name": "UPL Ltd.",
+    "sector": "Materials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "ULTRACEMCO",
+    "name": "UltraTech Cement Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "UNIONBANK",
+    "name": "Union Bank of India",
+    "sector": "Financials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "UNITDSPR",
+    "name": "United Spirits Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Large"
+  },
+  {
+    "ticker": "VBL",
+    "name": "Varun Beverages Ltd.",
+    "sector": "Consumer Staples",
+    "cap": "Large"
+  },
+  {
+    "ticker": "VEDL",
+    "name": "Vedanta Ltd.",
+    "sector": "Materials",
+    "cap": "Large"
+  },
+  {
+    "ticker": "VMM",
+    "name": "Vishal Mega Mart Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "IDEA",
+    "name": "Vodafone Idea Ltd.",
+    "sector": "Communication Services",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "VOLTAS",
+    "name": "Voltas Ltd.",
+    "sector": "Consumer Discretionary",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "WAAREEENER",
+    "name": "Waaree Energies Ltd.",
+    "sector": "Industrials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "WIPRO",
+    "name": "Wipro Ltd.",
+    "sector": "Information Technology",
+    "cap": "Large"
+  },
+  {
+    "ticker": "YESBANK",
+    "name": "Yes Bank Ltd.",
+    "sector": "Financials",
+    "cap": "Mid"
+  },
+  {
+    "ticker": "ZYDUSLIFE",
+    "name": "Zydus Lifesciences Ltd.",
+    "sector": "Health Care",
+    "cap": "Large"
+  }
+]

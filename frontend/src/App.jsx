@@ -8,6 +8,7 @@ import { getIndexDetail, getIndices } from "./api/indexApi";
 import { getCompanyNews, getGlobalMarketNews, getNiftyMarketEvents, getVixMarketNews } from "./api/newsApi";
 import { getPerformanceHistory } from "./api/performanceApi";
 import { getSectorDetail, getSectors } from "./api/sectorApi";
+import stockUniverse from "./data/stockUniverse.json";
 import {
   ResponsiveContainer,
   LineChart,
@@ -577,7 +578,7 @@ const SECTOR_NEWS = {
 
 /* ---------------------------- Stocks ---------------------------- */
 // live:true rows are the 5 real-anchored large caps. Everything else is representative demo data.
-const RAW_STOCKS = [
+const LEGACY_RAW_STOCKS = [
   { ticker: "RELIANCE", name: "Reliance Industries Ltd", sector: "Energy", cap: "Large", price: 1286.3, chgPct: 0.65, mcap: 1739000, pe: 24.1, pb: 2.1, roe: 9.2, roce: 10.4, divYield: 0.4, de: 0.35, ret1y: 4.2, tradedVal: 2840, live: true, sourceNote: "Yahoo Finance base price + 24 Jul close move" },
   { ticker: "TCS", name: "Tata Consultancy Services Ltd", sector: "Information Technology", cap: "Large", price: 2254.3, chgPct: 0.2, mcap: 1218000, pe: 22.8, pb: 12.9, roe: 52.1, roce: 64.3, divYield: 3.1, de: 0.02, ret1y: -6.8, tradedVal: 1620, live: true, sourceNote: "Yahoo Finance, early Jul 2026 + Q1 FY27 results 24 Jul 2026" },
   { ticker: "SBIN", name: "State Bank of India", sector: "Financials", cap: "Large", price: 1015.0, chgPct: 0.24, mcap: 906000, pe: 10.2, pb: 1.6, roe: 17.4, roce: null, divYield: 1.8, de: null, ret1y: 8.9, tradedVal: 1980, live: true, sourceNote: "Yahoo Finance, early Jul 2026" },
@@ -637,6 +638,23 @@ const RAW_STOCKS = [
   },
 }));
 
+const RAW_STOCKS = stockUniverse.map((stock) => ({
+  ...stock,
+  price: null,
+  chgPct: null,
+  mcap: null,
+  pe: null,
+  pb: null,
+  roe: null,
+  roce: null,
+  divYield: null,
+  ret1y: null,
+  tradedVal: null,
+  live: true,
+  spark: [],
+  hist: {},
+}));
+
 const STOCKS_BY_TICKER = Object.fromEntries(RAW_STOCKS.map((s) => [s.ticker, s]));
 
 // Demo constituent membership for each benchmark index, drawn from the representative stock
@@ -645,7 +663,7 @@ const INDEX_CONSTITUENTS = {
   NIFTY50: RAW_STOCKS.filter((s) => s.cap === "Large").map((s) => s.ticker),
   NEXT50: RAW_STOCKS.filter((s) => s.cap === "Large").slice(8, 20).map((s) => s.ticker),
   MIDCAP150: RAW_STOCKS.filter((s) => s.cap === "Mid").map((s) => s.ticker),
-  SMALLCAP250: RAW_STOCKS.filter((s) => s.cap === "Small" || s.cap === "Micro").map((s) => s.ticker),
+  SMALLCAP250: [],
   NIFTY500: RAW_STOCKS.map((s) => s.ticker),
   BANKNIFTY: RAW_STOCKS.filter((s) => s.sector === "Financials" && /BANK|SBIN/i.test(s.ticker)).map((s) => s.ticker),
   SENSEX: RAW_STOCKS.filter((s) => s.cap === "Large").slice(0, 14).map((s) => s.ticker),
@@ -1367,8 +1385,8 @@ function IndexCard({ idx, onOpen }) {
    BENCHMARK RESEARCH PAGE — opened by clicking any index card on the Markets homepage
    ========================================================================================= */
 function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWatch, compareList, toggleCompare }) {
-  const demoConfig = DEMO_INDEX_DETAILS[indexKey];
-  const isDemo = Boolean(demoConfig);
+  const demoConfig = null;
+  const isDemo = false;
   const isVix = indexKey === "VIX";
   const [range, setRange] = useState("1Y");
   const [indexData, setIndexData] = useState(null);
@@ -1959,15 +1977,9 @@ const mostActive = [...performerStocks]
   liveIndices.find((idx) => idx.key === "BANKNIFTY"),
   liveIndices.find((idx) => idx.key === "SENSEX"),
   liveIndices.find((idx) => idx.key === "VIX"),
-  DEMO_MARKET_INDICES.find(
-    (idx) => idx.key === "MIDCAP150"
-  ),
-  DEMO_MARKET_INDICES.find(
-    (idx) => idx.key === "SMALLCAP250"
-  ),
-  DEMO_MARKET_INDICES.find(
-    (idx) => idx.key === "NIFTY500"
-  ),
+  liveIndices.find((idx) => idx.key === "MIDCAP150"),
+  liveIndices.find((idx) => idx.key === "SMALLCAP250"),
+  liveIndices.find((idx) => idx.key === "NIFTY500"),
 ].filter(Boolean);
 
 useEffect(() => {
@@ -3692,7 +3704,6 @@ function CompanyOverviewTab({ ticker, liveNews, newsLoading, newsError }) {
         <div style={{ fontSize: 12, marginTop: 16, padding: 10, borderRadius: 4, background: "rgba(201,162,75,0.06)", border: `1px dashed ${THEME.hairline}` }}>
           <b style={{ color: THEME.gold }}>What changed?</b> {whatChangedBlurb(ticker)}
         </div>
-        <div style={{ fontSize: 11.5, color: THEME.inkDim, marginTop: 10 }}>Next corporate event: Q2 FY27 results — mid-Oct 2026 (demo date)</div>
       </Panel>
 
       <Panel style={{ padding: 16 }}>
@@ -4593,10 +4604,7 @@ useEffect(() => {
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Valuation</div>
             {[
   ["P/E", quote.trailingPE ?? s.pe],
-  ["Forward P/E (demo)", quote.trailingPE ? quote.trailingPE * 0.92 : (s.pe ? s.pe * 0.92 : null)],
   ["P/B", s.pb],
-  ["EV/EBITDA (demo)", quote.trailingPE ? quote.trailingPE * 0.8 : (s.pe ? s.pe * 0.8 : null)],
-  ["PEG (demo)", 1.4],
   ["Market Cap", null]
 ].map(([l, v]) => (
               <MetricLine key={l} label={l} value={
@@ -4618,7 +4626,7 @@ useEffect(() => {
           </Panel>
           <Panel style={{ padding: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Quality & growth</div>
-            {[["ROE %", s.roe], ["ROCE %", s.roce], ["Gross margin % (demo)", 38.4], ["Operating margin % (demo)", 21.2], ["Net margin % (demo)", 14.6], ["Revenue growth 3Y CAGR % (demo)", 9.8]].map(([l, v]) => (
+            {[["ROE %", s.roe], ["ROCE %", s.roce]].map(([l, v]) => (
               <MetricLine key={l} label={l} value={
   v !== null && v !== undefined
     ? l === "Dividend yield %"
@@ -4636,10 +4644,7 @@ useEffect(() => {
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Leverage & dividends</div>
             {[
   ["Debt/Equity", s.de],
-  ["Interest coverage (demo)", 8.4],
-  ["Current ratio (demo)", 1.6],
   ["Dividend yield %", quote.dividendYield ?? s.divYield],
-  ["Payout ratio % (demo)", 24.5]
 ].map(([l, v]) => (
               <MetricLine key={l} label={l} value={v !== null && v !== undefined ? fmtNum(v, 2) : "—"} mode={mode} explain={
                 l === "Dividend yield %"
@@ -5312,7 +5317,7 @@ function companyBlurb(ticker) {
     SHRIRAMFIN: "Large non-banking financial company focused on commercial-vehicle finance and MSME lending.",
     TATACONSUM: "Consumer-goods company with a portfolio spanning tea, coffee, salt and packaged foods.",
   };
-  return map[ticker] || "Diversified NSE-listed business; demo business description for this Artifact.";
+  return map[ticker] || "Company profile information is not currently available from the configured data providers.";
 }
 function whatChangedBlurb(ticker) {
   const map = {
@@ -5669,7 +5674,7 @@ function companyProfile(ticker) {
   return COMPANY_PROFILE[ticker] || {
     overview: companyBlurb(ticker),
     segments: [{ name: "Core operations", desc: "Primary revenue-generating business activity for this company." }],
-    background: "Demo business background for this Artifact — a live product would source this from company filings and investor presentations.",
+    background: "Company background information is not currently available from the configured data providers.",
   };
 }
 
@@ -5725,20 +5730,7 @@ const COMPANY_NEWS = {
 };
 function companyNews(ticker) {
   if (COMPANY_NEWS[ticker]) return COMPANY_NEWS[ticker];
-  const s = STOCKS_BY_TICKER[ticker];
-  const sector = s?.sector || "the sector";
-  return [
-    {
-      id: ticker + "-generic-1", headline: `${s ? s.name : ticker}: no major company-specific news this session`, date: "24 Jul 2026",
-      teaser: `Trading broadly tracked moves in ${sector} rather than any company-specific catalyst.`,
-      body: [
-        `There was no significant company-specific announcement for ${s ? s.name : ticker} in the most recent session, and the stock's move largely tracked the broader trend in ${sector}.`,
-        `In the absence of a specific catalyst, single-session price moves are generally read as noise relative to a company's underlying fundamentals, which are better assessed through the Financials and Valuation & Quality tabs on this page.`,
-        `This is placeholder demo commentary for this Artifact — a live product would source real-time company news from licensed financial-news providers and exchange filings.`,
-      ],
-      source: "StockDekho demo desk",
-    },
-  ];
+  return [];
 }
 
 /* =========================================================================================
@@ -6461,11 +6453,11 @@ function Footer() {
   const [drawer, setDrawer] = useState(null);
   const links = ["Data sources", "Methodology", "Metric definitions", "Risk disclosures", "Corporate-action treatment", "End-of-day data timing"];
   const content = {
-    "Data sources": "Indian equity and index quotes and historical series are retrieved primarily through Upstox and cached by StockDekho, with Yahoo Finance retained as a fallback and for selected fundamentals and events. Currency reference rates use Yahoo Finance. News is aggregated from configured news providers and filtered for relevance. Explicitly marked fields remain illustrative demo data.",
+    "Data sources": "Indian equity and index quotes and historical series are retrieved primarily through Upstox and cached by StockDekho, with Yahoo Finance retained as a fallback and for selected fundamentals and events. Currency reference rates use Yahoo Finance. News is aggregated from configured news providers and filtered for relevance.",
     Methodology: "Returns, drawdown, volatility and beta are calculated from the available daily historical series. Comparisons provide research context only and are not certified index calculations or recommendations.",
     "Metric definitions": "Hover or tap a visible (i) icon for a concise definition, why investors use the metric and how to interpret it.",
     "Risk disclosures": "Equity investments carry risk of loss. Past performance is not indicative of future results. This Artifact is for information and research purposes only.",
-    "Corporate-action treatment": "Historical performance uses adjusted closing prices where the provider supplies them. Explicitly labelled demo fields should not be treated as verified corporate-action records.",
+    "Corporate-action treatment": "Historical performance uses adjusted closing prices where the provider supplies them. Corporate-action records are shown only when returned by the configured provider.",
     "End-of-day data timing": "NSE/BSE trading runs 09:15–15:30 IST. EOD values refer to the latest completed session available from the data provider; timestamps are shown in IST where available.",
   };
   return (

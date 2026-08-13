@@ -27,13 +27,18 @@ export async function getPeerComparison(symbols) {
 
 export async function getStockUniverse(symbols) {
   try {
-    const response = await cachedGet("/market/stocks", {
-      params: {
-        symbols: symbols.join(","),
-      },
-    });
-
-    return response.data.stocks || [];
+    const chunks = [];
+    for (let index = 0; index < symbols.length; index += 40) {
+      chunks.push(symbols.slice(index, index + 40));
+    }
+    const responses = await Promise.all(
+      chunks.map((chunk) =>
+        cachedGet("/market/stocks", {
+          params: { symbols: chunk.join(",") },
+        })
+      )
+    );
+    return responses.flatMap((response) => response.data.stocks || []);
   } catch (error) {
     console.error("Failed to fetch live stock universe:", error);
     throw error;

@@ -118,6 +118,34 @@ const INDICES = [
       "TITAN",
     ],
   },
+  {
+    key: "MIDCAP150",
+    name: "Nifty Midcap 150",
+    symbol: "^NSEMDCP150",
+    description:
+      "Tracks 150 mid-sized companies selected from the Nifty 500 and provides a broad view of India's mid-cap equity segment.",
+    constituents: require("../../frontend/src/data/stockUniverse.json")
+      .filter((stock) => stock.cap === "Mid")
+      .map((stock) => stock.ticker),
+  },
+  {
+    key: "SMALLCAP250",
+    name: "Nifty Smallcap 250",
+    symbol: "^NSESMLCAP250",
+    description:
+      "Tracks 250 smaller companies within the Nifty 500 and represents India's diversified small-cap equity segment.",
+    constituents: [],
+  },
+  {
+    key: "NIFTY500",
+    name: "Nifty 500",
+    symbol: "^NSE500",
+    description:
+      "Tracks 500 large-, mid- and small-cap NSE-listed companies and represents the broad Indian equity market.",
+    constituents: require("../../frontend/src/data/stockUniverse.json").map(
+      (stock) => stock.ticker
+    ),
+  },
 ];
 
 function getIndexDefinition(key) {

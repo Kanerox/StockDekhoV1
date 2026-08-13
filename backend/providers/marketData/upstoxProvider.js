@@ -19,6 +19,9 @@ const INDEX_KEYS = {
   "^CNXMETAL": "NSE_INDEX|Nifty Metal",
   "^CNXPSE": "NSE_INDEX|Nifty PSE",
   "^CNXREALTY": "NSE_INDEX|Nifty Realty",
+  "^NSEMDCP150": "NSE_INDEX|NIFTY MIDCAP 150",
+  "^NSESMLCAP250": "NSE_INDEX|NIFTY SMLCAP 250",
+  "^NSE500": "NSE_INDEX|Nifty 500",
 };
 
 let instrumentMapPromise = null;
