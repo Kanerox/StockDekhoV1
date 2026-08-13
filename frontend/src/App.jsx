@@ -3022,7 +3022,7 @@ function FilterSidebar({ selectedSectors, setSelectedSectors, priceRange, setPri
   );
 }
 
-function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, toggleCompare }) {
+function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compareList, toggleCompare }) {
   const [q, setQ] = useState("");
   const [selectedSectors, setSelectedSectors] = useState([]);
   const [priceRange, setPriceRange] = useState("all");
@@ -3176,7 +3176,23 @@ function StocksPage({ mode, openCompany, watchlist, toggleWatch, compareList, to
       <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16, maxWidth: 760 }}>
         Represents the broader universe of NSE-listed equities across market-cap bands — not only Nifty 50 constituents.
         This V1 tracks a representative universe using the latest available Upstox market data; a live product
-        would use the complete licensed NSE-listed equity universe under <span className="sd-underline-link">Sector Classification</span>.
+        would use the complete licensed NSE-listed equity universe under{" "}
+        <button
+          type="button"
+          className="sd-underline-link"
+          onClick={() => setPage("sectors")}
+          style={{
+            appearance: "none",
+            background: "none",
+            border: 0,
+            color: "inherit",
+            cursor: "pointer",
+            font: "inherit",
+            padding: 0,
+          }}
+        >
+          Sector Classification
+        </button>.
         {stocksAsOf && <> Data as of {formatMarketAsOf(stocksAsOf)}.</>}
       </p>
 
@@ -6538,7 +6554,7 @@ const [notes, setNotes] = useState({});
       <div style={{ flex: 1 }}>
         {page === "markets" && <MarketsPage mode={mode} setPage={setPage} openCompany={openCompany} openBenchmark={openBenchmark} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />}
         {page === "benchmark" && <BenchmarkDetailPage indexKey={activeBenchmark} back={() => setPage("markets")} openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />}
-        {page === "stocks" && <StocksPage mode={mode} openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />}
+        {page === "stocks" && <StocksPage mode={mode} setPage={setPage} openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />}
         {page === "sectors" && <SectorsPage mode={mode} openCompany={openCompany} openSector={setActiveSector} activeSector={activeSector} />}
         {page === "company" && <CompanyPage ticker={activeTicker} mode={mode} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} notes={notes} setNote={setNote} openCompany={openCompany} />}
         {page === "compare" && <ComparePage compareList={compareList} toggleCompare={toggleCompare} openCompany={openCompany} />}
