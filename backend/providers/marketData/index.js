@@ -1,11 +1,16 @@
 const yahooProvider = require("./yahooProvider");
+const upstoxProvider = require("./upstoxProvider");
 
 const providers = new Map([
   [yahooProvider.name, yahooProvider],
+  [upstoxProvider.name, upstoxProvider],
 ]);
 
 function getConfiguredProviderName() {
-  return String(process.env.MARKET_DATA_PROVIDER || "yahoo")
+  const defaultProvider = process.env.UPSTOX_ANALYTICS_TOKEN
+    ? "upstox"
+    : "yahoo";
+  return String(process.env.MARKET_DATA_PROVIDER || defaultProvider)
     .trim()
     .toLowerCase();
 }

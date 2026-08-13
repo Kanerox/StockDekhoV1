@@ -115,6 +115,16 @@ function quoteTimestamp(quote) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+async function preserveLegacyQuoteFields(quote) {
+  if (getMarketDataProviderName() !== "upstox" || !quote?.symbol) return quote;
+
+  const legacyQuote = await getCachedValue(
+    `quote:${normalizeSymbol(quote.symbol)}`,
+    STALE_QUOTE_TTL_MS
+  );
+  return legacyQuote ? { ...legacyQuote, ...quote } : quote;
+}
+
 async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
   const normalizedSymbol = normalizeSymbol(symbol);
   const period2 = new Date();
@@ -218,10 +228,11 @@ async function fetchMarketData(symbol) {
 
   const requestPromise = (async () => {
     try {
-      const quote = await withRetry(
+      const providerQuote = await withRetry(
         () => getMarketDataProvider().quote(normalizedSymbol),
-        { label: `Yahoo quote ${normalizedSymbol}` }
+        { label: `Market quote ${normalizedSymbol}` }
       );
+      const quote = await preserveLegacyQuoteFields(providerQuote);
 
       if (quote?.symbol) {
         await setCacheEntry(
@@ -302,9 +313,13 @@ async function fetchMarketDataBatch(symbols) {
   batchRequestInFlight = (async () => {
     const result = await withRetry(
       () => getMarketDataProvider().quote(missingSymbols),
-      { label: "Yahoo batch quote request" }
+      { label: "Market batch quote request" }
     );
-    const fetchedQuotes = (Array.isArray(result) ? result : [result]).filter(Boolean);
+    const fetchedQuotes = await Promise.all(
+      (Array.isArray(result) ? result : [result])
+        .filter(Boolean)
+        .map(preserveLegacyQuoteFields)
+    );
 
     await Promise.all(
       fetchedQuotes
