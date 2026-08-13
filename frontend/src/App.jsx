@@ -3201,7 +3201,6 @@ function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compar
           <input value={q} onChange={(e) => { setQ(e.target.value); setPageN(1); }} placeholder="Search company or ticker"
             style={{ background: "none", border: "none", outline: "none", color: THEME.ink, fontSize: 12.5, width: "100%" }} />
         </div>
-        <div style={{ marginLeft: "auto", fontSize: 12, color: THEME.inkDim, alignSelf: "center" }}>{rows.length} matching companies</div>
       </div>
 
       <ModeExplain mode={mode}>Use the metric filters on the left to narrow the universe; selected information icons explain unfamiliar concepts. The star adds to Watchlist, the + adds to Compare (up to 5).</ModeExplain>
@@ -4365,8 +4364,15 @@ useEffect(() => {
   const chartSeries = showBenchmark ? rebaseTo100(series) : series;
   const chartBenchSeries = showBenchmark ? rebaseTo100(benchSeries) : null;
 
-  const low52 = Math.min(...s.hist["1Y"]);
-  const high52 = Math.max(...s.hist["1Y"]);
+  const fallbackOneYearHistory = Array.isArray(s.hist?.["1Y"])
+    ? s.hist["1Y"].filter(Number.isFinite)
+    : [];
+  const low52 = fallbackOneYearHistory.length
+    ? Math.min(...fallbackOneYearHistory)
+    : null;
+  const high52 = fallbackOneYearHistory.length
+    ? Math.max(...fallbackOneYearHistory)
+    : null;
   const performanceMetrics = calculatePerformanceMetrics(
     performancePoints,
     useAdjustedClose,
@@ -4401,9 +4407,9 @@ useEffect(() => {
             </div>
             <div style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: 4 }}>
   {quote.symbol || s.ticker}· {quote.exchange || "NSE"} · {s.sector} · {s.cap} Cap
-</div>
+            </div>
             <p style={{ fontSize: 12.5, color: THEME.creamDim, maxWidth: 560, marginTop: 10, lineHeight: 1.5 }}>
-              {companyBlurb(s.ticker)}
+              {companyProfile(s.ticker).overview}
             </p>
           </div>
           <div style={{ textAlign: "right" }}>
@@ -5697,11 +5703,73 @@ const COMPANY_PROFILE = {
     background: "Reorganised in 2020 to consolidate the Tata Group's consumer-food and beverage businesses, Tata Consumer Products has been expanding beyond its historical tea and salt franchise into wider packaged foods.",
   },
 };
+const SECTOR_PROFILE_CONTEXT = {
+  Financials: {
+    activity: "financial services",
+    focus: "lending, deposits, investment products, insurance or other financial services, depending on the company’s disclosed business mix",
+  },
+  "Information Technology": {
+    activity: "information technology",
+    focus: "software, digital services, technology consulting or related products, depending on the company’s disclosed business mix",
+  },
+  Energy: {
+    activity: "energy",
+    focus: "oil, gas, fuels or related energy activities, depending on the company’s disclosed business mix",
+  },
+  "Consumer Staples": {
+    activity: "consumer staples",
+    focus: "frequently purchased food, beverage, household or personal-care products, depending on the company’s disclosed business mix",
+  },
+  "Consumer Discretionary": {
+    activity: "consumer discretionary",
+    focus: "automotive, retail, hospitality or other discretionary consumer products and services, depending on the company’s disclosed business mix",
+  },
+  "Health Care": {
+    activity: "health care",
+    focus: "pharmaceuticals, hospitals, diagnostics or other health-care products and services, depending on the company’s disclosed business mix",
+  },
+  Industrials: {
+    activity: "industrials",
+    focus: "capital goods, engineering, construction, transport or industrial services, depending on the company’s disclosed business mix",
+  },
+  Materials: {
+    activity: "materials",
+    focus: "metals, mining, chemicals, cement or related materials, depending on the company’s disclosed business mix",
+  },
+  Utilities: {
+    activity: "utilities",
+    focus: "power generation, transmission, distribution or related infrastructure, depending on the company’s disclosed business mix",
+  },
+  "Communication Services": {
+    activity: "communication services",
+    focus: "telecommunications, connectivity or related communication services, depending on the company’s disclosed business mix",
+  },
+  "Real Estate": {
+    activity: "real estate",
+    focus: "property development, leasing or related real-estate activities, depending on the company’s disclosed business mix",
+  },
+};
+
 function companyProfile(ticker) {
-  return COMPANY_PROFILE[ticker] || {
-    overview: companyBlurb(ticker),
-    segments: [{ name: "Core operations", desc: "Primary revenue-generating business activity for this company." }],
-    background: "Company background information is not currently available from the configured data providers.",
+  if (COMPANY_PROFILE[ticker]) return COMPANY_PROFILE[ticker];
+
+  const stock = STOCKS_BY_TICKER[ticker];
+  const name = stock?.name || ticker;
+  const sector = stock?.sector || "Unclassified";
+  const context = SECTOR_PROFILE_CONTEXT[sector] || {
+    activity: "listed business operations",
+    focus: "the activities described in the company’s latest exchange filings and investor disclosures",
+  };
+
+  return {
+    overview: `${name} is an NSE-listed company in StockDekho’s ${sector} classification. Its detailed company-specific business description is not currently supplied by the configured market-data providers.`,
+    segments: [
+      {
+        name: `${sector} operations`,
+        desc: `The company is classified within ${context.activity}; this can include ${context.focus}. Consult its latest annual report for the company’s exact segment breakdown.`,
+      },
+    ],
+    background: `${name} is included in StockDekho’s tracked Nifty 200 universe. Price, performance, financial, event, peer and news sections use the latest information available from StockDekho’s configured providers; unavailable fields remain blank rather than being estimated.`,
   };
 }
 
