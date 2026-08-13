@@ -2207,7 +2207,6 @@ useEffect(() => {
         performerSymbols,
         rangeByTab[perfTab] || "1M"
       );
-console.log(response);
       if (cancelled) {
         return;
       }
@@ -2491,8 +2490,8 @@ console.log(response);
           </select>
           <div style={{ display: "flex", gap: 6 }}>{Object.keys(perfMap).map((t) => <Pill key={t} active={perfTab === t} onClick={() => setPerfTab(t)}>{t}</Pill>)}</div>
         </div>} />
-      <ModeExplain mode={mode}>
-  Rankings use provider-supplied historical prices for the selected period. The market-cap filter is based on StockDekho's current stock classifications.
+<ModeExplain mode={mode}>
+  Rankings use provider-supplied historical prices across StockDekho's 200 tracked companies. The market-cap filter is based on StockDekho's current stock classifications.
 </ModeExplain>
       <div className="sd-grid-2" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12, marginBottom: 26 }}>
   {!performersLoading && sortedByRet.length > 0 && (
@@ -2528,7 +2527,7 @@ console.log(response);
     marginBottom: 12,
   }}
 >
-  Ranked by the estimated value of shares traded in the current session, using the latest available market data.
+  Ranked across StockDekho's 200 tracked companies by the estimated value of shares traded in the current session, using the latest available market data.
 </div>
       <RankTable title="" rows={mostActive} metricKey="tradedVal" metricLabel="Traded value (₹Cr)" openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} wide />
 

@@ -270,7 +270,7 @@ const getMarketPerformersFromService = async (
         )
         .filter(Boolean)
     ),
-  ].slice(0, 50);
+  ].slice(0, 200);
 
   if (uniqueSymbols.length === 0) {
     throw new Error(
@@ -281,17 +281,39 @@ const getMarketPerformersFromService = async (
   const { period1, period2 } =
     getPerformerPeriod(normalizedRange);
 
-  const [quotes, historyResults] =
-    await Promise.all([
-      fetchMarketDataBatch(uniqueSymbols),
+  const historyResults = new Array(uniqueSymbols.length);
+  let nextHistoryIndex = 0;
 
-      Promise.allSettled(
-        uniqueSymbols.map((symbol) =>
-          fetchHistoricalPrices(
-            symbol,
+  async function loadHistoryWorker() {
+    while (nextHistoryIndex < uniqueSymbols.length) {
+      const index = nextHistoryIndex;
+      nextHistoryIndex += 1;
+
+      try {
+        historyResults[index] = {
+          status: "fulfilled",
+          value: await fetchHistoricalPrices(
+            uniqueSymbols[index],
             period1,
             period2
-          )
+          ),
+        };
+      } catch (error) {
+        historyResults[index] = {
+          status: "rejected",
+          reason: error,
+        };
+      }
+    }
+  }
+
+  const [quotes] =
+    await Promise.all([
+      fetchMarketDataBatch(uniqueSymbols),
+      Promise.all(
+        Array.from(
+          { length: Math.min(12, uniqueSymbols.length) },
+          () => loadHistoryWorker()
         )
       ),
     ]);
