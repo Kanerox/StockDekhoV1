@@ -4367,6 +4367,11 @@ useEffect(() => {
           year: "numeric",
         })
       : "Not available";
+  const upcomingEarningsTime = new Date(
+    eventsData?.upcomingEarnings?.date
+  ).getTime();
+  const hasUpcomingEarnings =
+    Number.isFinite(upcomingEarningsTime) && upcomingEarningsTime > Date.now();
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
@@ -4703,17 +4708,22 @@ useEffect(() => {
                     Upcoming earnings
                   </div>
                   <div className="sd-serif" style={{ fontSize: 20, marginTop: 8 }}>
-                    {formatEventDate(eventsData?.upcomingEarnings?.date)}
+                    {hasUpcomingEarnings
+                      ? formatEventDate(eventsData.upcomingEarnings.date)
+                      : "Next earnings date not yet available"}
                   </div>
                   <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 5 }}>
-                    {eventsData?.upcomingEarnings?.isEstimate
-                      ? "Estimated reporting date"
-                      : "Reported calendar date"}
+                    {hasUpcomingEarnings
+                      ? eventsData?.upcomingEarnings?.isEstimate
+                        ? "Estimated reporting date"
+                        : "Reported calendar date"
+                      : "No valid future reporting date is currently available."}
                   </div>
                   <div style={{ borderTop: `1px solid ${THEME.hairline}`, marginTop: 14, paddingTop: 10 }}>
                     <MetricLine
                       label="Consensus EPS"
                       value={
+                        hasUpcomingEarnings &&
                         Number.isFinite(eventsData?.upcomingEarnings?.epsEstimate)
                           ? `₹${fmtNum(eventsData.upcomingEarnings.epsEstimate, 2)}`
                           : "—"
@@ -4724,6 +4734,7 @@ useEffect(() => {
                     <MetricLine
                       label="EPS estimate range"
                       value={
+                        hasUpcomingEarnings &&
                         Number.isFinite(eventsData?.upcomingEarnings?.epsLow) &&
                         Number.isFinite(eventsData?.upcomingEarnings?.epsHigh)
                           ? `₹${fmtNum(eventsData.upcomingEarnings.epsLow, 2)} – ₹${fmtNum(eventsData.upcomingEarnings.epsHigh, 2)}`
@@ -4735,6 +4746,7 @@ useEffect(() => {
                     <MetricLine
                       label="Consensus revenue"
                       value={
+                        hasUpcomingEarnings &&
                         Number.isFinite(eventsData?.upcomingEarnings?.revenueEstimate)
                           ? fmtCr(eventsData.upcomingEarnings.revenueEstimate / 10000000)
                           : "—"

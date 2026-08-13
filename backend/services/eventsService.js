@@ -12,9 +12,14 @@ function dateOrNull(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
-function futureDateOrNull(value) {
-  const date = dateOrNull(value);
-  return date && new Date(date).getTime() > Date.now() ? date : null;
+function selectFutureDate(values, now = Date.now()) {
+  const candidates = (Array.isArray(values) ? values : [values])
+    .map(dateOrNull)
+    .filter(Boolean)
+    .filter((date) => new Date(date).getTime() > now)
+    .sort((dateA, dateB) => new Date(dateA) - new Date(dateB));
+
+  return candidates[0] || null;
 }
 
 async function getCompanyEvents(symbol) {
@@ -29,15 +34,12 @@ async function getCompanyEvents(symbol) {
       quote.earningsTimestamp,
       quote.earningsTimestampStart,
       quote.earningsTimestampEnd,
-    ].filter((value) => {
-      const time = new Date(value).getTime();
-      return Number.isFinite(time) && time > Date.now();
-    });
+    ];
     partial = true;
     result = {
       calendarEvents: {
         earnings: {
-          earningsDate: earningsCandidates.slice(0, 1),
+          earningsDate: [selectFutureDate(earningsCandidates)].filter(Boolean),
         },
         exDividendDate: quote.exDividendDate,
       },
@@ -57,20 +59,32 @@ async function getCompanyEvents(symbol) {
   const earnings = calendar.earnings || {};
   const summary = result.summaryDetail || {};
   const earningsHistory = result.earningsHistory?.history || [];
+  const upcomingEarningsDate = selectFutureDate(earnings.earningsDate || []);
 
   return {
     symbol: String(symbol).trim().toUpperCase(),
     currency: summary.currency || "INR",
     availability: partial ? "partial" : "full",
     upcomingEarnings: {
-      date: futureDateOrNull(earnings.earningsDate?.[0]),
-      isEstimate: Boolean(earnings.isEarningsDateEstimate),
-      epsEstimate: numberOrNull(earnings.earningsAverage),
-      epsLow: numberOrNull(earnings.earningsLow),
-      epsHigh: numberOrNull(earnings.earningsHigh),
-      revenueEstimate: numberOrNull(earnings.revenueAverage),
-      revenueLow: numberOrNull(earnings.revenueLow),
-      revenueHigh: numberOrNull(earnings.revenueHigh),
+      date: upcomingEarningsDate,
+      status: upcomingEarningsDate ? "scheduled" : "not_available",
+      isEstimate: Boolean(
+        upcomingEarningsDate && earnings.isEarningsDateEstimate
+      ),
+      epsEstimate: upcomingEarningsDate
+        ? numberOrNull(earnings.earningsAverage)
+        : null,
+      epsLow: upcomingEarningsDate ? numberOrNull(earnings.earningsLow) : null,
+      epsHigh: upcomingEarningsDate ? numberOrNull(earnings.earningsHigh) : null,
+      revenueEstimate: upcomingEarningsDate
+        ? numberOrNull(earnings.revenueAverage)
+        : null,
+      revenueLow: upcomingEarningsDate
+        ? numberOrNull(earnings.revenueLow)
+        : null,
+      revenueHigh: upcomingEarningsDate
+        ? numberOrNull(earnings.revenueHigh)
+        : null,
     },
     dividend: {
       exDividendDate: dateOrNull(
@@ -103,4 +117,5 @@ async function getCompanyEvents(symbol) {
 
 module.exports = {
   getCompanyEvents,
+  selectFutureDate,
 };
