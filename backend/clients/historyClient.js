@@ -73,6 +73,37 @@ function mergePrices(existingPrices, newPrices) {
   );
 }
 
+async function appendLatestUpstoxQuote(symbol, prices, period1, period2) {
+  if (getMarketDataProviderName() !== "upstox") return prices;
+
+  try {
+    const quote = await getMarketDataProvider().quote(symbol);
+    const price = Number(quote?.regularMarketPrice);
+    const date = quote?.regularMarketTime;
+    const time = new Date(date).getTime();
+    const start = new Date(period1).getTime();
+    const end = new Date(period2).getTime();
+
+    if (
+      !Number.isFinite(price) ||
+      !Number.isFinite(time) ||
+      time < start ||
+      time >= end
+    ) {
+      return prices;
+    }
+
+    return mergePrices(prices, [{
+      date,
+      close: price,
+      adjustedClose: price,
+    }]);
+  } catch (error) {
+    console.warn(`Unable to append current Upstox quote for ${symbol}: ${error.message}`);
+    return prices;
+  }
+}
+
 function isRateLimitError(error) {
   const status = error?.response?.status || error?.status || error?.statusCode;
   const message = String(error?.message || "").toLowerCase();
@@ -123,13 +154,19 @@ async function fetchHistoricalPrices(symbol, period1, period2) {
         interval: "1d",
       });
 
-      const prices = (result.quotes || [])
+      const historicalPrices = (result.quotes || [])
         .filter((quote) => quote.date && Number.isFinite(quote.close))
         .map((quote) => ({
           date: quote.date,
           close: quote.close,
           adjustedClose: Number.isFinite(quote.adjclose) ? quote.adjclose : quote.close,
         }));
+      const prices = await appendLatestUpstoxQuote(
+        normalizedSymbol,
+        historicalPrices,
+        period1,
+        period2
+      );
 
       const existingLatest = await getCachedValue(
         latestHistoryCacheKey(normalizedSymbol),
