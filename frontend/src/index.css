@@ -49,6 +49,21 @@ body {
     margin-left: auto;
   }
 
+  .sd-section-heading {
+    align-items: flex-start !important;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .sd-section-action,
+  .sd-section-action > div {
+    max-width: 100%;
+  }
+
+  .sd-section-action > div {
+    flex-wrap: wrap;
+  }
+
   .sd-grid-2,
   .sd-grid-3,
   .sd-featured-grid {

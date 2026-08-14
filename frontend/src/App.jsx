@@ -1009,12 +1009,12 @@ function DemoBanner() {
 
 function SectionHeading({ eyebrow, title, action }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
+    <div className="sd-section-heading" style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 14 }}>
       <div>
         {eyebrow && <div style={{ fontSize: 11, letterSpacing: 1.2, textTransform: "uppercase", color: THEME.gold, marginBottom: 4 }}>{eyebrow}</div>}
         <h2 className="sd-serif" style={{ fontSize: 22, margin: 0, fontWeight: 600 }}>{title}</h2>
       </div>
-      {action}
+      {action && <div className="sd-section-action">{action}</div>}
     </div>
   );
 }
@@ -3173,9 +3173,8 @@ function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compar
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
       <SectionHeading eyebrow="Screener" title="All NSE Stocks" />
       <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16, maxWidth: 760 }}>
-        Represents the broader universe of NSE-listed equities across market-cap bands — not only Nifty 50 constituents.
-        This V1 tracks a representative universe using the latest available Upstox market data; a live product
-        would use the complete licensed NSE-listed equity universe under{" "}
+        Tracks a representative universe of 200 NSE-listed equities across market-cap bands — not only Nifty 50 constituents.
+        Prices and performance use the latest available Upstox market data. Explore the universe by{" "}
         <button
           type="button"
           className="sd-underline-link"
