@@ -397,22 +397,33 @@ async function fetchCompanyNews(
 
   return getOrFetchArticles(cacheKey, async () => {
     const results = await Promise.allSettled([
-      fetchMarketauxNews({
-        search: companyName,
-        numberOfDays: 30,
-        countries: "in",
-      }),
+      settleWithin(
+        fetchMarketauxNews({
+          search: companyName,
+          numberOfDays: 30,
+          countries: "in",
+        }),
+        8000
+      ),
 
-      currentsProvider.getCompanyNews({
-        companyName,
-        aliases: [
-          String(companyName)
-            .replace(/\bLimited\b/gi, "")
-            .replace(/\bLtd\b/gi, "")
-            .trim(),
-        ],
-        limit: 20,
-      }),
+      settleWithin(
+        currentsProvider.getCompanyNews({
+          companyName,
+          aliases: [
+            String(companyName)
+              .replace(/\bLimited\b/gi, "")
+              .replace(/\bLtd\b/gi, "")
+              .trim(),
+          ],
+          limit: 20,
+        }),
+        8000
+      ),
+
+      settleWithin(
+        fetchGoogleNewsRss(companyName, 30),
+        12000
+      ),
     ]);
 
 
@@ -426,6 +437,11 @@ async function fetchCompanyNews(
         ? results[1].value.map(
             convertCurrentsToLegacy
           )
+        : [];
+
+    const googleNewsArticles =
+      results[2].status === "fulfilled"
+        ? results[2].value.slice(0, 40)
         : [];
 
     if (results[0].status === "rejected") {
@@ -444,9 +460,18 @@ async function fetchCompanyNews(
       );
     }
 
+    if (results[2].status === "rejected") {
+      console.error(
+        "Google News RSS company news failed:",
+        results[2].reason?.message ||
+          results[2].reason
+      );
+    }
+
     return removeExactDuplicateUrls([
       ...marketauxArticles,
       ...currentsArticles,
+      ...googleNewsArticles,
     ]);
   });
 }

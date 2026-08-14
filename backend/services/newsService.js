@@ -55,6 +55,31 @@ const BLOCKED_TITLE_TERMS = [
   "today share price",
   "stock quote",
   "price chart",
+  "stock recommendation",
+  "stock recommendations",
+  "trading guide",
+  "technical pick",
+  "technical picks",
+  "buy or sell",
+  "buy, sell",
+  "sell or hold",
+  "do you own",
+  "upside potential",
+  "top gainers",
+  "top losers",
+  "leads gainers",
+  "leads losers",
+  "spurts",
+  "straight session",
+  "shares gain",
+  "shares rise",
+  "shares fall",
+  "shares drop",
+  "price target",
+  "raises tp",
+  "cuts tp",
+  "analyst picks",
+  "brokerage picks",
 ];
 
 const GLOBAL_MARKET_TOPICS = [
@@ -479,7 +504,7 @@ function isCompanyRelevantArticle(
     ).test(titleText);
 
   const symbolMatch =
-    normalizedSymbol.length >= 3 &&
+    normalizedSymbol.length >= 4 &&
     new RegExp(
       `\\b${normalizedSymbol}\\b`,
       "i"
@@ -492,10 +517,16 @@ function isCompanyRelevantArticle(
           `\\b${word}\\b`,
           "i"
         ).test(titleText)
-    );
+      );
+
+  const companyNameWords =
+    normalizedCompanyName
+      .split(" ")
+      .filter(Boolean);
 
   const strongWordMatch =
-    significantCompanyWords.length === 1
+    significantCompanyWords.length === 1 &&
+    companyNameWords.length === 1
       ? matchedSignificantWords.length === 1
       : significantCompanyWords.length >= 2 &&
         matchedSignificantWords.length >= 2;
