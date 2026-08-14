@@ -243,11 +243,15 @@ async function saveCachedArticles(cacheKey, articles) {
   );
 }
 
+function hasArticles(value) {
+  return Array.isArray(value) && value.length > 0;
+}
+
 async function getOrFetchArticles(cacheKey, fetchArticles) {
   const cachedArticles =
     await getCachedArticles(cacheKey);
 
-  if (cachedArticles) {
+  if (hasArticles(cachedArticles)) {
     return cachedArticles;
   }
 
@@ -269,9 +273,11 @@ async function getOrFetchArticles(cacheKey, fetchArticles) {
         return articles;
       }
 
-      return staleArticles || [];
+      return hasArticles(staleArticles)
+        ? staleArticles
+        : [];
     } catch (error) {
-      if (staleArticles) {
+      if (hasArticles(staleArticles)) {
         console.warn(
           "News providers failed; using cached articles."
         );
