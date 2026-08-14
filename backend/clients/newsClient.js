@@ -397,7 +397,7 @@ async function fetchCompanyNews(
   const cacheKey = getCacheKey({
     type: "company",
     search: companyName,
-    numberOfDays: 30,
+    numberOfDays: 14,
     countries: "in",
   });
 
@@ -406,7 +406,7 @@ async function fetchCompanyNews(
       settleWithin(
         fetchMarketauxNews({
           search: companyName,
-          numberOfDays: 30,
+          numberOfDays: 14,
           countries: "in",
         }),
         8000
@@ -427,7 +427,7 @@ async function fetchCompanyNews(
       ),
 
       settleWithin(
-        fetchGoogleNewsRss(companyName, 30),
+        fetchGoogleNewsRss(companyName, 14),
         12000
       ),
     ]);

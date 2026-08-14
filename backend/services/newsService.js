@@ -75,6 +75,8 @@ const BLOCKED_TITLE_TERMS = [
   "shares rise",
   "shares fall",
   "shares drop",
+  "shares decline",
+  "prefers",
   "price target",
   "raises tp",
   "cuts tp",
@@ -2124,7 +2126,7 @@ const companyName =
       return (
         isWithinLastDays(
           article.pubDate,
-          30
+          14
         ) &&
         isRelevantArticle(article) &&
         isCompanyRelevantArticle(
@@ -2175,7 +2177,7 @@ const companyName =
   return {
     symbol: quote?.symbol || symbol,
     company: companyName,
-    range: "Last 30 days",
+    range: "Last 14 days",
     articleCount: currentArticles.length,
     articles: currentArticles,
   };
