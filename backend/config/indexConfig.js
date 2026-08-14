@@ -49,7 +49,7 @@ const INDICES = [
       "SUNPHARMA",
       "TCS",
       "TATACONSUM",
-      "TATAMOTORS",
+      "TMPV",
       "TATASTEEL",
       "TECHM",
       "TITAN",
