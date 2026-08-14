@@ -1943,7 +1943,10 @@ const mostActive = [...performerStocks]
   const trackedNiftyStocks = niftyDetail?.constituents || [];
   const advancing = trackedNiftyStocks.filter((stock) => stock.chgPct > 0.005).length;
   const declining = trackedNiftyStocks.filter((stock) => stock.chgPct < -0.005).length;
-  const unchanged = Math.max(0, trackedNiftyStocks.length - advancing - declining);
+  const unchanged = trackedNiftyStocks.filter(
+    (stock) =>
+      Number.isFinite(stock.chgPct) && Math.abs(stock.chgPct) <= 0.005
+  ).length;
   const total = Math.max(1, trackedNiftyStocks.length);
   const rankedNiftyStocks = [...trackedNiftyStocks].sort((stockA, stockB) => stockB.chgPct - stockA.chgPct);
   const leadingStock = rankedNiftyStocks[0];

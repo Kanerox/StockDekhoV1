@@ -109,9 +109,15 @@ function marketTime(quote) {
 
 function mapQuote(requestedSymbol, instrument, quote) {
   const price = finite(quote?.last_price);
-  const change = finite(quote?.net_change);
+  const quotedPreviousClose = finite(quote?.ohlc?.close);
+  const quotedChange = finite(quote?.net_change);
   const previousClose =
-    price === null || change === null ? finite(quote?.ohlc?.close) : price - change;
+    quotedPreviousClose ??
+    (price === null || quotedChange === null ? null : price - quotedChange);
+  const change =
+    price === null || previousClose === null
+      ? quotedChange
+      : price - previousClose;
 
   return {
     symbol: requestedSymbol,
