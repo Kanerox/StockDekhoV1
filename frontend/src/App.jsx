@@ -2530,7 +2530,7 @@ useEffect(() => {
     marginBottom: 12,
   }}
 >
-  Ranked across StockDekho's 200 tracked companies by the estimated value of shares traded in the current session, using the latest available market data.
+  Ranked across StockDekho's 200 tracked companies by the estimated value of shares traded in the latest available session, using the latest available market data.
 </div>
       <RankTable title="" rows={mostActive} metricKey="tradedVal" metricLabel="Traded value (₹Cr)" openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} wide />
 

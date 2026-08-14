@@ -345,6 +345,13 @@ const getMarketPerformersFromService = async (
 
       const returnPercent =
         calculatePeriodReturn(prices);
+      const latestHistoricalVolume = [...prices]
+        .reverse()
+        .map((point) => valueOrNull(point?.volume))
+        .find((volume) => volume !== null) ?? null;
+      const volume =
+        valueOrNull(quote?.regularMarketVolume) ?? latestHistoricalVolume;
+      const price = valueOrNull(quote?.regularMarketPrice);
 
       return {
         ticker,
@@ -360,9 +367,7 @@ const getMarketPerformersFromService = async (
           quote?.shortName ||
           ticker,
 
-        price: valueOrNull(
-          quote?.regularMarketPrice
-        ),
+        price,
 
         changePercent: valueOrNull(
           quote?.regularMarketChangePercent
@@ -372,21 +377,11 @@ const getMarketPerformersFromService = async (
           quote?.marketCap
         ),
 
-        volume: valueOrNull(
-          quote?.regularMarketVolume
-        ),
+        volume,
 
         tradedValue:
-          valueOrNull(
-            quote?.regularMarketPrice
-          ) !== null &&
-          valueOrNull(
-            quote?.regularMarketVolume
-          ) !== null
-            ? (
-                quote.regularMarketPrice *
-                quote.regularMarketVolume
-              ) / 10000000
+          price !== null && volume !== null
+            ? (price * volume) / 10000000
             : null,
 
         returnPercent,

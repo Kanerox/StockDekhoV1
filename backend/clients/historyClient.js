@@ -33,13 +33,13 @@ function dateKey(date) {
 function historyCacheKey(symbol, period1, period2) {
   const key = `history:${symbol}:1d:${dateKey(period1)}:${dateKey(period2)}`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v2:${key}`;
+  return providerName === "yahoo" ? key : `${providerName}:v3:${key}`;
 }
 
 function latestHistoryCacheKey(symbol) {
   const key = `history:${symbol}:1d:latest`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v2:${key}`;
+  return providerName === "yahoo" ? key : `${providerName}:v3:${key}`;
 }
 
 function cooldownCacheKey() {
@@ -67,7 +67,10 @@ async function getLatestCachedPrices(symbol, period1, period2) {
 function mergePrices(existingPrices, newPrices) {
   const byDate = new Map();
   [...(Array.isArray(existingPrices) ? existingPrices : []), ...newPrices]
-    .forEach((point) => byDate.set(dateKey(point.date), point));
+    .forEach((point) => {
+      const key = dateKey(point.date);
+      byDate.set(key, { ...byDate.get(key), ...point });
+    });
   return [...byDate.values()].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
@@ -160,6 +163,7 @@ async function fetchHistoricalPrices(symbol, period1, period2) {
           date: quote.date,
           close: quote.close,
           adjustedClose: Number.isFinite(quote.adjclose) ? quote.adjclose : quote.close,
+          volume: Number.isFinite(quote.volume) ? quote.volume : null,
         }));
       const prices = await appendLatestUpstoxQuote(
         normalizedSymbol,
