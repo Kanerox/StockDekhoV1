@@ -81,6 +81,29 @@ function calculateReturn(points) {
   return ((last / first) - 1) * 100;
 }
 
+function calculateDailyMove(points) {
+  if (!Array.isArray(points) || points.length < 2) {
+    return { change: null, changePercent: null };
+  }
+
+  const previousClose = points[points.length - 2].adjustedClose;
+  const latestClose = points[points.length - 1].adjustedClose;
+
+  if (
+    !Number.isFinite(previousClose) ||
+    !Number.isFinite(latestClose) ||
+    previousClose === 0
+  ) {
+    return { change: null, changePercent: null };
+  }
+
+  const change = latestClose - previousClose;
+  return {
+    change,
+    changePercent: (change / previousClose) * 100,
+  };
+}
+
 function mapConstituent(quote, fallbackTicker) {
   const ticker = String(quote?.symbol || fallbackTicker)
     .toUpperCase()
@@ -142,6 +165,7 @@ async function getIndexSummary(definition) {
 
   return {
     ...mapQuote(definition, quote),
+    ...calculateDailyMove(points),
     oneMonthReturn: calculateReturn(points),
     sparkline: points.map((point) => point.adjustedClose),
   };
@@ -175,6 +199,7 @@ async function getIndexDetail(key, range = "1Y") {
 
   return {
     ...mapQuote(definition, quote),
+    ...calculateDailyMove(points),
     range,
     periodReturn: calculateReturn(points),
     periodHigh: closes.length ? Math.max(...closes) : null,

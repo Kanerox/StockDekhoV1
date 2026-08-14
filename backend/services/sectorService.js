@@ -168,10 +168,12 @@ async function getSectorSummary(definition) {
       "1Y": calculateReturn(history),
     },
     companyCount: constituents.length,
-    combinedMarketCap: constituents.reduce(
-      (total, stock) => total + (stock.mcap || 0),
-      0
-    ),
+    combinedMarketCap: constituents.some((stock) => Number.isFinite(stock.mcap))
+      ? constituents.reduce(
+          (total, stock) => total + (Number.isFinite(stock.mcap) ? stock.mcap : 0),
+          0
+        )
+      : null,
     leader: ranked[0]?.ticker || null,
     lagger: ranked[ranked.length - 1]?.ticker || null,
   };

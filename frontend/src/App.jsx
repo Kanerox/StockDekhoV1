@@ -1251,7 +1251,7 @@ function Header({
     { key: "markets", label: "Markets" },
     { key: "sectors", label: "Sectors" },
     { key: "stocks", label: "Stocks" },
-    { key: "currencies", label: "Currencies" },
+    { key: "currencies", label: "Global" },
     { key: "compare", label: "Compare" },
     { key: "watchlist", label: "Watchlist" },
   ];
@@ -3377,7 +3377,9 @@ function SectorsPage({ mode, openCompany, openSector, activeSector }) {
                   ))}
                 </div>
                 <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 10 }}>
-                  {liveSector.companyCount} tracked constituents · {fmtCr(liveSector.combinedMarketCap)} combined market cap
+                  {liveSector.companyCount} tracked constituents · {Number.isFinite(liveSector.combinedMarketCap)
+                    ? `${fmtCr(liveSector.combinedMarketCap)} combined market cap`
+                    : "Combined market cap unavailable"}
                 </div>
                 <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 4 }}>
                   As of {formatMarketAsOf(liveSector.asOf)}
@@ -6116,7 +6118,7 @@ function CurrencyDetail({ currency, back }) {
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
       <button onClick={back} style={{ background: "none", border: "none", color: THEME.gold, cursor: "pointer", fontSize: 12.5, display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
-        <ChevronLeft size={14} /> Back to currencies
+        <ChevronLeft size={14} /> Back to Global
       </button>
       <SectionHeading eyebrow="Reference rate" title={`${c.code}/INR`} />
       <div className="sd-grid-2" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
@@ -6299,7 +6301,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <SectionHeading eyebrow="Currencies" title="INR reference rates" />
+      <SectionHeading eyebrow="Global" title="INR reference rates" />
       <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16 }}>
         Latest available Yahoo Finance reference rates. Not live tradable FX quotes. Shown for research context, not currency forecasting.
       </p>
