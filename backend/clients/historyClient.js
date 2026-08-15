@@ -27,19 +27,24 @@ function normalizeSymbol(symbol) {
 function dateKey(date) {
   const value = new Date(date);
   if (Number.isNaN(value.getTime())) throw new Error("Invalid historical date");
-  return value.toISOString().slice(0, 10);
+  return value.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 }
 
 function historyCacheKey(symbol, period1, period2) {
   const key = `history:${symbol}:1d:${dateKey(period1)}:${dateKey(period2)}`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v3:${key}`;
+  return providerName === "yahoo" ? key : `${providerName}:v4:${key}`;
 }
 
 function latestHistoryCacheKey(symbol) {
   const key = `history:${symbol}:1d:latest`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v3:${key}`;
+  return providerName === "yahoo" ? key : `${providerName}:v4:${key}`;
 }
 
 function cooldownCacheKey() {

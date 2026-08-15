@@ -10,7 +10,7 @@ const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
-const QUOTE_CACHE_VERSION = "v2";
+const QUOTE_CACHE_VERSION = "v3";
 
 const quoteRequestsInFlight = new Map();
 const fundamentalsRequestsInFlight = new Map();
@@ -46,6 +46,13 @@ function providerCacheKey(key) {
 
 function cooldownCacheKey() {
   return `${getMarketDataProviderName()}:blocked-until`;
+}
+
+function fetchProviderQuotes(symbols) {
+  const provider = getMarketDataProvider();
+  return typeof provider.quoteWithSupplement === "function"
+    ? provider.quoteWithSupplement(symbols)
+    : provider.quote(symbols);
 }
 
 function wait(milliseconds) {
@@ -230,7 +237,7 @@ async function fetchMarketData(symbol) {
   const requestPromise = (async () => {
     try {
       const providerQuote = await withRetry(
-        () => getMarketDataProvider().quote(normalizedSymbol),
+        () => fetchProviderQuotes(normalizedSymbol),
         { label: `Market quote ${normalizedSymbol}` }
       );
       const quote = await preserveLegacyQuoteFields(providerQuote);
@@ -313,7 +320,7 @@ async function fetchMarketDataBatch(symbols) {
 
   batchRequestInFlight = (async () => {
     const result = await withRetry(
-      () => getMarketDataProvider().quote(missingSymbols),
+      () => fetchProviderQuotes(missingSymbols),
       { label: "Market batch quote request" }
     );
     const fetchedQuotes = await Promise.all(

@@ -164,7 +164,9 @@ async function getSectorSummary(definition) {
     returns: {
       "1W": calculateTrailingReturn(history, { days: 10 }, 6),
       "1M": calculateTrailingReturn(history, { months: 1 }, 22),
+      "3M": calculateTrailingReturn(history, { months: 3 }, 63),
       "6M": calculateTrailingReturn(history, { months: 6 }, 126),
+      "9M": calculateTrailingReturn(history, { months: 9 }, 189),
       "1Y": calculateReturn(history),
     },
     companyCount: constituents.length,
@@ -223,7 +225,9 @@ async function getSectorDetail(key, range = "1Y") {
     returns: {
       "1W": calculateTrailingReturn(metricHistory, { days: 10 }, 6),
       "1M": calculateTrailingReturn(metricHistory, { months: 1 }, 22),
+      "3M": calculateTrailingReturn(metricHistory, { months: 3 }, 63),
       "6M": calculateTrailingReturn(metricHistory, { months: 6 }, 126),
+      "9M": calculateTrailingReturn(metricHistory, { months: 9 }, 189),
       "1Y": calculateReturn(metricHistory),
     },
     points: selectedHistory.map((point) => ({

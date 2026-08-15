@@ -2367,7 +2367,7 @@ useEffect(() => {
   title="Sector performance heatmap"
   action={
     <div style={{ display: "flex", gap: 6 }}>
-      {["1W", "1M", "6M", "1Y"].map((period) => (
+      {["1W", "1M", "3M", "6M", "9M", "1Y"].map((period) => (
         <Pill
           key={period}
           active={heatRange === period}

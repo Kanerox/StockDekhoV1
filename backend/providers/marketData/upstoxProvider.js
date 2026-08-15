@@ -24,6 +24,20 @@ const INDEX_KEYS = {
   "^NSE500": "NSE_INDEX|Nifty 500",
 };
 
+const YAHOO_SUPPLEMENTAL_FIELDS = [
+  "marketCap",
+  "trailingPE",
+  "forwardPE",
+  "priceToBook",
+  "bookValue",
+  "epsTrailingTwelveMonths",
+  "dividendYield",
+  "averageDailyVolume3Month",
+  "fiftyTwoWeekLow",
+  "fiftyTwoWeekHigh",
+  "fiftyTwoWeekChangePercent",
+];
+
 let instrumentMapPromise = null;
 
 function token() {
@@ -172,6 +186,47 @@ async function upstoxQuotes(symbols) {
   return Array.isArray(symbols) ? result : result[0];
 }
 
+async function enrichQuotesWithYahoo(upstoxResult, symbols) {
+  const upstoxQuotesResult = Array.isArray(upstoxResult)
+    ? upstoxResult
+    : [upstoxResult];
+
+  try {
+    const yahooResult = await yahooProvider.quote(symbols);
+    const yahooQuotes = Array.isArray(yahooResult) ? yahooResult : [yahooResult];
+    const yahooByTicker = new Map(
+      yahooQuotes
+        .filter(Boolean)
+        .map((quote) => [tickerFromSymbol(quote.symbol), quote])
+    );
+
+    const enriched = upstoxQuotesResult.map((quote) => {
+      const yahooQuote = yahooByTicker.get(tickerFromSymbol(quote.symbol));
+      if (!yahooQuote) return quote;
+
+      const supplemental = {};
+      for (const field of YAHOO_SUPPLEMENTAL_FIELDS) {
+        if (quote[field] === null || quote[field] === undefined) {
+          supplemental[field] = yahooQuote[field] ?? null;
+        }
+      }
+
+      return {
+        ...quote,
+        ...supplemental,
+        shortName: yahooQuote.shortName || quote.shortName,
+        longName: yahooQuote.longName || quote.longName,
+        supplementalDataProvider: "Yahoo Finance",
+      };
+    });
+
+    return Array.isArray(upstoxResult) ? enriched : enriched[0];
+  } catch (error) {
+    console.warn(`Yahoo supplemental quote enrichment unavailable: ${error.message}`);
+    return upstoxResult;
+  }
+}
+
 function formatDate(date) {
   return new Date(date).toISOString().slice(0, 10);
 }
@@ -242,6 +297,14 @@ module.exports = {
       () => upstoxQuotes(symbols),
       () => yahooProvider.quote(symbols),
       "Upstox quote"
+    );
+  },
+
+  quoteWithSupplement(symbols) {
+    return withYahooFallback(
+      async () => enrichQuotesWithYahoo(await upstoxQuotes(symbols), symbols),
+      () => yahooProvider.quote(symbols),
+      "Upstox supplemented quote"
     );
   },
 
