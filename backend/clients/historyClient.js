@@ -38,13 +38,13 @@ function dateKey(date) {
 function historyCacheKey(symbol, period1, period2) {
   const key = `history:${symbol}:1d:${dateKey(period1)}:${dateKey(period2)}`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v4:${key}`;
+  return providerName === "yahoo" ? key : `${providerName}:v5:${key}`;
 }
 
 function latestHistoryCacheKey(symbol) {
   const key = `history:${symbol}:1d:latest`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v4:${key}`;
+  return providerName === "yahoo" ? key : `${providerName}:v5:${key}`;
 }
 
 function cooldownCacheKey() {
@@ -166,6 +166,9 @@ async function fetchHistoricalPrices(symbol, period1, period2) {
         .filter((quote) => quote.date && Number.isFinite(quote.close))
         .map((quote) => ({
           date: quote.date,
+          open: Number.isFinite(quote.open) ? quote.open : null,
+          high: Number.isFinite(quote.high) ? quote.high : null,
+          low: Number.isFinite(quote.low) ? quote.low : null,
           close: quote.close,
           adjustedClose: Number.isFinite(quote.adjclose) ? quote.adjclose : quote.close,
           volume: Number.isFinite(quote.volume) ? quote.volume : null,

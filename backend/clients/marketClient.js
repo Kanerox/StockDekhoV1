@@ -10,7 +10,7 @@ const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
-const QUOTE_CACHE_VERSION = "v4";
+const QUOTE_CACHE_VERSION = "v5";
 const PREVIOUS_QUOTE_CACHE_VERSION = "v2";
 const SUPPLEMENTAL_QUOTE_FIELDS = [
   "marketCap",
@@ -137,6 +137,18 @@ function quoteTimestamp(quote) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function endOfDayTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const sessionDate = date.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return `${sessionDate}T10:30:00.000Z`;
+}
+
 async function preserveLegacyQuoteFields(quote) {
   if (getMarketDataProviderName() !== "upstox" || !quote?.symbol) return quote;
 
@@ -205,13 +217,17 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
     regularMarketChange: change,
     regularMarketChangePercent:
       previous.close === 0 ? null : (change / previous.close) * 100,
+    regularMarketOpen: Number.isFinite(latest.open) ? latest.open : null,
+    regularMarketDayHigh: Number.isFinite(latest.high) ? latest.high : null,
+    regularMarketDayLow: Number.isFinite(latest.low) ? latest.low : null,
+    regularMarketVolume: Number.isFinite(latest.volume) ? latest.volume : null,
     fiftyTwoWeekLow: Math.min(...closes),
     fiftyTwoWeekHigh: Math.max(...closes),
     fiftyTwoWeekChangePercent:
       adjustedFirst === 0
         ? null
         : ((adjustedLatest / adjustedFirst) - 1) * 100,
-    regularMarketTime: latest.date,
+    regularMarketTime: endOfDayTimestamp(latest.date),
     currency: "INR",
     quoteSourceName: "Yahoo Finance historical EOD",
   };

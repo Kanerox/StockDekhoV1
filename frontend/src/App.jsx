@@ -4207,7 +4207,7 @@ useEffect(() => {
   useEffect(() => {
     let isMounted = true;
 
-    if (tab !== "Financials") {
+    if (tab !== "Financials" && tab !== "Valuation & Quality") {
       return () => {
         isMounted = false;
       };
@@ -4397,6 +4397,31 @@ useEffect(() => {
   ).getTime();
   const hasUpcomingEarnings =
     Number.isFinite(upcomingEarningsTime) && upcomingEarningsTime > Date.now();
+  const latestIncomeStatement = financialsData?.incomeStatement?.at(-1);
+  const latestBalanceSheet = financialsData?.balanceSheet?.at(-1);
+  const derivedReturnOnEquity =
+    Number.isFinite(latestIncomeStatement?.netIncome) &&
+    Number.isFinite(latestBalanceSheet?.shareholdersEquity) &&
+    latestBalanceSheet.shareholdersEquity !== 0
+      ? (latestIncomeStatement.netIncome / latestBalanceSheet.shareholdersEquity) * 100
+      : null;
+  const capitalEmployed =
+    Number.isFinite(latestBalanceSheet?.totalAssets) &&
+    Number.isFinite(latestBalanceSheet?.currentLiabilities)
+      ? latestBalanceSheet.totalAssets - latestBalanceSheet.currentLiabilities
+      : null;
+  const derivedReturnOnCapital =
+    Number.isFinite(latestIncomeStatement?.ebit) &&
+    Number.isFinite(capitalEmployed) &&
+    capitalEmployed !== 0
+      ? (latestIncomeStatement.ebit / capitalEmployed) * 100
+      : null;
+  const derivedDebtToEquity =
+    Number.isFinite(latestBalanceSheet?.totalDebt) &&
+    Number.isFinite(latestBalanceSheet?.shareholdersEquity) &&
+    latestBalanceSheet.shareholdersEquity !== 0
+      ? latestBalanceSheet.totalDebt / latestBalanceSheet.shareholdersEquity
+      : null;
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
@@ -4452,7 +4477,7 @@ useEffect(() => {
     paddingTop: 10,
   }}
 >
-  Market data sourced from {marketProviderLabel(quote.dataProvider)} · As of {formatMarketAsOf(quote.asOf)}. For research purposes only. Not investment advice.
+  Market data sourced from {marketProviderLabel(quote.dataProvider)}{quote.supplementalDataProvider ? ` + ${quote.supplementalDataProvider}` : ""} · As of {formatMarketAsOf(quote.asOf)}. For research purposes only. Not investment advice.
 </div>
       </Panel>
 
@@ -4634,7 +4659,7 @@ useEffect(() => {
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Valuation</div>
             {[
   ["P/E", quote.trailingPE ?? s.pe],
-  ["P/B", s.pb],
+  ["P/B", quote.priceToBook ?? s.pb],
   ["Market Cap", null]
 ].map(([l, v]) => (
               <MetricLine key={l} label={l} value={
@@ -4656,7 +4681,7 @@ useEffect(() => {
           </Panel>
           <Panel style={{ padding: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Quality & growth</div>
-            {[["ROE %", s.roe], ["ROCE %", s.roce]].map(([l, v]) => (
+            {[["ROE %", quote.returnOnEquity ?? derivedReturnOnEquity ?? s.roe], ["ROCE %", derivedReturnOnCapital ?? s.roce]].map(([l, v]) => (
               <MetricLine key={l} label={l} value={
   v !== null && v !== undefined
     ? l === "Dividend yield %"
@@ -4673,7 +4698,7 @@ useEffect(() => {
           <Panel style={{ padding: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Leverage & dividends</div>
             {[
-  ["Debt/Equity", s.de],
+  ["Debt/Equity", quote.debtToEquity ?? derivedDebtToEquity ?? s.de],
   ["Dividend yield %", quote.dividendYield ?? s.divYield],
 ].map(([l, v]) => (
               <MetricLine key={l} label={l} value={v !== null && v !== undefined ? fmtNum(v, 2) : "—"} mode={mode} explain={

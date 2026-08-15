@@ -113,12 +113,15 @@ function finite(value) {
 }
 
 function marketTime(quote) {
+  const timestamp = new Date(quote?.timestamp);
+  if (!Number.isNaN(timestamp.getTime())) {
+    return timestamp.toISOString();
+  }
   const lastTrade = Number(quote?.last_trade_time);
   if (Number.isFinite(lastTrade) && lastTrade > 0) {
     return new Date(lastTrade).toISOString();
   }
-  const timestamp = new Date(quote?.timestamp);
-  return Number.isNaN(timestamp.getTime()) ? null : timestamp.toISOString();
+  return null;
 }
 
 function mapQuote(requestedSymbol, instrument, quote) {
