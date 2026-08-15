@@ -19,6 +19,22 @@ function valueOrNull(value) {
     : null;
 }
 
+function completedSessionPoints(points) {
+  return (Array.isArray(points) ? points : []).filter((point) => {
+    const date = new Date(point?.date);
+    if (Number.isNaN(date.getTime())) return false;
+    const day = date.getUTCDay();
+    return day !== 0 && day !== 6;
+  });
+}
+
+function latestSessionAsOf(points) {
+  const latest = points[points.length - 1];
+  if (!latest?.date) return null;
+  const date = new Date(latest.date).toISOString().slice(0, 10);
+  return `${date}T10:30:00.000Z`;
+}
+
 function resolvePeriod(range = "1Y") {
   const period2 = new Date();
   period2.setDate(period2.getDate() + 1);
@@ -163,11 +179,15 @@ async function getIndexSummary(definition) {
     fetchHistoricalPrices(definition.symbol, period1, period2),
   ]);
 
+  const sessions = completedSessionPoints(points);
+  const asOf = latestSessionAsOf(sessions);
   return {
     ...mapQuote(definition, quote),
-    ...calculateDailyMove(points),
-    oneMonthReturn: calculateReturn(points),
-    sparkline: points.map((point) => point.adjustedClose),
+    ...calculateDailyMove(sessions),
+    marketTime: asOf,
+    asOf,
+    oneMonthReturn: calculateReturn(sessions),
+    sparkline: sessions.map((point) => point.adjustedClose),
   };
 }
 
@@ -189,22 +209,25 @@ async function getIndexDetail(key, range = "1Y") {
     fetchConstituents(definition),
   ]);
 
-  if (points.length < 2) {
+  const sessions = completedSessionPoints(points);
+  if (sessions.length < 2) {
     throw new Error("Insufficient historical index data");
   }
 
-  const closes = points
+  const closes = sessions
     .map((point) => point.adjustedClose)
     .filter(Number.isFinite);
 
   return {
     ...mapQuote(definition, quote),
-    ...calculateDailyMove(points),
+    ...calculateDailyMove(sessions),
+    marketTime: latestSessionAsOf(sessions),
+    asOf: latestSessionAsOf(sessions),
     range,
-    periodReturn: calculateReturn(points),
+    periodReturn: calculateReturn(sessions),
     periodHigh: closes.length ? Math.max(...closes) : null,
     periodLow: closes.length ? Math.min(...closes) : null,
-    points: points.map((point) => ({
+    points: sessions.map((point) => ({
       date: new Date(point.date).toISOString().slice(0, 10),
       close: point.close,
       adjustedClose: point.adjustedClose,
