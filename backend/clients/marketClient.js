@@ -10,7 +10,21 @@ const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
-const QUOTE_CACHE_VERSION = "v3";
+const QUOTE_CACHE_VERSION = "v4";
+const PREVIOUS_QUOTE_CACHE_VERSION = "v2";
+const SUPPLEMENTAL_QUOTE_FIELDS = [
+  "marketCap",
+  "trailingPE",
+  "forwardPE",
+  "priceToBook",
+  "bookValue",
+  "epsTrailingTwelveMonths",
+  "dividendYield",
+  "averageDailyVolume3Month",
+  "fiftyTwoWeekLow",
+  "fiftyTwoWeekHigh",
+  "fiftyTwoWeekChangePercent",
+];
 
 const quoteRequestsInFlight = new Map();
 const fundamentalsRequestsInFlight = new Map();
@@ -126,11 +140,30 @@ function quoteTimestamp(quote) {
 async function preserveLegacyQuoteFields(quote) {
   if (getMarketDataProviderName() !== "upstox" || !quote?.symbol) return quote;
 
-  const legacyQuote = await getCachedValue(
-    `quote:${normalizeSymbol(quote.symbol)}`,
-    STALE_QUOTE_TTL_MS
-  );
-  return legacyQuote ? { ...legacyQuote, ...quote } : quote;
+  const normalizedSymbol = normalizeSymbol(quote.symbol);
+  const [legacyQuote, previousUpstoxQuote] = await Promise.all([
+    getCachedValue(`quote:${normalizedSymbol}`, FUNDAMENTALS_TTL_MS),
+    getCachedValue(
+      `upstox:quote:${PREVIOUS_QUOTE_CACHE_VERSION}:${normalizedSymbol}`,
+      FUNDAMENTALS_TTL_MS
+    ),
+  ]);
+  const cachedSupplement = previousUpstoxQuote || legacyQuote;
+  if (!cachedSupplement) return quote;
+
+  const supplemental = {};
+  for (const field of SUPPLEMENTAL_QUOTE_FIELDS) {
+    if (quote[field] === null || quote[field] === undefined) {
+      supplemental[field] = cachedSupplement[field] ?? null;
+    }
+  }
+
+  return {
+    ...quote,
+    ...supplemental,
+    shortName: quote.shortName || cachedSupplement.shortName,
+    longName: quote.longName || cachedSupplement.longName,
+  };
 }
 
 async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
