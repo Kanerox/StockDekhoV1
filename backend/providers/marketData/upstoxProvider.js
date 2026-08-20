@@ -164,12 +164,25 @@ function mapQuote(requestedSymbol, instrument, quote) {
 
 async function upstoxQuotes(symbols) {
   const requested = Array.isArray(symbols) ? symbols : [symbols];
-  const resolved = await Promise.all(
+  const resolutionResults = await Promise.allSettled(
     requested.map(async (symbol) => ({
       requestedSymbol: normalizeYahooSymbol(symbol),
       instrument: await resolveInstrument(symbol),
     }))
   );
+  const resolved = resolutionResults
+    .filter((result) => result.status === "fulfilled")
+    .map((result) => result.value);
+  const unresolvedSymbols = resolutionResults
+    .map((result, index) => result.status === "rejected"
+      ? normalizeYahooSymbol(requested[index])
+      : null)
+    .filter(Boolean);
+
+  if (resolved.length === 0) {
+    return yahooProvider.quote(symbols);
+  }
+
   const instrumentKeys = resolved.map(({ instrument }) => instrument.instrument_key);
   const response = await axios.get(`${API_BASE_URL}/v2/market-quote/quotes`, {
     headers: headers(),
@@ -180,17 +193,43 @@ async function upstoxQuotes(symbols) {
   const byInstrumentKey = new Map(
     quotes.map((quote) => [quote?.instrument_token, quote])
   );
-  const result = resolved
+  const upstoxResult = resolved
     .map(({ requestedSymbol, instrument }) => {
       const quote = byInstrumentKey.get(instrument.instrument_key);
       return quote ? mapQuote(requestedSymbol, instrument, quote) : null;
     })
     .filter(Boolean);
+  const returnedSymbols = new Set(upstoxResult.map((quote) => quote.symbol));
+  const missingSymbols = [
+    ...unresolvedSymbols,
+    ...resolved
+      .map(({ requestedSymbol }) => requestedSymbol)
+      .filter((symbol) => !returnedSymbols.has(symbol)),
+  ];
+  let fallbackResult = [];
 
-  if (result.length !== requested.length) {
-    throw new Error("Upstox returned an incomplete market quote response");
+  if (missingSymbols.length > 0) {
+    try {
+      const yahooResult = await yahooProvider.quote(missingSymbols);
+      fallbackResult = Array.isArray(yahooResult) ? yahooResult : [yahooResult];
+    } catch (error) {
+      console.warn(`Yahoo fallback unavailable for ${missingSymbols.length} unresolved Upstox symbols: ${error.message}`);
+    }
   }
-  return Array.isArray(symbols) ? result : result[0];
+
+  const byRequestedSymbol = new Map(
+    [...upstoxResult, ...fallbackResult]
+      .filter(Boolean)
+      .map((quote) => [normalizeYahooSymbol(quote.symbol), quote])
+  );
+  const ordered = requested
+    .map((symbol) => byRequestedSymbol.get(normalizeYahooSymbol(symbol)))
+    .filter(Boolean);
+
+  if (ordered.length === 0) {
+    throw new Error("No market quotes were available from Upstox or Yahoo Finance");
+  }
+  return Array.isArray(symbols) ? ordered : ordered[0];
 }
 
 async function enrichQuotesWithYahoo(upstoxResult, symbols) {
