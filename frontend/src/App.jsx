@@ -6497,67 +6497,63 @@ const globalMarketNews = globalNewsData.map((article) => ({
 /* =========================================================================================
    SEARCH RESULTS PAGE
    ========================================================================================= */
+const SEARCH_TOPIC_TICKERS = {
+  "artificial intelligence": ["TCS", "INFY", "HCLTECH", "TECHM", "PERSISTENT", "TATAELXSI", "DIXON"],
+  semiconductors: ["DIXON", "CGPOWER", "TATAELXSI", "BEL"],
+  defence: ["HAL", "BEL", "BDL", "MAZDOCK", "COCHINSHIP", "SOLARINDS"],
+  banking: ["HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "KOTAKBANK", "BANKBARODA", "PNB"],
+  insurance: ["HDFCLIFE", "SBILIFE", "ICICIGI", "POLICYBZR"],
+  nbfc: ["BAJFINANCE", "SHRIRAMFIN", "CHOLAFIN", "MUTHOOTFIN", "M&MFIN", "LTF"],
+  fintech: ["PAYTM", "JIOFIN", "POLICYBZR", "GROWW", "SBICARD"],
+  "asset management": ["HDFCAMC", "ICICIAMC", "360ONE", "MOTILALOFS"],
+  "stock exchanges": ["BSE", "MCX"],
+  automobiles: ["MARUTI", "M&M", "HYUNDAI", "TMCV", "TMPV", "BAJAJ-AUTO", "TVSMOTOR", "EICHERMOT", "ASHOKLEY"],
+  "electric vehicles": ["M&M", "TMPV", "TVSMOTOR", "BAJAJ-AUTO", "EXIDEIND"],
+  telecom: ["BHARTIARTL", "IDEA", "INDUSTOWER", "TATACOMM"],
+  "it services": ["TCS", "INFY", "HCLTECH", "WIPRO", "TECHM", "COFORGE", "LTM", "MPHASIS", "PERSISTENT"],
+  railways: ["IRCTC", "IRFC", "RVNL", "CONCOR"], aviation: ["INDIGO", "GMRAIRPORT"],
+  ports: ["ADANIPORTS", "CONCOR"], logistics: ["ADANIPORTS", "CONCOR"],
+  power: ["NTPC", "POWERGRID", "TATAPOWER", "ADANIPOWER", "JSWENERGY", "NHPC"],
+  "renewable energy": ["SUZLON", "ADANIGREEN", "TATAPOWER", "NTPC", "IREDA", "PREMIERENE", "WAAREEENER"],
+  "oil and gas": ["RELIANCE", "ONGC", "OIL", "IOC", "BPCL", "HINDPETRO", "GAIL", "ATGL"],
+  metals: ["TATASTEEL", "JSWSTEEL", "HINDALCO", "VEDL", "HINDZINC", "SAIL", "NMDC", "NATIONALUM"],
+  cement: ["ULTRACEMCO", "AMBUJACEM", "SHREECEM", "GRASIM"],
+  chemicals: ["PIDILITIND", "SRF", "PIIND", "UPL", "COROMANDEL"],
+  pharmaceuticals: ["SUNPHARMA", "DRREDDY", "CIPLA", "DIVISLAB", "LUPIN", "AUROPHARMA", "ZYDUSLIFE", "ALKEM"],
+  hospitals: ["APOLLOHOSP", "MAXHEALTH", "FORTIS"],
+  fmcg: ["HINDUNILVR", "ITC", "NESTLEIND", "BRITANNIA", "DABUR", "MARICO", "GODREJCP", "COLPAL"],
+  retail: ["DMART", "TRENT", "NYKAA", "VMM", "LENSKART", "ETERNAL", "SWIGGY"], hotels: ["INDHOTEL"],
+  "real estate": ["DLF", "LODHA", "GODREJPROP", "OBEROIRLTY", "PHOENIXLTD", "PRESTIGE"],
+  "consumer electronics": ["DIXON", "VOLTAS", "BLUESTARCO", "HAVELLS", "LGEINDIA"],
+  jewellery: ["TITAN", "KALYANKJIL"], "food delivery": ["ETERNAL", "SWIGGY", "JUBLFOOD"],
+};
+
+const SEARCH_TOPIC_ALIASES = {
+  ai: "artificial intelligence", "artificial intelligence": "artificial intelligence", "machine learning": "artificial intelligence",
+  chip: "semiconductors", chips: "semiconductors", semiconductor: "semiconductors",
+  defence: "defence", defense: "defence", bank: "banking", banks: "banking",
+  insurer: "insurance", insurers: "insurance", nbfcs: "nbfc", "non banking finance": "nbfc",
+  "mutual funds": "asset management", amc: "asset management", exchanges: "stock exchanges",
+  auto: "automobiles", automobile: "automobiles", cars: "automobiles", ev: "electric vehicles", evs: "electric vehicles",
+  telecommunications: "telecom", it: "it services", technology: "it services", software: "it services",
+  railway: "railways", airport: "aviation", airports: "aviation", port: "ports",
+  utilities: "power", renewable: "renewable energy", renewables: "renewable energy", "clean energy": "renewable energy",
+  oil: "oil and gas", gas: "oil and gas", metal: "metals", steel: "metals",
+  chemical: "chemicals", pharma: "pharmaceuticals", pharmaceutical: "pharmaceuticals",
+  healthcare: "hospitals", hospital: "hospitals", "consumer staples": "fmcg",
+  property: "real estate", electronics: "consumer electronics", jewelry: "jewellery",
+};
+
 function SearchResultsPage({ searchTerm, openCompany }) {
   const [stocks, setStocks] = useState([]);
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
   const normalized = searchTerm.trim().toLowerCase();
+  const canonicalTopic = SEARCH_TOPIC_ALIASES[normalized] || normalized;
 
   const matchingDefinitions = useMemo(() => {
     if (!normalized) return [];
-    const topicTickers = {
-      semiconductors: ["DIXON", "CGPOWER", "TATAELXSI", "BEL"],
-      defence: ["HAL", "BEL", "BDL", "MAZDOCK", "COCHINSHIP", "SOLARINDS"],
-      banking: ["HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "KOTAKBANK", "BANKBARODA", "PNB"],
-      insurance: ["HDFCLIFE", "SBILIFE", "ICICIGI", "POLICYBZR"],
-      nbfc: ["BAJFINANCE", "SHRIRAMFIN", "CHOLAFIN", "MUTHOOTFIN", "M&MFIN", "LTF"],
-      fintech: ["PAYTM", "JIOFIN", "POLICYBZR", "GROWW", "SBICARD"],
-      "asset management": ["HDFCAMC", "ICICIAMC", "360ONE", "MOTILALOFS"],
-      "stock exchanges": ["BSE", "MCX"],
-      automobiles: ["MARUTI", "M&M", "HYUNDAI", "TMCV", "TMPV", "BAJAJ-AUTO", "TVSMOTOR", "EICHERMOT", "ASHOKLEY"],
-      "electric vehicles": ["M&M", "TMPV", "TVSMOTOR", "BAJAJ-AUTO", "EXIDEIND"],
-      telecom: ["BHARTIARTL", "IDEA", "INDUSTOWER", "TATACOMM"],
-      "it services": ["TCS", "INFY", "HCLTECH", "WIPRO", "TECHM", "COFORGE", "LTM", "MPHASIS", "PERSISTENT"],
-      railways: ["IRCTC", "IRFC", "RVNL", "CONCOR"],
-      aviation: ["INDIGO", "GMRAIRPORT"],
-      ports: ["ADANIPORTS", "CONCOR"],
-      logistics: ["ADANIPORTS", "CONCOR"],
-      power: ["NTPC", "POWERGRID", "TATAPOWER", "ADANIPOWER", "JSWENERGY", "NHPC"],
-      "renewable energy": ["SUZLON", "ADANIGREEN", "TATAPOWER", "NTPC", "IREDA", "PREMIERENE", "WAAREEENER"],
-      "oil and gas": ["RELIANCE", "ONGC", "OIL", "IOC", "BPCL", "HINDPETRO", "GAIL", "ATGL"],
-      metals: ["TATASTEEL", "JSWSTEEL", "HINDALCO", "VEDL", "HINDZINC", "SAIL", "NMDC", "NATIONALUM"],
-      cement: ["ULTRACEMCO", "AMBUJACEM", "SHREECEM", "GRASIM"],
-      chemicals: ["PIDILITIND", "SRF", "PIIND", "UPL", "COROMANDEL"],
-      pharmaceuticals: ["SUNPHARMA", "DRREDDY", "CIPLA", "DIVISLAB", "LUPIN", "AUROPHARMA", "ZYDUSLIFE", "ALKEM"],
-      hospitals: ["APOLLOHOSP", "MAXHEALTH", "FORTIS"],
-      fmcg: ["HINDUNILVR", "ITC", "NESTLEIND", "BRITANNIA", "DABUR", "MARICO", "GODREJCP", "COLPAL"],
-      retail: ["DMART", "TRENT", "NYKAA", "VMM", "LENSKART", "ETERNAL", "SWIGGY"],
-      hotels: ["INDHOTEL"],
-      "real estate": ["DLF", "LODHA", "GODREJPROP", "OBEROIRLTY", "PHOENIXLTD", "PRESTIGE"],
-      "consumer electronics": ["DIXON", "VOLTAS", "BLUESTARCO", "HAVELLS", "LGEINDIA"],
-      jewellery: ["TITAN", "KALYANKJIL"],
-      "food delivery": ["ETERNAL", "SWIGGY", "JUBLFOOD"],
-    };
-    const topicAliases = {
-      semiconductor: "semiconductors",
-      chips: "semiconductors",
-      renewable: "renewable energy",
-      renewables: "renewable energy",
-      pharma: "pharmaceuticals",
-      healthcare: "hospitals",
-      auto: "automobiles",
-      automobiles: "automobiles",
-      ev: "electric vehicles",
-      it: "it services",
-      technology: "it services",
-      banks: "banking",
-      energy: "power",
-      oil: "oil and gas",
-      gas: "oil and gas",
-      property: "real estate",
-    };
-    const canonicalTopic = topicAliases[normalized] || normalized;
-    const aliases = new Set(topicTickers[canonicalTopic] || []);
+    const aliases = new Set(SEARCH_TOPIC_TICKERS[canonicalTopic] || []);
     return RAW_STOCKS.filter((stock) =>
       aliases.has(stock.ticker) ||
       [stock.ticker, stock.name, stock.sector, stock.industry, stock.description]
@@ -6566,12 +6562,15 @@ function SearchResultsPage({ searchTerm, openCompany }) {
         .toLowerCase()
         .includes(normalized)
     ).slice(0, 20);
-  }, [normalized]);
+  }, [normalized, canonicalTopic]);
 
   useEffect(() => {
     let cancelled = false;
     async function loadResults() {
       setLoading(true);
+      const companyNewsResults = await Promise.allSettled(
+        matchingDefinitions.slice(0, 4).map((stock) => getCompanyNews(stock.ticker))
+      );
       const [stockResult, globalResult, marketResult] = await Promise.allSettled([
         matchingDefinitions.length
           ? getStockUniverse(matchingDefinitions.map((stock) => stock.ticker))
@@ -6584,13 +6583,22 @@ function SearchResultsPage({ searchTerm, openCompany }) {
       const combined = [
         ...(globalResult.status === "fulfilled" ? globalResult.value?.articles || [] : []),
         ...(marketResult.status === "fulfilled" ? marketResult.value?.articles || [] : []),
+        ...companyNewsResults.flatMap((result) => result.status === "fulfilled" ? result.value?.articles || [] : []),
       ];
+      const topicTerms = new Set([
+        normalized,
+        canonicalTopic,
+        ...Object.entries(SEARCH_TOPIC_ALIASES)
+          .filter(([, topic]) => topic === canonicalTopic)
+          .map(([alias]) => alias),
+        ...matchingDefinitions.flatMap((stock) => [stock.ticker.toLowerCase(), stock.name?.toLowerCase()]).filter(Boolean),
+      ]);
       const seen = new Set();
       setArticles(combined.filter((article) => {
         const haystack = [article.title, article.topic, article.teaser, article.body, article.summary]
           .filter(Boolean).join(" ").toLowerCase();
         const key = article.link || article.url || article.title;
-        if (!haystack.includes(normalized) || seen.has(key)) return false;
+        if (![...topicTerms].some((term) => term && haystack.includes(term)) || seen.has(key)) return false;
         seen.add(key);
         return true;
       }).slice(0, 15));
