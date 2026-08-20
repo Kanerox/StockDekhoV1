@@ -6,8 +6,17 @@ import {
 
 function mergeCompanySupplement(primary, supplement) {
   if (!supplement) return primary;
+  const primaryTime = new Date(primary.asOf).getTime();
+  const supplementTime = new Date(supplement.regularMarketTime).getTime();
+  const useYahooQuote = Number.isFinite(supplementTime) &&
+    (!Number.isFinite(primaryTime) || supplementTime > primaryTime);
   return {
     ...primary,
+    price: useYahooQuote ? supplement.regularMarketPrice ?? primary.price : primary.price,
+    changePercent: useYahooQuote
+      ? supplement.regularMarketChangePercent ?? primary.changePercent
+      : primary.changePercent,
+    asOf: useYahooQuote ? supplement.regularMarketTime : primary.asOf,
     company: supplement.company || primary.company,
     marketCap: supplement.marketCap ?? primary.marketCap,
     trailingPE: supplement.trailingPE ?? primary.trailingPE,
@@ -96,8 +105,19 @@ export async function getStockUniverse(symbols) {
       .map((stock) => {
         const supplement = supplementByTicker.get(stock.ticker);
         if (!supplement) return stock;
+        const stockTime = new Date(stock.asOf).getTime();
+        const supplementTime = new Date(supplement.regularMarketTime).getTime();
+        const useYahooQuote = Number.isFinite(supplementTime) &&
+          (!Number.isFinite(stockTime) || supplementTime > stockTime);
         return {
           ...stock,
+          price: useYahooQuote
+            ? supplement.regularMarketPrice ?? stock.price
+            : stock.price,
+          chgPct: useYahooQuote
+            ? supplement.regularMarketChangePercent ?? stock.chgPct
+            : stock.chgPct,
+          asOf: useYahooQuote ? supplement.regularMarketTime : stock.asOf,
           name: supplement.company || stock.name,
           mcap: Number.isFinite(supplement.marketCap)
             ? supplement.marketCap / 10000000

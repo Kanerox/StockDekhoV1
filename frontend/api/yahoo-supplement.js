@@ -38,6 +38,10 @@ function quoteSupplement(quote) {
   return {
     ticker: ticker(quote.symbol),
     company: quote.longName || quote.shortName || ticker(quote.symbol),
+    regularMarketPrice: finite(quote.regularMarketPrice),
+    regularMarketChange: finite(quote.regularMarketChange),
+    regularMarketChangePercent: finite(quote.regularMarketChangePercent),
+    regularMarketTime: isoDate(quote.regularMarketTime),
     marketCap: finite(quote.marketCap),
     trailingPE: finite(quote.trailingPE),
     priceToBook: finite(quote.priceToBook),
@@ -102,13 +106,14 @@ function normalizeEvents(symbol, result) {
 }
 
 export default async function handler(request, response) {
-  response.setHeader(
-    "Cache-Control",
-    "public, s-maxage=1800, stale-while-revalidate=86400"
-  );
-
   try {
     const action = String(request.query?.action || "quotes");
+    response.setHeader(
+      "Cache-Control",
+      action === "events"
+        ? "public, s-maxage=600, stale-while-revalidate=3600"
+        : "public, s-maxage=120, stale-while-revalidate=600"
+    );
     const symbols = String(request.query?.symbols || request.query?.symbol || "")
       .split(",")
       .map(normalizeSymbol)
