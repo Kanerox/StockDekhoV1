@@ -34,6 +34,7 @@ function mergeCompanySupplement(primary, supplement) {
     volume: primary.volume ?? supplement.regularMarketVolume,
     fiftyTwoWeekHigh: supplement.fiftyTwoWeekHigh ?? primary.fiftyTwoWeekHigh,
     fiftyTwoWeekLow: supplement.fiftyTwoWeekLow ?? primary.fiftyTwoWeekLow,
+    oneYearReturn: supplement.fiftyTwoWeekChangePercent ?? primary.oneYearReturn,
     returnOnEquity: supplement.returnOnEquity ?? primary.returnOnEquity,
     debtToEquity: supplement.debtToEquity ?? primary.debtToEquity,
     supplementalDataProvider: "Yahoo Finance",
@@ -146,6 +147,7 @@ export async function getStockUniverse(symbols) {
           pb: supplement.priceToBook ?? stock.pb,
           bookValue: supplement.bookValue ?? stock.bookValue,
           divYield: supplement.dividendYield ?? stock.divYield,
+          ret1y: supplement.fiftyTwoWeekChangePercent ?? stock.ret1y,
         };
       });
   } catch (error) {

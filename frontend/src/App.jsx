@@ -1264,7 +1264,7 @@ function Header({
                   setSearchOpen(false);
                 }
               }}
-              placeholder="Search companies or topics…"
+              placeholder="Search Companies or Topics..."
               style={{ background: "none", border: "none", outline: "none", color: THEME.ink, fontSize: 13, width: "100%" }}
             />
           </div>
@@ -6670,7 +6670,29 @@ function WatchlistPage({ watchlist, toggleWatch, openCompany, setPage }) {
 
       try {
         const data = await getStockUniverse(watchlist);
-        if (!cancelled) setRows(data);
+        const detailResults = await Promise.allSettled(
+          data.map((stock) => getStockQuote(stock.ticker))
+        );
+        const detailedByTicker = new Map(
+          detailResults
+            .map((result, index) => [data[index]?.ticker, result])
+            .filter(([ticker, result]) => ticker && result.status === "fulfilled")
+            .map(([ticker, result]) => [ticker, result.value])
+        );
+        const enriched = data.map((stock) => {
+          const detail = detailedByTicker.get(stock.ticker);
+          const definition = STOCKS_BY_TICKER[stock.ticker];
+          const calculatedRoe = Number.isFinite(detail?.trailingEps) && Number.isFinite(detail?.bookValue) && detail.bookValue !== 0
+            ? (detail.trailingEps / detail.bookValue) * 100
+            : null;
+          return {
+            ...stock,
+            roe: detail?.returnOnEquity ?? calculatedRoe ?? stock.roe ?? definition?.roe ?? null,
+            de: detail?.debtToEquity ?? stock.de ?? definition?.de ?? null,
+            ret1y: detail?.oneYearReturn ?? stock.ret1y,
+          };
+        });
+        if (!cancelled) setRows(enriched);
       } catch (error) {
         if (!cancelled) {
           setRows([]);
@@ -6716,7 +6738,7 @@ function WatchlistPage({ watchlist, toggleWatch, openCompany, setPage }) {
         <Panel style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 1080 }}>
             <thead><tr style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
-              <th style={thStyle}></th><th style={thStyle}>Company</th><th style={thStyle}>Price</th><th style={thStyle}>Chg%</th><th style={thStyle}>Market Cap</th><th style={thStyle}>P/E</th><th style={thStyle}>ROE%</th><th style={thStyle}>D/E</th><th style={thStyle}>Div Yield%</th><th style={thStyle}>1Y Return</th>
+              <th style={thStyle}></th><th style={thStyle}>Company</th><th style={thStyle}>Price</th><th style={thStyle}>Chg%</th><th style={thStyle}>1Y Return</th><th style={thStyle}>Market Cap</th><th style={thStyle}>P/E</th><th style={thStyle}>ROE%</th><th style={thStyle}>D/E</th><th style={thStyle}>Div Yield%</th>
             </tr></thead>
             <tbody>
               {rows.map((s) => (
@@ -6725,12 +6747,12 @@ function WatchlistPage({ watchlist, toggleWatch, openCompany, setPage }) {
                   <td style={tdStyle} onClick={() => openCompany(s.ticker)}><span style={{ cursor: "pointer", fontWeight: 600 }}>{s.name}</span> <span style={{ color: THEME.inkDim }}>· {s.ticker}</span></td>
                   <td style={tdStyle} className="sd-mono">₹{fmtNum(s.price)}</td>
                   <td style={tdStyle}>{s.chgPct !== null ? <Move value={s.chgPct} /> : "—"}</td>
+                  <td style={tdStyle}>{s.ret1y !== null ? <Move value={s.ret1y} /> : "—"}</td>
                   <td style={tdStyle} className="sd-mono">{fmtCr(s.mcap)}</td>
                   <td style={tdStyle} className="sd-mono">{s.pe ? fmtNum(s.pe, 1) : "—"}</td>
                   <td style={tdStyle} className="sd-mono">{s.roe !== null ? fmtNum(s.roe, 1) : "—"}</td>
                   <td style={tdStyle} className="sd-mono">{s.de !== null ? fmtNum(s.de, 2) : "—"}</td>
                   <td style={tdStyle} className="sd-mono">{s.divYield !== null ? `${fmtNum(s.divYield, 2)}%` : "—"}</td>
-                  <td style={tdStyle}>{s.ret1y !== null ? <Move value={s.ret1y} /> : "—"}</td>
                 </tr>
               ))}
             </tbody>

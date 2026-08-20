@@ -65,6 +65,7 @@ function quoteSupplement(quote) {
     regularMarketVolume: finite(quote.regularMarketVolume),
     fiftyTwoWeekHigh: finite(quote.fiftyTwoWeekHigh),
     fiftyTwoWeekLow: finite(quote.fiftyTwoWeekLow),
+    fiftyTwoWeekChangePercent: finite(quote.fiftyTwoWeekChangePercent),
   };
 }
 
