@@ -1980,6 +1980,15 @@ const mostActive = [...performerStocks]
         year: "numeric",
       })
     : "latest available session";
+  const leadershipObservationTime = hasLeadershipSnapshot
+    ? [...trackedNiftyStocks]
+        .map((stock) => new Date(stock.marketTime).getTime())
+        .filter(Number.isFinite)
+        .sort((a, b) => b - a)[0]
+    : null;
+  const leadershipAsOf = Number.isFinite(leadershipObservationTime)
+    ? formatMarketAsOf(new Date(leadershipObservationTime).toISOString())
+    : leadershipDate;
   const leadershipHeadline = hasLeadershipSnapshot
     ? nifty50.changePercent >= 0
       ? `Nifty 50 advances as ${leadingStock.name} leads index constituents`
@@ -2334,7 +2343,7 @@ useEffect(() => {
         {hasLeadershipSnapshot && <div style={{ display: "flex", gap: 22, marginTop: 16, flexWrap: "wrap" }}>
           <div>
             <div style={{ fontSize: 11, color: THEME.inkDim, marginBottom: 6 }}>
-              Nifty 50 breadth ({leadershipDate})
+              Nifty 50 breadth ({leadershipAsOf})
             </div>
             <div style={{ display: "flex", height: 8, width: 260, borderRadius: 4, overflow: "hidden" }}>
               <div style={{ width: `${(advancing / total) * 100}%`, background: THEME.up }} />
