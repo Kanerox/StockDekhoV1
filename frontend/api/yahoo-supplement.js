@@ -105,6 +105,62 @@ function normalizeEvents(symbol, result) {
   };
 }
 
+function historyPeriod(query) {
+  const period2 = query?.end ? new Date(query.end) : new Date();
+  period2.setDate(period2.getDate() + 1);
+  const period1 = query?.start ? new Date(query.start) : new Date();
+  const range = String(query?.range || "1Y").toUpperCase();
+
+  if (!query?.start) {
+    if (range === "1W") period1.setDate(period1.getDate() - 10);
+    else if (range === "1M") period1.setMonth(period1.getMonth() - 1);
+    else if (range === "3M") period1.setMonth(period1.getMonth() - 3);
+    else if (range === "6M") period1.setMonth(period1.getMonth() - 6);
+    else if (range === "9M") period1.setMonth(period1.getMonth() - 9);
+    else if (range === "3Y") period1.setFullYear(period1.getFullYear() - 3);
+    else if (range === "5Y") period1.setFullYear(period1.getFullYear() - 5);
+    else if (range === "MAX" || range === "SI") period1.setTime(new Date("1990-01-01").getTime());
+    else period1.setFullYear(period1.getFullYear() - 1);
+  }
+
+  return { period1, period2 };
+}
+
+function chartPoints(result) {
+  return (result?.quotes || [])
+    .filter((quote) => quote?.date && Number.isFinite(quote?.close))
+    .map((quote) => ({
+      date: new Date(quote.date).toISOString().slice(0, 10),
+      close: quote.close,
+      adjustedClose: Number.isFinite(quote.adjclose) ? quote.adjclose : quote.close,
+    }));
+}
+
+async function historySupplement(symbol, query) {
+  const { period1, period2 } = historyPeriod(query);
+  const options = { period1, period2, interval: "1d" };
+  const [stockResult, benchmarkResult] = await Promise.all([
+    yahooFinance.chart(symbol, options),
+    yahooFinance.chart("^NSEI", options),
+  ]);
+  const benchmarkByDate = new Map(
+    chartPoints(benchmarkResult).map((point) => [point.date, point])
+  );
+
+  return {
+    points: chartPoints(stockResult)
+      .map((point) => {
+        const benchmark = benchmarkByDate.get(point.date);
+        return benchmark ? {
+          ...point,
+          benchmarkClose: benchmark.close,
+          benchmarkAdjustedClose: benchmark.adjustedClose,
+        } : null;
+      })
+      .filter(Boolean),
+  };
+}
+
 export default async function handler(request, response) {
   try {
     const action = String(request.query?.action || "quotes");
@@ -130,6 +186,12 @@ export default async function handler(request, response) {
         modules: ["calendarEvents", "summaryDetail", "earningsHistory"],
       }, { validateResult: false });
       return response.status(200).json(normalizeEvents(symbol, result));
+    }
+
+    if (action === "history") {
+      return response.status(200).json(
+        await historySupplement(symbols[0], request.query)
+      );
     }
 
     if (action === "company") {

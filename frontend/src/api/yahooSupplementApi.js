@@ -39,6 +39,21 @@ export async function getYahooQuoteSupplements(symbols) {
   }
 }
 
+export async function getYahooHistorySupplement(symbol, range, customRange = {}) {
+  try {
+    return await supplementalRequest({
+      action: "history",
+      symbol: ticker(symbol),
+      range,
+      ...(customRange.start ? { start: customRange.start } : {}),
+      ...(customRange.end ? { end: customRange.end } : {}),
+    });
+  } catch (error) {
+    console.warn("Yahoo history supplement unavailable:", error);
+    return null;
+  }
+}
+
 export async function getYahooEventSupplement(symbol) {
   try {
     return await supplementalRequest({ action: "events", symbol: ticker(symbol) });
