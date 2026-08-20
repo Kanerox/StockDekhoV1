@@ -139,8 +139,9 @@ function mapQuote(requestedSymbol, instrument, quote) {
   const quotedPreviousClose = finite(quote?.ohlc?.close);
   const quotedChange = finite(quote?.net_change);
   const previousClose =
-    quotedPreviousClose ??
-    (price === null || quotedChange === null ? null : price - quotedChange);
+    price !== null && quotedChange !== null
+      ? price - quotedChange
+      : quotedPreviousClose;
   const change =
     price === null || previousClose === null
       ? quotedChange
