@@ -5,12 +5,12 @@ const {
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 const { fetchHistoricalPrices } = require("./historyClient");
 
-const FRESH_QUOTE_TTL_MS = 10 * 60 * 1000;
+const FRESH_QUOTE_TTL_MS = 2 * 60 * 1000;
 const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
-const QUOTE_CACHE_VERSION = "v5";
+const QUOTE_CACHE_VERSION = "v6";
 const PREVIOUS_QUOTE_CACHE_VERSION = "v2";
 const SUPPLEMENTAL_QUOTE_FIELDS = [
   "marketCap",
@@ -149,6 +149,20 @@ function endOfDayTimestamp(value) {
   return `${sessionDate}T10:30:00.000Z`;
 }
 
+function historyObservationTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const sessionDate = date.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+  const today = new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+  return sessionDate === today
+    ? new Date().toISOString()
+    : endOfDayTimestamp(date);
+}
+
 async function preserveLegacyQuoteFields(quote) {
   if (getMarketDataProviderName() !== "upstox" || !quote?.symbol) return quote;
 
@@ -227,7 +241,7 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
       adjustedFirst === 0
         ? null
         : ((adjustedLatest / adjustedFirst) - 1) * 100,
-    regularMarketTime: endOfDayTimestamp(latest.date),
+    regularMarketTime: historyObservationTimestamp(latest.date),
     currency: "INR",
     quoteSourceName: "Yahoo Finance historical EOD",
   };

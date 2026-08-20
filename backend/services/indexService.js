@@ -28,13 +28,6 @@ function completedSessionPoints(points) {
   });
 }
 
-function latestSessionAsOf(points) {
-  const latest = points[points.length - 1];
-  if (!latest?.date) return null;
-  const date = new Date(latest.date).toISOString().slice(0, 10);
-  return `${date}T10:30:00.000Z`;
-}
-
 function resolvePeriod(range = "1Y") {
   const period2 = new Date();
   period2.setDate(period2.getDate() + 1);
@@ -180,12 +173,14 @@ async function getIndexSummary(definition) {
   ]);
 
   const sessions = completedSessionPoints(points);
-  const asOf = latestSessionAsOf(sessions);
+  const historyMove = calculateDailyMove(sessions);
+  const quoteMove = {
+    change: valueOrNull(quote.regularMarketChange),
+    changePercent: valueOrNull(quote.regularMarketChangePercent),
+  };
   return {
     ...mapQuote(definition, quote),
-    ...calculateDailyMove(sessions),
-    marketTime: asOf,
-    asOf,
+    ...(quoteMove.changePercent === null ? historyMove : quoteMove),
     oneMonthReturn: calculateReturn(sessions),
     sparkline: sessions.map((point) => point.adjustedClose),
   };
@@ -220,9 +215,12 @@ async function getIndexDetail(key, range = "1Y") {
 
   return {
     ...mapQuote(definition, quote),
-    ...calculateDailyMove(sessions),
-    marketTime: latestSessionAsOf(sessions),
-    asOf: latestSessionAsOf(sessions),
+    ...(valueOrNull(quote.regularMarketChangePercent) === null
+      ? calculateDailyMove(sessions)
+      : {
+          change: valueOrNull(quote.regularMarketChange),
+          changePercent: valueOrNull(quote.regularMarketChangePercent),
+        }),
     range,
     periodReturn: calculateReturn(sessions),
     periodHigh: closes.length ? Math.max(...closes) : null,

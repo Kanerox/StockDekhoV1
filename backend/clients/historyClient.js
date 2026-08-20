@@ -5,7 +5,7 @@ const {
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 
 const YAHOO_FRESH_HISTORY_TTL_MS = 6 * 60 * 60 * 1000;
-const UPSTOX_FRESH_HISTORY_TTL_MS = 30 * 60 * 1000;
+const UPSTOX_FRESH_HISTORY_TTL_MS = 5 * 60 * 1000;
 const STALE_HISTORY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
 const requestsInFlight = new Map();
@@ -38,13 +38,13 @@ function dateKey(date) {
 function historyCacheKey(symbol, period1, period2) {
   const key = `history:${symbol}:1d:${dateKey(period1)}:${dateKey(period2)}`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v5:${key}`;
+  return providerName === "yahoo" ? key : `${providerName}:v6:${key}`;
 }
 
 function latestHistoryCacheKey(symbol) {
   const key = `history:${symbol}:1d:latest`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v5:${key}`;
+  return providerName === "yahoo" ? key : `${providerName}:v6:${key}`;
 }
 
 function cooldownCacheKey() {

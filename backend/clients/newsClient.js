@@ -13,7 +13,7 @@ const MARKETAUX_URL =
   "https://api.marketaux.com/v1/news/all";
 
 const CACHE_TTL_MS =
-  30 * 60 * 1000;
+  10 * 60 * 1000;
 
 const CACHE_RETENTION_MS =
   24 * 60 * 60 * 1000;

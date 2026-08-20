@@ -1344,6 +1344,41 @@ function isWithinLastDays(dateValue, numberOfDays) {
   );
 }
 
+function indiaDateKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function recentMarketNewsDay(value) {
+  const publicationDate = new Date(value);
+  if (Number.isNaN(publicationDate.getTime()) || publicationDate > new Date()) {
+    return null;
+  }
+  const today = indiaDateKey(new Date());
+  const yesterday = indiaDateKey(Date.now() - 24 * 60 * 60 * 1000);
+  const articleDay = indiaDateKey(publicationDate);
+  return articleDay === today ? "today" : articleDay === yesterday ? "yesterday" : null;
+}
+
+function isPlausibleMarketPublication(article, cleanedArticle) {
+  const publicationDate = new Date(article?.pubDate);
+  if (Number.isNaN(publicationDate.getTime())) return false;
+  const title = String(cleanedArticle?.title || "").toLowerCase();
+  const hour = Number(new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    hour: "2-digit",
+    hourCycle: "h23",
+  }).format(publicationDate));
+  const claimsMarketClose = /\b(closing|closing bell|ends?|settles?|final bell)\b/.test(title);
+  return !(claimsMarketClose && hour < 15);
+}
+
 function getMarketArticleScore(item) {
   const source = String(
     item.cleanedArticle?.source || ""
@@ -1809,12 +1844,7 @@ async function getNiftyMarketEventsFromService() {
         return [];
       }
       return result.value.articles
-        .filter((article) =>
-          isWithinLastDays(
-            article.pubDate,
-            30
-          )
-        )
+        .filter((article) => recentMarketNewsDay(article.pubDate))
         .map((article) => ({
           article,
           cleanedArticle:
@@ -1836,7 +1866,8 @@ async function getNiftyMarketEventsFromService() {
     isIndiaMarketRelevantArticle(
       article,
       cleanedArticle
-    )
+    ) &&
+    isPlausibleMarketPublication(article, cleanedArticle)
 )
         .sort(
           (itemA, itemB) =>
@@ -1850,10 +1881,20 @@ async function getNiftyMarketEventsFromService() {
         .slice(0, 25);
     }
   );
-  const selectedArticles = selectTopMarketArticles(
-  candidates,
-  30
-);
+  const todayCandidates = candidates.filter(
+    ({ article }) => recentMarketNewsDay(article.pubDate) === "today"
+  );
+  const yesterdayCandidates = candidates.filter(
+    ({ article }) => recentMarketNewsDay(article.pubDate) === "yesterday"
+  );
+  const selectedToday = selectTopMarketArticles(todayCandidates, 30);
+  const selectedArticles = [
+    ...selectedToday,
+    ...selectTopMarketArticles(
+      yesterdayCandidates,
+      Math.max(0, 30 - selectedToday.length)
+    ),
+  ];
 
 selectedArticles.sort(
   (itemA, itemB) =>
@@ -1884,7 +1925,7 @@ const articles = selectedArticles.map(
   );
 
   return {
-    range: "Last 30 days",
+    range: "Today and yesterday",
     articleCount: articles.length,
     articles,
   };

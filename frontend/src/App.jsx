@@ -175,6 +175,17 @@ function parseNewsDate(value) {
     : parsedDate;
 }
 
+function isTodayOrYesterdayNews(value) {
+  const date = parseNewsDate(value);
+  if (!date || date.getTime() > Date.now()) return false;
+  const dateKey = (item) => item.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+  });
+  const today = dateKey(new Date());
+  const yesterday = dateKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
+  return dateKey(date) === today || dateKey(date) === yesterday;
+}
+
 function formatNewsDate(value) {
   const parsedDate =
     parseNewsDate(value);
@@ -2020,9 +2031,11 @@ useEffect(() => {
   }
 
   loadIndices();
+  const refreshTimer = window.setInterval(loadIndices, 2 * 60 * 1000);
 
   return () => {
     cancelled = true;
+    window.clearInterval(refreshTimer);
   };
 }, []);
 
@@ -2077,7 +2090,7 @@ useEffect(() => {
             article.title || ""
           ).toLowerCase();
 
-          return !blockedMarketEventTerms.some(
+          return isTodayOrYesterdayNews(article.publishedAt) && !blockedMarketEventTerms.some(
             (term) => title.includes(term)
           );
         })
@@ -2146,9 +2159,11 @@ date: formatNewsDate(
   }
 
   loadMarketContext();
+  const refreshTimer = window.setInterval(loadMarketContext, 2 * 60 * 1000);
 
   return () => {
     cancelled = true;
+    window.clearInterval(refreshTimer);
   };
 }, []);
 
@@ -4198,9 +4213,11 @@ useEffect(() => {
   }
 
   fetchCompanyData();
+  const refreshTimer = window.setInterval(fetchCompanyData, 2 * 60 * 1000);
 
   return () => {
     isMounted = false;
+    window.clearInterval(refreshTimer);
   };
 }, [ticker]);
 
