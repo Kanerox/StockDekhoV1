@@ -226,12 +226,32 @@ export default async function handler(request, response) {
       const [quote, summary] = await Promise.all([
         yahooFinance.quote(symbol),
         yahooFinance.quoteSummary(symbol, {
-          modules: ["financialData"],
+          modules: ["financialData", "price", "summaryDetail", "defaultKeyStatistics"],
         }, { validateResult: false }),
       ]);
       const financialData = summary?.financialData || {};
+      const enrichedQuote = {
+        ...quote,
+        marketCap:
+          quote?.marketCap ??
+          summary?.price?.marketCap ??
+          summary?.summaryDetail?.marketCap ??
+          null,
+        trailingPE:
+          quote?.trailingPE ??
+          summary?.summaryDetail?.trailingPE ??
+          null,
+        priceToBook:
+          quote?.priceToBook ??
+          summary?.defaultKeyStatistics?.priceToBook ??
+          null,
+        bookValue:
+          quote?.bookValue ??
+          summary?.defaultKeyStatistics?.bookValue ??
+          null,
+      };
       return response.status(200).json({
-        ...quoteSupplement(quote),
+        ...quoteSupplement(enrichedQuote),
         returnOnEquity: finite(financialData.returnOnEquity) === null
           ? null
           : finite(financialData.returnOnEquity) * 100,
