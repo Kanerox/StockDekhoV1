@@ -6,6 +6,9 @@ const CURRENCY_SYMBOLS = {
   GBP: "GBPINR=X",
   JPY: "JPYINR=X",
   AED: "AEDINR=X",
+  SGD: "SGDINR=X",
+  CAD: "CADINR=X",
+  AUD: "AUDINR=X",
 };
 
 function getCurrencySymbol(code) {

@@ -30,8 +30,6 @@ import Star from "lucide-react/dist/esm/icons/star.mjs";
 import StarOff from "lucide-react/dist/esm/icons/star-off.mjs";
 import TrendingUp from "lucide-react/dist/esm/icons/trending-up.mjs";
 import TrendingDown from "lucide-react/dist/esm/icons/trending-down.mjs";
-import BookOpen from "lucide-react/dist/esm/icons/book-open.mjs";
-import FlaskConical from "lucide-react/dist/esm/icons/flask-conical.mjs";
 import Info from "lucide-react/dist/esm/icons/info.mjs";
 import ArrowUpRight from "lucide-react/dist/esm/icons/arrow-up-right.mjs";
 import ArrowDownRight from "lucide-react/dist/esm/icons/arrow-down-right.mjs";
@@ -806,6 +804,9 @@ const CURRENCIES = [
   { code: "GBP", name: "British Pound", rate: 128.9, chgPct: 0.1, low52: 112.6, high52: 130.4, live: true, sourceDate: "mid-market ref., 24 Jul 2026" },
   { code: "JPY", name: "Japanese Yen (per 1)", rate: 0.594, chgPct: -0.05, low52: 0.52, high52: 0.63, live: true, sourceDate: "forex card ref., 20 Jul 2026" },
   { code: "AED", name: "UAE Dirham", rate: 25.17, chgPct: 0.01, low52: 23.4, high52: 26.4, live: true, sourceDate: "market ref., late Jul 2026" },
+  { code: "SGD", name: "Singapore Dollar", rate: null, chgPct: null, low52: null, high52: null, live: true, sourceDate: "Latest available market reference" },
+  { code: "CAD", name: "Canadian Dollar", rate: null, chgPct: null, low52: null, high52: null, live: true, sourceDate: "Latest available market reference" },
+  { code: "AUD", name: "Australian Dollar", rate: null, chgPct: null, low52: null, high52: null, live: true, sourceDate: "Latest available market reference" },
 ].map((c) => ({ ...c, spark: sparkPoints("FX" + c.code, c.rate) }));
 
 // Editorial "Global Markets" module — macro developments affecting the INR, shown on the Currencies page.
@@ -937,11 +938,7 @@ function isCurrencyMarketOpen(now = new Date()) {
 }
 
 function hasFreshCurrencyQuote(currency, now = new Date()) {
-  if (!isCurrencyMarketOpen(now)) return false;
-  const marketTime = new Date(currency?.marketTime).getTime();
-  if (!Number.isFinite(marketTime)) return false;
-  const age = now.getTime() - marketTime;
-  return age >= -5 * 60 * 1000 && age <= 30 * 60 * 1000;
+  return isCurrencyMarketOpen(now) && Number.isFinite(currency?.rate);
 }
 
 function LiveTag({ live, approx, small, statusLabel }) {
@@ -1326,18 +1323,6 @@ function Header({
           )}
         </div>
 
-        <div className="sd-mode-switch" style={{ display: "flex", background: THEME.panel, border: `1px solid ${THEME.hairline}`, borderRadius: 20, padding: 3, flexShrink: 0 }}>
-          <button onClick={() => setMode("explore")} className="sd-focusable" style={{
-            border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: 16, fontSize: 12, fontWeight: 700,
-            background: mode === "explore" ? THEME.gold : "transparent", color: mode === "explore" ? THEME.navyDeep : THEME.inkDim,
-            display: "flex", alignItems: "center", gap: 5,
-          }}><BookOpen size={13} />Explore</button>
-          <button onClick={() => setMode("research")} className="sd-focusable" style={{
-            border: "none", cursor: "pointer", padding: "6px 12px", borderRadius: 16, fontSize: 12, fontWeight: 700,
-            background: mode === "research" ? THEME.gold : "transparent", color: mode === "research" ? THEME.navyDeep : THEME.inkDim,
-            display: "flex", alignItems: "center", gap: 5,
-          }}><FlaskConical size={13} />Research</button>
-        </div>
       </div>
     </div>
   );
@@ -2764,7 +2749,7 @@ function FeaturedChartCard({
             />
           )}
 
-          <LiveTag live small statusLabel={dataType === "currency" ? "EOD" : isIndianMarketOpen() ? "Live" : "EOD"} />
+          <LiveTag live small statusLabel={dataType === "currency" ? (isCurrencyMarketOpen() ? "Live" : "EOD") : isIndianMarketOpen() ? "Live" : "EOD"} />
         </div>
       </div>
 
@@ -6260,9 +6245,11 @@ function CurrenciesPage() {
     }
 
     loadCurrencies();
+    const refreshTimer = window.setInterval(loadCurrencies, 2 * 60 * 1000);
 
     return () => {
       cancelled = true;
+      window.clearInterval(refreshTimer);
     };
   }, []);
 
