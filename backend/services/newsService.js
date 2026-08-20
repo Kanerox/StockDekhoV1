@@ -1376,7 +1376,34 @@ function isPlausibleMarketPublication(article, cleanedArticle) {
     hourCycle: "h23",
   }).format(publicationDate));
   const claimsMarketClose = /\b(closing|closing bell|ends?|settles?|final bell)\b/.test(title);
-  return !(claimsMarketClose && hour < 15);
+  if (claimsMarketClose && hour < 15) return false;
+
+  const monthNumbers = {
+    jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
+    jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12,
+  };
+  const titleDate = title.match(
+    /\b(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})\b/
+  ) || title.match(
+    /\b(\d{1,2})\s+(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\b/
+  );
+  if (titleDate) {
+    const monthFirst = Number.isNaN(Number(titleDate[1]));
+    const monthName = monthFirst ? titleDate[1] : titleDate[2];
+    const day = Number(monthFirst ? titleDate[2] : titleDate[1]);
+    const publicationParts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-GB", {
+        timeZone: "Asia/Kolkata",
+        month: "numeric",
+        day: "numeric",
+      }).formatToParts(publicationDate).map((part) => [part.type, part.value])
+    );
+    if (monthNumbers[monthName.slice(0, 3)] !== Number(publicationParts.month) ||
+        day !== Number(publicationParts.day)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function getMarketArticleScore(item) {
