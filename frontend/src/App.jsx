@@ -1970,6 +1970,9 @@ const mostActive = [...performerStocks]
   const laggingStock = rankedNiftyStocks[rankedNiftyStocks.length - 1];
   const nifty50 = liveIndices.find((idx) => idx.key === "NIFTY50");
   const sensex = liveIndices.find((idx) => idx.key === "SENSEX");
+  const hasLeadershipSnapshot = Boolean(
+    nifty50 && sensex && trackedNiftyStocks.length === 50 && leadingStock && laggingStock
+  );
   const leadershipDate = niftyDetail?.marketTime
     ? new Date(niftyDetail.marketTime).toLocaleDateString("en-IN", {
         day: "2-digit",
@@ -1977,14 +1980,18 @@ const mostActive = [...performerStocks]
         year: "numeric",
       })
     : "latest available session";
-  const leadershipHeadline = nifty50 && leadingStock && laggingStock
+  const leadershipHeadline = hasLeadershipSnapshot
     ? nifty50.changePercent >= 0
       ? `Nifty 50 advances as ${leadingStock.name} leads index constituents`
       : `Nifty 50 declines as ${laggingStock.name} weighs on index constituents`
-    : "Loading the latest Indian market leadership snapshot";
-  const leadershipSummary = nifty50 && sensex && leadingStock && laggingStock
+    : niftyDetail
+      ? "Consistent market leadership snapshot unavailable"
+      : "Loading the latest Indian market leadership snapshot";
+  const leadershipSummary = hasLeadershipSnapshot
     ? `The Nifty 50 ${nifty50.changePercent >= 0 ? "rose" : "fell"} ${Math.abs(nifty50.changePercent).toFixed(2)}% while the Sensex ${sensex.changePercent >= 0 ? "gained" : "declined"} ${Math.abs(sensex.changePercent).toFixed(2)}%. ${leadingStock.name} led the Nifty constituents with a ${leadingStock.chgPct >= 0 ? "gain" : "move"} of ${Math.abs(leadingStock.chgPct).toFixed(2)}%, while ${laggingStock.name} was the weakest at ${laggingStock.chgPct.toFixed(2)}%. Index breadth was ${advancing} advancing, ${unchanged} unchanged and ${declining} declining.`
-    : "Current Nifty 50 leadership and breadth data are loading from the market-data provider.";
+    : niftyDetail
+      ? "The index and constituent observations do not currently belong to the same market session, so StockDekho is withholding the headline and breadth rather than showing mismatched figures."
+      : "Current Nifty 50 leadership and breadth data are loading from the market-data provider.";
   const sectorByKey = new Map(
   sectorData.map((sector) => [
     sector.key,
@@ -2324,7 +2331,7 @@ useEffect(() => {
         <p style={{ fontSize: 13.5, color: THEME.inkDim, lineHeight: 1.55, maxWidth: 820, margin: 0 }}>
           {leadershipSummary}
         </p>
-        <div style={{ display: "flex", gap: 22, marginTop: 16, flexWrap: "wrap" }}>
+        {hasLeadershipSnapshot && <div style={{ display: "flex", gap: 22, marginTop: 16, flexWrap: "wrap" }}>
           <div>
             <div style={{ fontSize: 11, color: THEME.inkDim, marginBottom: 6 }}>
               Nifty 50 breadth ({leadershipDate})
@@ -2340,7 +2347,7 @@ useEffect(() => {
               <span style={{ color: THEME.down }}>Declining {declining}</span>
             </div>
           </div>
-        </div>
+        </div>}
       </Panel>
 
       <EventStrip mode={mode} onOpen={setEventOpen} events={marketEvents} loading={marketEventsLoading} error={marketEventsError} />
