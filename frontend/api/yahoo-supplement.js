@@ -139,16 +139,42 @@ function chartPoints(result) {
 async function historySupplement(symbol, query) {
   const { period1, period2 } = historyPeriod(query);
   const options = { period1, period2, interval: "1d" };
-  const [stockResult, benchmarkResult] = await Promise.all([
+  const [stockResult, benchmarkResult, stockQuote, benchmarkQuote] = await Promise.all([
     yahooFinance.chart(symbol, options),
     yahooFinance.chart("^NSEI", options),
+    yahooFinance.quote(symbol),
+    yahooFinance.quote("^NSEI"),
   ]);
+  const stockPoints = chartPoints(stockResult);
+  const benchmarkPoints = chartPoints(benchmarkResult);
+  const stockQuoteDate = isoDate(stockQuote?.regularMarketTime)?.slice(0, 10);
+  const benchmarkQuoteDate = isoDate(benchmarkQuote?.regularMarketTime)?.slice(0, 10);
+
+  if (
+    stockQuoteDate &&
+    stockQuoteDate === benchmarkQuoteDate &&
+    Number.isFinite(stockQuote?.regularMarketPrice) &&
+    Number.isFinite(benchmarkQuote?.regularMarketPrice)
+  ) {
+    stockPoints.push({
+      date: stockQuoteDate,
+      close: stockQuote.regularMarketPrice,
+      adjustedClose: stockQuote.regularMarketPrice,
+    });
+    benchmarkPoints.push({
+      date: benchmarkQuoteDate,
+      close: benchmarkQuote.regularMarketPrice,
+      adjustedClose: benchmarkQuote.regularMarketPrice,
+    });
+  }
+
   const benchmarkByDate = new Map(
-    chartPoints(benchmarkResult).map((point) => [point.date, point])
+    benchmarkPoints.map((point) => [point.date, point])
   );
+  const stockByDate = new Map(stockPoints.map((point) => [point.date, point]));
 
   return {
-    points: chartPoints(stockResult)
+    points: [...stockByDate.values()]
       .map((point) => {
         const benchmark = benchmarkByDate.get(point.date);
         return benchmark ? {
@@ -157,7 +183,8 @@ async function historySupplement(symbol, query) {
           benchmarkAdjustedClose: benchmark.adjustedClose,
         } : null;
       })
-      .filter(Boolean),
+      .filter(Boolean)
+      .sort((a, b) => a.date.localeCompare(b.date)),
   };
 }
 
