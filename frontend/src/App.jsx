@@ -6506,15 +6506,58 @@ function SearchResultsPage({ searchTerm, openCompany }) {
   const matchingDefinitions = useMemo(() => {
     if (!normalized) return [];
     const topicTickers = {
-      semiconductor: ["DIXON", "CGPOWER", "TATAELXSI", "BEL"],
       semiconductors: ["DIXON", "CGPOWER", "TATAELXSI", "BEL"],
-      chips: ["DIXON", "CGPOWER", "TATAELXSI", "BEL"],
-      defence: ["HAL", "BEL", "BDL", "MAZDOCK"],
-      renewable: ["SUZLON", "NTPC", "TATAPOWER", "ADANIGREEN"],
-      renewables: ["SUZLON", "NTPC", "TATAPOWER", "ADANIGREEN"],
-      banking: ["HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "KOTAKBANK"],
+      defence: ["HAL", "BEL", "BDL", "MAZDOCK", "COCHINSHIP", "SOLARINDS"],
+      banking: ["HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "KOTAKBANK", "BANKBARODA", "PNB"],
+      insurance: ["HDFCLIFE", "SBILIFE", "ICICIGI", "POLICYBZR"],
+      nbfc: ["BAJFINANCE", "SHRIRAMFIN", "CHOLAFIN", "MUTHOOTFIN", "M&MFIN", "LTF"],
+      fintech: ["PAYTM", "JIOFIN", "POLICYBZR", "GROWW", "SBICARD"],
+      "asset management": ["HDFCAMC", "ICICIAMC", "360ONE", "MOTILALOFS"],
+      "stock exchanges": ["BSE", "MCX"],
+      automobiles: ["MARUTI", "M&M", "HYUNDAI", "TMCV", "TMPV", "BAJAJ-AUTO", "TVSMOTOR", "EICHERMOT", "ASHOKLEY"],
+      "electric vehicles": ["M&M", "TMPV", "TVSMOTOR", "BAJAJ-AUTO", "EXIDEIND"],
+      telecom: ["BHARTIARTL", "IDEA", "INDUSTOWER", "TATACOMM"],
+      "it services": ["TCS", "INFY", "HCLTECH", "WIPRO", "TECHM", "COFORGE", "LTM", "MPHASIS", "PERSISTENT"],
+      railways: ["IRCTC", "IRFC", "RVNL", "CONCOR"],
+      aviation: ["INDIGO", "GMRAIRPORT"],
+      ports: ["ADANIPORTS", "CONCOR"],
+      logistics: ["ADANIPORTS", "CONCOR"],
+      power: ["NTPC", "POWERGRID", "TATAPOWER", "ADANIPOWER", "JSWENERGY", "NHPC"],
+      "renewable energy": ["SUZLON", "ADANIGREEN", "TATAPOWER", "NTPC", "IREDA", "PREMIERENE", "WAAREEENER"],
+      "oil and gas": ["RELIANCE", "ONGC", "OIL", "IOC", "BPCL", "HINDPETRO", "GAIL", "ATGL"],
+      metals: ["TATASTEEL", "JSWSTEEL", "HINDALCO", "VEDL", "HINDZINC", "SAIL", "NMDC", "NATIONALUM"],
+      cement: ["ULTRACEMCO", "AMBUJACEM", "SHREECEM", "GRASIM"],
+      chemicals: ["PIDILITIND", "SRF", "PIIND", "UPL", "COROMANDEL"],
+      pharmaceuticals: ["SUNPHARMA", "DRREDDY", "CIPLA", "DIVISLAB", "LUPIN", "AUROPHARMA", "ZYDUSLIFE", "ALKEM"],
+      hospitals: ["APOLLOHOSP", "MAXHEALTH", "FORTIS"],
+      fmcg: ["HINDUNILVR", "ITC", "NESTLEIND", "BRITANNIA", "DABUR", "MARICO", "GODREJCP", "COLPAL"],
+      retail: ["DMART", "TRENT", "NYKAA", "VMM", "LENSKART", "ETERNAL", "SWIGGY"],
+      hotels: ["INDHOTEL"],
+      "real estate": ["DLF", "LODHA", "GODREJPROP", "OBEROIRLTY", "PHOENIXLTD", "PRESTIGE"],
+      "consumer electronics": ["DIXON", "VOLTAS", "BLUESTARCO", "HAVELLS", "LGEINDIA"],
+      jewellery: ["TITAN", "KALYANKJIL"],
+      "food delivery": ["ETERNAL", "SWIGGY", "JUBLFOOD"],
     };
-    const aliases = new Set(topicTickers[normalized] || []);
+    const topicAliases = {
+      semiconductor: "semiconductors",
+      chips: "semiconductors",
+      renewable: "renewable energy",
+      renewables: "renewable energy",
+      pharma: "pharmaceuticals",
+      healthcare: "hospitals",
+      auto: "automobiles",
+      automobiles: "automobiles",
+      ev: "electric vehicles",
+      it: "it services",
+      technology: "it services",
+      banks: "banking",
+      energy: "power",
+      oil: "oil and gas",
+      gas: "oil and gas",
+      property: "real estate",
+    };
+    const canonicalTopic = topicAliases[normalized] || normalized;
+    const aliases = new Set(topicTickers[canonicalTopic] || []);
     return RAW_STOCKS.filter((stock) =>
       aliases.has(stock.ticker) ||
       [stock.ticker, stock.name, stock.sector, stock.industry, stock.description]
