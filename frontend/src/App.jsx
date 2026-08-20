@@ -950,6 +950,23 @@ function marketSessionDate(value) {
   });
 }
 
+function isCompleteLeadershipObservation(value, now = new Date()) {
+  const observation = new Date(value);
+  if (Number.isNaN(observation.getTime())) return false;
+  if (isIndianMarketOpen(now)) {
+    return now.getTime() - observation.getTime() <= 10 * 60 * 1000;
+  }
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(observation).map((part) => [part.type, part.value])
+  );
+  return Number(parts.hour) * 60 + Number(parts.minute) >= 15 * 60 + 29;
+}
+
 function hasFreshCurrencyQuote(currency, now = new Date()) {
   return isCurrencyMarketOpen(now) && Number.isFinite(currency?.rate);
 }
@@ -1970,8 +1987,18 @@ const mostActive = [...performerStocks]
   const laggingStock = rankedNiftyStocks[rankedNiftyStocks.length - 1];
   const nifty50 = liveIndices.find((idx) => idx.key === "NIFTY50");
   const sensex = liveIndices.find((idx) => idx.key === "SENSEX");
+  const newestLeadershipTime = trackedNiftyStocks.length
+    ? Math.max(...trackedNiftyStocks.map((stock) => new Date(stock.marketTime).getTime()))
+    : NaN;
   const hasLeadershipSnapshot = Boolean(
-    nifty50 && sensex && trackedNiftyStocks.length === 50 && leadingStock && laggingStock
+    nifty50 &&
+    sensex &&
+    trackedNiftyStocks.length === 50 &&
+    leadingStock &&
+    laggingStock &&
+    marketSessionDate(nifty50.marketTime || nifty50.asOf) === leadershipSession &&
+    marketSessionDate(sensex.marketTime || sensex.asOf) === leadershipSession &&
+    isCompleteLeadershipObservation(newestLeadershipTime)
   );
   const leadershipDate = niftyDetail?.marketTime
     ? new Date(niftyDetail.marketTime).toLocaleDateString("en-IN", {

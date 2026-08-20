@@ -7,6 +7,7 @@ const yahooFinance = new YahooFinance({
 function normalizeSymbol(symbol) {
   const value = String(symbol || "").trim().toUpperCase();
   if (!value) return null;
+  if (value.startsWith("^")) return value;
   return value.endsWith(".NS") || value.endsWith(".BO")
     ? value
     : `${value}.NS`;
