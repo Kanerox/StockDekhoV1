@@ -1,0 +1,26 @@
+name: Capture closing market snapshot
+
+on:
+  schedule:
+    # GitHub schedules use UTC. These are 3:31, 3:36 and 3:41 PM IST.
+    - cron: "1,6,11 10 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Refresh Nifty 50 closing snapshot
+        run: |
+          curl --fail-with-body \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-delay 15 \
+            --max-time 90 \
+            "https://stockdekho-api.onrender.com/api/indices/NIFTY50?range=1M" \
+            --output /dev/null
