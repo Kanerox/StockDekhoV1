@@ -21,6 +21,14 @@ function finite(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function firstPositive(...values) {
+  for (const value of values) {
+    const number = finite(value);
+    if (number !== null && number > 0) return number;
+  }
+  return null;
+}
+
 function isoDate(value) {
   if (!value) return null;
   const date = new Date(value);
@@ -232,11 +240,17 @@ export default async function handler(request, response) {
       const financialData = summary?.financialData || {};
       const enrichedQuote = {
         ...quote,
-        marketCap:
-          quote?.marketCap ??
-          summary?.price?.marketCap ??
-          summary?.summaryDetail?.marketCap ??
-          null,
+        marketCap: firstPositive(
+          quote?.marketCap,
+          summary?.price?.marketCap,
+          summary?.summaryDetail?.marketCap,
+          summary?.summaryDetail?.nonDilutedMarketCap,
+          finite(summary?.defaultKeyStatistics?.sharesOutstanding) &&
+            finite(quote?.regularMarketPrice)
+            ? finite(summary.defaultKeyStatistics.sharesOutstanding) *
+              finite(quote.regularMarketPrice)
+            : null
+        ),
         trailingPE:
           quote?.trailingPE ??
           summary?.summaryDetail?.trailingPE ??

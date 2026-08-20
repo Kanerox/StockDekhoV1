@@ -18,7 +18,9 @@ function mergeCompanySupplement(primary, supplement) {
       : primary.changePercent,
     asOf: useYahooQuote ? supplement.regularMarketTime : primary.asOf,
     company: supplement.company || primary.company,
-    marketCap: supplement.marketCap ?? primary.marketCap,
+    marketCap: Number.isFinite(supplement.marketCap) && supplement.marketCap > 0
+      ? supplement.marketCap
+      : primary.marketCap,
     trailingPE: supplement.trailingPE ?? primary.trailingPE,
     priceToBook: supplement.priceToBook ?? primary.priceToBook,
     bookValue: supplement.bookValue ?? primary.bookValue,

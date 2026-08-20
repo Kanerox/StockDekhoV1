@@ -4497,7 +4497,7 @@ useEffect(() => {
 />
             
             <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 6 }}>
-  Mkt Cap {quote.marketCap ? fmtCr(quote.marketCap / 10000000) : fmtCr(s.mcap)}
+  Mkt Cap {Number.isFinite(quote.marketCap) && quote.marketCap > 0 ? fmtCr(quote.marketCap / 10000000) : fmtCr(s.mcap)}
 </div>
 
 <div style={{ fontSize: 11, color: THEME.inkDim }}>
@@ -4709,7 +4709,7 @@ useEffect(() => {
 ].map(([l, v]) => (
               <MetricLine key={l} label={l} value={
   l === "Market Cap"
-    ? (quote.marketCap
+    ? (Number.isFinite(quote.marketCap) && quote.marketCap > 0
         ? fmtCr(quote.marketCap / 10000000)
         : fmtCr(s.mcap))
     : v !== null
