@@ -6505,7 +6505,18 @@ function SearchResultsPage({ searchTerm, openCompany }) {
 
   const matchingDefinitions = useMemo(() => {
     if (!normalized) return [];
+    const topicTickers = {
+      semiconductor: ["DIXON", "CGPOWER", "TATAELXSI", "BEL"],
+      semiconductors: ["DIXON", "CGPOWER", "TATAELXSI", "BEL"],
+      chips: ["DIXON", "CGPOWER", "TATAELXSI", "BEL"],
+      defence: ["HAL", "BEL", "BDL", "MAZDOCK"],
+      renewable: ["SUZLON", "NTPC", "TATAPOWER", "ADANIGREEN"],
+      renewables: ["SUZLON", "NTPC", "TATAPOWER", "ADANIGREEN"],
+      banking: ["HDFCBANK", "ICICIBANK", "SBIN", "AXISBANK", "KOTAKBANK"],
+    };
+    const aliases = new Set(topicTickers[normalized] || []);
     return RAW_STOCKS.filter((stock) =>
+      aliases.has(stock.ticker) ||
       [stock.ticker, stock.name, stock.sector, stock.industry, stock.description]
         .filter(Boolean)
         .join(" ")
