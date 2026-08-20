@@ -920,6 +920,22 @@ function isIndianMarketOpen(now = new Date()) {
     minuteOfDay < 15 * 60 + 30;
 }
 
+function isIndianMarketRefreshWindow(now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      weekday: "short",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(now).map((part) => [part.type, part.value])
+  );
+  const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
+  return ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(parts.weekday) &&
+    minuteOfDay >= 9 * 60 + 15 &&
+    minuteOfDay <= 15 * 60 + 40;
+}
+
 const MARKET_REFRESH_MS = 5 * 60 * 1000;
 
 function isCurrencyMarketOpen(now = new Date()) {
@@ -2081,7 +2097,7 @@ useEffect(() => {
 
   loadIndices();
   const refreshTimer = window.setInterval(() => {
-    if (isIndianMarketOpen()) loadIndices();
+    if (isIndianMarketRefreshWindow()) loadIndices();
   }, MARKET_REFRESH_MS);
 
   return () => {
@@ -2211,7 +2227,7 @@ date: formatNewsDate(
 
   loadMarketContext();
   const refreshTimer = window.setInterval(() => {
-    if (isIndianMarketOpen()) loadMarketContext();
+    if (isIndianMarketRefreshWindow()) loadMarketContext();
   }, MARKET_REFRESH_MS);
 
   return () => {
