@@ -113,13 +113,17 @@ function finite(value) {
 }
 
 function marketTime(quote) {
+  const lastTrade = Number(quote?.last_trade_time);
+  if (Number.isFinite(lastTrade) && lastTrade > 0) {
+    const milliseconds = lastTrade < 1e12 ? lastTrade * 1000 : lastTrade;
+    const lastTradeDate = new Date(milliseconds);
+    if (!Number.isNaN(lastTradeDate.getTime())) {
+      return lastTradeDate.toISOString();
+    }
+  }
   const timestamp = new Date(quote?.timestamp);
   if (!Number.isNaN(timestamp.getTime())) {
     return timestamp.toISOString();
-  }
-  const lastTrade = Number(quote?.last_trade_time);
-  if (Number.isFinite(lastTrade) && lastTrade > 0) {
-    return new Date(lastTrade).toISOString();
   }
   return null;
 }
@@ -283,6 +287,37 @@ async function upstoxChart(symbol, options = {}) {
   return { quotes };
 }
 
+function quoteDateKey(quote) {
+  const date = new Date(quote?.date);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
+async function chartWithYahooSupplement(symbol, options) {
+  const upstoxResult = await upstoxChart(symbol, options);
+
+  try {
+    const yahooResult = await yahooProvider.chart(symbol, options);
+    const byDate = new Map();
+
+    for (const quote of [
+      ...(upstoxResult?.quotes || []),
+      ...(yahooResult?.quotes || []),
+    ]) {
+      const key = quoteDateKey(quote);
+      if (key && Number.isFinite(quote?.close)) byDate.set(key, quote);
+    }
+
+    return {
+      quotes: [...byDate.values()].sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      ),
+    };
+  } catch (error) {
+    console.warn(`Yahoo history supplementation unavailable for ${symbol}: ${error.message}`);
+    return upstoxResult;
+  }
+}
+
 async function withYahooFallback(upstoxOperation, yahooOperation, label) {
   try {
     return await upstoxOperation();
@@ -313,7 +348,7 @@ module.exports = {
 
   chart(symbol, options) {
     return withYahooFallback(
-      () => upstoxChart(symbol, options),
+      () => chartWithYahooSupplement(symbol, options),
       () => yahooProvider.chart(symbol, options),
       `Upstox history ${symbol}`
     );

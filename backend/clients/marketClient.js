@@ -5,7 +5,7 @@ const {
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 const { fetchHistoricalPrices } = require("./historyClient");
 
-const FRESH_QUOTE_TTL_MS = 2 * 60 * 1000;
+const FRESH_QUOTE_TTL_MS = 5 * 60 * 1000;
 const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;

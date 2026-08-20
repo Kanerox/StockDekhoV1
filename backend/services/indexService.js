@@ -125,6 +125,7 @@ function mapConstituent(quote, fallbackTicker) {
     name: quote?.longName || quote?.shortName || fallbackTicker,
     price: valueOrNull(quote?.regularMarketPrice),
     chgPct: valueOrNull(quote?.regularMarketChangePercent),
+    marketTime: quote?.regularMarketTime || null,
     mcap: marketCap === null ? null : marketCap / 10000000,
     pe: valueOrNull(quote?.trailingPE),
     ret1y: valueOrNull(quote?.fiftyTwoWeekChangePercent),

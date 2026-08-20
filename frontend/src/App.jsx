@@ -920,6 +920,8 @@ function isIndianMarketOpen(now = new Date()) {
     minuteOfDay < 15 * 60 + 30;
 }
 
+const MARKET_REFRESH_MS = 5 * 60 * 1000;
+
 function isCurrencyMarketOpen(now = new Date()) {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
@@ -935,6 +937,17 @@ function isCurrencyMarketOpen(now = new Date()) {
   if (parts.weekday === "Sun") return minuteOfDay >= 17 * 60;
   if (parts.weekday === "Fri") return minuteOfDay < 17 * 60;
   return false;
+}
+
+function marketSessionDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 }
 
 function hasFreshCurrencyQuote(currency, now = new Date()) {
@@ -1936,7 +1949,15 @@ const mostActive = [...performerStocks]
   )
   .slice(0, 5);
 
-  const trackedNiftyStocks = niftyDetail?.constituents || [];
+  const leadershipSession = marketSessionDate(niftyDetail?.marketTime);
+  const sessionMatchedNiftyStocks = (niftyDetail?.constituents || []).filter(
+    (stock) =>
+      Number.isFinite(stock?.chgPct) &&
+      marketSessionDate(stock?.marketTime) === leadershipSession
+  );
+  const trackedNiftyStocks = sessionMatchedNiftyStocks.length === 50
+    ? sessionMatchedNiftyStocks
+    : [];
   const advancing = trackedNiftyStocks.filter((stock) => stock.chgPct > 0.005).length;
   const declining = trackedNiftyStocks.filter((stock) => stock.chgPct < -0.005).length;
   const unchanged = trackedNiftyStocks.filter(
@@ -2016,7 +2037,9 @@ useEffect(() => {
   }
 
   loadIndices();
-  const refreshTimer = window.setInterval(loadIndices, 2 * 60 * 1000);
+  const refreshTimer = window.setInterval(() => {
+    if (isIndianMarketOpen()) loadIndices();
+  }, MARKET_REFRESH_MS);
 
   return () => {
     cancelled = true;
@@ -2144,7 +2167,9 @@ date: formatNewsDate(
   }
 
   loadMarketContext();
-  const refreshTimer = window.setInterval(loadMarketContext, 2 * 60 * 1000);
+  const refreshTimer = window.setInterval(() => {
+    if (isIndianMarketOpen()) loadMarketContext();
+  }, MARKET_REFRESH_MS);
 
   return () => {
     cancelled = true;
@@ -4198,7 +4223,9 @@ useEffect(() => {
   }
 
   fetchCompanyData();
-  const refreshTimer = window.setInterval(fetchCompanyData, 2 * 60 * 1000);
+  const refreshTimer = window.setInterval(() => {
+    if (isIndianMarketOpen()) fetchCompanyData();
+  }, MARKET_REFRESH_MS);
 
   return () => {
     isMounted = false;
@@ -5940,6 +5967,12 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
     { key: "ret1y", label: "1Y Return %", fmt: (v) => fmtNum(v, 2), isMove: true },
     { key: "chgPct", label: "Today's Chg %", fmt: (v) => fmtNum(v, 2), isMove: true },
   ];
+  const visibleMetrics = metrics.filter((metric) =>
+    liveStocks.some((stock) => {
+      const value = stock?.[metric.key];
+      return value !== null && value !== undefined && Number.isFinite(Number(value));
+    })
+  );
 
   function bestWorst(key) {
     const vals = liveStocks.map((s) => s[key]).filter((v) => v !== null && v !== undefined);
@@ -6044,7 +6077,7 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
                 {stocks.map((s) => <th key={s.ticker} style={{ ...thStyle, textAlign: "right", cursor: "pointer" }} onClick={() => openCompany(s.ticker)}>{s.ticker}</th>)}
               </tr></thead>
               <tbody>
-                {metrics.map((m) => {
+                {visibleMetrics.map((m) => {
                   const bw = bestWorst(m.key);
                   return (
                     <tr key={m.key} style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
@@ -6334,7 +6367,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
       <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16 }}>
         Latest available Yahoo Finance reference rates. Not live tradable FX quotes. Shown for research context, not currency forecasting.
       </p>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 14, marginBottom: 32 }}>
+      <div className="sd-scroll" style={{ display: "flex", gap: 14, marginBottom: 32, overflowX: "auto", paddingBottom: 8 }}>
         {currenciesLoading && (
           <Panel style={{ padding: 24, color: THEME.inkDim, gridColumn: "1 / -1" }}>
             Loading live currency data...
@@ -6346,7 +6379,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
           </Panel>
         )}
         {!currenciesLoading && !currenciesError && currencies.map((c) => (
-          <Panel key={c.code} onClick={() => setActiveCode(c.code)} className="sd-row-hover" style={{ padding: 14, cursor: "pointer" }}>
+          <Panel key={c.code} onClick={() => setActiveCode(c.code)} className="sd-row-hover" style={{ padding: 14, cursor: "pointer", width: 220, minWidth: 220, flexShrink: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <div style={{ fontWeight: 700, fontSize: 13.5 }}>{c.code}/INR</div>
               <LiveTag live small statusLabel={hasFreshCurrencyQuote(c) ? "Live" : "EOD"} />

@@ -38,13 +38,13 @@ function dateKey(date) {
 function historyCacheKey(symbol, period1, period2) {
   const key = `history:${symbol}:1d:${dateKey(period1)}:${dateKey(period2)}`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v6:${key}`;
+  return providerName === "yahoo" ? key : `${providerName}:v7:${key}`;
 }
 
 function latestHistoryCacheKey(symbol) {
   const key = `history:${symbol}:1d:latest`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v6:${key}`;
+  return providerName === "yahoo" ? key : `${providerName}:v7:${key}`;
 }
 
 function cooldownCacheKey() {
