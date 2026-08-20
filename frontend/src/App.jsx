@@ -972,6 +972,12 @@ function isCompleteLeadershipObservation(value, now = new Date()) {
   if (isIndianMarketOpen(now)) {
     return now.getTime() - observation.getTime() <= 10 * 60 * 1000;
   }
+  return true;
+}
+
+function isClosingLeadershipObservation(value) {
+  const observation = new Date(value);
+  if (Number.isNaN(observation.getTime())) return false;
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
       timeZone: "Asia/Kolkata",
@@ -1180,104 +1186,10 @@ function Header({
   query,
   setQuery,
   onSelectSearch,
+  onSearchTopic,
 }) {
   const [searchOpen, setSearchOpen] =
     useState(false);
-
-  const [liveSearchStocks, setLiveSearchStocks] =
-    useState([]);
-
-  const searchSymbols = useMemo(
-    () =>
-      RAW_STOCKS.map(
-        (stock) => stock.ticker
-      ),
-    []
-  );
-
-  const searchDefinitions = useMemo(
-    () =>
-      new Map(
-        RAW_STOCKS.map((stock) => [
-          stock.ticker,
-          stock,
-        ])
-      ),
-    []
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadSearchStocks() {
-      try {
-        const data = await getStockUniverse(
-          searchSymbols
-        );
-
-        if (cancelled) {
-          return;
-        }
-
-        const mergedStocks = data.map(
-          (stock) => {
-            const definition =
-              searchDefinitions.get(
-                stock.ticker
-              );
-
-            return {
-              ...definition,
-              ...stock,
-
-              name:
-                stock.name ||
-                definition?.name ||
-                stock.ticker,
-
-              sector:
-                definition?.sector ||
-                "Unclassified",
-
-              price:
-                Number.isFinite(
-                  stock.price
-                )
-                  ? stock.price
-                  : null,
-
-              chgPct:
-                Number.isFinite(
-                  stock.chgPct
-                )
-                  ? stock.chgPct
-                  : null,
-            };
-          }
-        );
-
-        setLiveSearchStocks(mergedStocks);
-      } catch (error) {
-        console.error(
-          "Unable to load live search data:",
-          error
-        );
-
-        if (!cancelled) {
-          setLiveSearchStocks([]);
-        }
-      }
-    }
-
-    loadSearchStocks();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    searchSymbols,
-    searchDefinitions,
-  ]);
 
   const results = useMemo(() => {
     if (!query.trim()) {
@@ -1288,7 +1200,7 @@ function Header({
       .trim()
       .toLowerCase();
 
-    return liveSearchStocks
+    return RAW_STOCKS
       .filter(
         (stock) =>
           stock.ticker
@@ -1299,7 +1211,7 @@ function Header({
             .includes(normalizedQuery)
       )
       .slice(0, 8);
-  }, [query, liveSearchStocks]);
+  }, [query]);
 
   const navItems = [
     { key: "markets", label: "Markets" },
@@ -1339,18 +1251,24 @@ function Header({
           ))}
         </nav>
 
-        <div className="sd-header-search" style={{ position: "relative", flex: 1, maxWidth: 380, marginLeft: 12 }}>
+        <div className="sd-header-search" style={{ position: "relative", width: "min(460px, 36vw)", marginLeft: "auto" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, background: THEME.panel, border: `1px solid ${THEME.hairline}`, borderRadius: 5, padding: "7px 10px" }}>
             <Search size={14} color={THEME.inkDim} />
             <input
               value={query}
               onChange={(e) => { setQuery(e.target.value); setSearchOpen(true); }}
               onFocus={() => setSearchOpen(true)}
-              placeholder="Search RELIANCE, TCS, INFY…"
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && query.trim()) {
+                  onSearchTopic(query.trim());
+                  setSearchOpen(false);
+                }
+              }}
+              placeholder="Search companies or topics…"
               style={{ background: "none", border: "none", outline: "none", color: THEME.ink, fontSize: 13, width: "100%" }}
             />
           </div>
-          {searchOpen && results.length > 0 && (
+          {searchOpen && query.trim() && (
             <div className="sd-fade-in" style={{ position: "absolute", top: 40, left: 0, right: 0, background: THEME.panelAlt, border: `1px solid ${THEME.hairline}`, borderRadius: 6, overflow: "hidden", boxShadow: "0 12px 28px rgba(0,0,0,0.4)" }}>
               {results.map((r) => (
                 <div key={r.ticker} className="sd-row-hover" onClick={() => { onSelectSearch(r.ticker); setSearchOpen(false); setQuery(""); }}
@@ -1359,12 +1277,14 @@ function Header({
                     <div style={{ fontSize: 13, fontWeight: 600 }}>{r.name} <span style={{ color: THEME.inkDim, fontWeight: 400 }}>· {r.ticker}</span></div>
                     <div style={{ fontSize: 11, color: THEME.inkDim }}>{r.sector}</div>
                   </div>
-                  <div style={{ textAlign: "right" }}>
-                    <div className="sd-mono" style={{ fontSize: 13 }}>₹{fmtNum(r.price)}</div>
-                    <Move value={r.chgPct} />
-                  </div>
                 </div>
               ))}
+              <button
+                onClick={() => { onSearchTopic(query.trim()); setSearchOpen(false); }}
+                style={{ width: "100%", padding: "10px 12px", textAlign: "left", border: "none", background: "rgba(201,162,75,0.08)", color: THEME.gold, cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}
+              >
+                View stocks and news related to “{query.trim()}”
+              </button>
             </div>
           )}
         </div>
@@ -2016,6 +1936,8 @@ const mostActive = [...performerStocks]
     marketSessionDate(sensex.marketTime || sensex.asOf) === leadershipSession &&
     isCompleteLeadershipObservation(newestLeadershipTime)
   );
+  const hasClosingLeadershipSnapshot = hasLeadershipSnapshot &&
+    isClosingLeadershipObservation(newestLeadershipTime);
   const leadershipDate = niftyDetail?.marketTime
     ? new Date(niftyDetail.marketTime).toLocaleDateString("en-IN", {
         day: "2-digit",
@@ -2040,7 +1962,7 @@ const mostActive = [...performerStocks]
       ? "Consistent market leadership snapshot unavailable"
       : "Loading the latest Indian market leadership snapshot";
   const leadershipSummary = hasLeadershipSnapshot
-    ? `The Nifty 50 ${nifty50.changePercent >= 0 ? "rose" : "fell"} ${Math.abs(nifty50.changePercent).toFixed(2)}% while the Sensex ${sensex.changePercent >= 0 ? "gained" : "declined"} ${Math.abs(sensex.changePercent).toFixed(2)}%. ${leadingStock.name} led the Nifty constituents with a ${leadingStock.chgPct >= 0 ? "gain" : "move"} of ${Math.abs(leadingStock.chgPct).toFixed(2)}%, while ${laggingStock.name} was the weakest at ${laggingStock.chgPct.toFixed(2)}%. Index breadth was ${advancing} advancing, ${unchanged} unchanged and ${declining} declining.`
+    ? `The Nifty 50 ${nifty50.changePercent >= 0 ? "rose" : "fell"} ${Math.abs(nifty50.changePercent).toFixed(2)}% while the Sensex ${sensex.changePercent >= 0 ? "gained" : "declined"} ${Math.abs(sensex.changePercent).toFixed(2)}%. ${leadingStock.name} led the Nifty constituents with a ${leadingStock.chgPct >= 0 ? "gain" : "move"} of ${Math.abs(leadingStock.chgPct).toFixed(2)}%, while ${laggingStock.name} was the weakest at ${laggingStock.chgPct.toFixed(2)}%. Index breadth was ${advancing} advancing, ${unchanged} unchanged and ${declining} declining.${hasClosingLeadershipSnapshot ? "" : " This is the latest complete intraday snapshot; closing breadth is still being refreshed."}`
     : niftyDetail
       ? "The index and constituent observations do not currently belong to the same market session, so StockDekho is withholding the headline and breadth rather than showing mismatched figures."
       : "Current Nifty 50 leadership and breadth data are loading from the market-data provider.";
@@ -6573,6 +6495,97 @@ const globalMarketNews = globalNewsData.map((article) => ({
 }
 
 /* =========================================================================================
+   SEARCH RESULTS PAGE
+   ========================================================================================= */
+function SearchResultsPage({ searchTerm, openCompany }) {
+  const [stocks, setStocks] = useState([]);
+  const [articles, setArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const normalized = searchTerm.trim().toLowerCase();
+
+  const matchingDefinitions = useMemo(() => {
+    if (!normalized) return [];
+    return RAW_STOCKS.filter((stock) =>
+      [stock.ticker, stock.name, stock.sector, stock.industry, stock.description]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalized)
+    ).slice(0, 20);
+  }, [normalized]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadResults() {
+      setLoading(true);
+      const [stockResult, globalResult, marketResult] = await Promise.allSettled([
+        matchingDefinitions.length
+          ? getStockUniverse(matchingDefinitions.map((stock) => stock.ticker))
+          : Promise.resolve([]),
+        getGlobalMarketNews(),
+        getNiftyMarketEvents(),
+      ]);
+      if (cancelled) return;
+      setStocks(stockResult.status === "fulfilled" ? stockResult.value : matchingDefinitions);
+      const combined = [
+        ...(globalResult.status === "fulfilled" ? globalResult.value?.articles || [] : []),
+        ...(marketResult.status === "fulfilled" ? marketResult.value?.articles || [] : []),
+      ];
+      const seen = new Set();
+      setArticles(combined.filter((article) => {
+        const haystack = [article.title, article.topic, article.teaser, article.body, article.summary]
+          .filter(Boolean).join(" ").toLowerCase();
+        const key = article.link || article.url || article.title;
+        if (!haystack.includes(normalized) || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 15));
+      setLoading(false);
+    }
+    loadResults();
+    return () => { cancelled = true; };
+  }, [normalized, matchingDefinitions]);
+
+  return (
+    <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto", width: "100%" }}>
+      <SectionHeading eyebrow="Search" title={`Results for “${searchTerm}”`} />
+      <SectionHeading title="Relevant Stocks" />
+      {loading && <div style={{ color: THEME.inkDim, fontSize: 12 }}>Loading relevant companies…</div>}
+      {!loading && stocks.length === 0 && <Panel style={{ padding: 18, color: THEME.inkDim, fontSize: 12.5 }}>No tracked companies directly match this topic.</Panel>}
+      {stocks.length > 0 && (
+        <div className="sd-scroll" style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10, marginBottom: 24 }}>
+          {stocks.map((stock) => {
+            const definition = RAW_STOCKS.find((item) => item.ticker === stock.ticker) || stock;
+            return (
+              <Panel key={stock.ticker} onClick={() => openCompany(stock.ticker)} style={{ minWidth: 235, padding: 16, cursor: "pointer" }}>
+                <div style={{ fontSize: 13.5, fontWeight: 700, color: THEME.cream }}>{definition.name || stock.name}</div>
+                <div style={{ fontSize: 11, color: THEME.inkDim, margin: "4px 0 12px" }}>{stock.ticker} · {definition.sector}</div>
+                {Number.isFinite(stock.price) && <div className="sd-mono" style={{ fontSize: 18 }}>₹{fmtNum(stock.price)}</div>}
+                {Number.isFinite(stock.chgPct) && <Move value={stock.chgPct} size={12} />}
+              </Panel>
+            );
+          })}
+        </div>
+      )}
+
+      <SectionHeading title={`Relevant topics related to ${searchTerm}`} />
+      {!loading && articles.length === 0 && <Panel style={{ padding: 18, color: THEME.inkDim, fontSize: 12.5 }}>No current matching articles are available.</Panel>}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+        {articles.map((article, index) => (
+          <Panel key={article.link || article.url || `${article.title}-${index}`} style={{ padding: 16 }}>
+            <div style={{ color: THEME.gold, fontSize: 10.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 6 }}>{article.topic || "Market"}</div>
+            <div style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.35, marginBottom: 7 }}>{article.title}</div>
+            <div style={{ color: THEME.inkDim, fontSize: 11, marginBottom: 8 }}>{formatNewsDate(article.publishedAt || article.date)}</div>
+            <div style={{ color: THEME.creamDim, fontSize: 12, lineHeight: 1.45 }}>{article.teaser || article.summary || "Open the original report for full details."}</div>
+            {(article.link || article.url) && <a href={article.link || article.url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", color: THEME.gold, fontSize: 11.5, marginTop: 10 }}>Read original article →</a>}
+          </Panel>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* =========================================================================================
    WATCHLIST PAGE
    ========================================================================================= */
 function WatchlistPage({ watchlist, toggleWatch, openCompany, setPage }) {
@@ -6726,6 +6739,7 @@ const [activeBenchmark, setActiveBenchmark] = useState("NIFTY50");
 const [watchlist, setWatchlist] = useState(["RELIANCE", "TCS"]);
 const [compareList, setCompareList] = useState(["RELIANCE", "TCS", "INFY"]);
 const [query, setQuery] = useState("");
+const [searchTerm, setSearchTerm] = useState("");
 const [notes, setNotes] = useState({});  
 
 
@@ -6733,6 +6747,7 @@ const [notes, setNotes] = useState({});
   const toggleCompare = (t) => setCompareList((c) => (c.includes(t) ? c.filter((x) => x !== t) : c.length >= 5 ? c : [...c, t]));
   const openCompany = (t) => { setActiveTicker(t); setPage("company"); };
   const openBenchmark = (key) => { setActiveBenchmark(key); setPage("benchmark"); };
+  const openSearch = (term) => { setSearchTerm(term); setQuery(term); setPage("search"); };
   const setNote = (ticker, arr) => setNotes((n) => ({ ...n, [ticker]: arr }));
 
   return (
@@ -6742,7 +6757,7 @@ const [notes, setNotes] = useState({});
 
 
       <Header page={page} setPage={setPage} mode={mode} setMode={setMode} watchlist={watchlist} compareList={compareList}
-        query={query} setQuery={setQuery} onSelectSearch={openCompany} />
+        query={query} setQuery={setQuery} onSelectSearch={openCompany} onSearchTopic={openSearch} />
       <div style={{ flex: 1 }}>
         {page === "markets" && <MarketsPage mode={mode} setPage={setPage} openCompany={openCompany} openBenchmark={openBenchmark} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />}
         {page === "benchmark" && <BenchmarkDetailPage indexKey={activeBenchmark} back={() => setPage("markets")} openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />}
@@ -6752,6 +6767,7 @@ const [notes, setNotes] = useState({});
         {page === "compare" && <ComparePage compareList={compareList} toggleCompare={toggleCompare} openCompany={openCompany} />}
         {page === "currencies" && <CurrenciesPage />}
         {page === "watchlist" && <WatchlistPage watchlist={watchlist} toggleWatch={toggleWatch} openCompany={openCompany} setPage={setPage} />}
+        {page === "search" && <SearchResultsPage searchTerm={searchTerm} openCompany={openCompany} />}
       </div>
       <Footer />
     </div>

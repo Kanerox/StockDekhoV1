@@ -89,7 +89,7 @@ export async function getStockUniverse(symbols) {
     for (let index = 0; index < symbols.length; index += 40) {
       chunks.push(symbols.slice(index, index + 40));
     }
-    const [responses, supplements] = await Promise.all([
+    const [responses, quoteSupplements] = await Promise.all([
       Promise.all(
         chunks.map((chunk) =>
           cachedGet("/market/stocks", {
@@ -99,6 +99,24 @@ export async function getStockUniverse(symbols) {
       ),
       getYahooQuoteSupplements(symbols),
     ]);
+    const supplements = [...quoteSupplements];
+    const supplementByTickerForCap = new Map(
+      supplements.map((item) => [item.ticker, item])
+    );
+    const missingMarketCapSymbols = symbols.filter((symbol) => {
+      const item = supplementByTickerForCap.get(symbol);
+      return !Number.isFinite(item?.marketCap) || item.marketCap <= 0;
+    });
+    for (const symbol of missingMarketCapSymbols.slice(0, 20)) {
+      const companySupplement = await getYahooCompanySupplement(symbol);
+      if (!companySupplement) continue;
+      const existingIndex = supplements.findIndex((item) => item.ticker === symbol);
+      if (existingIndex >= 0) {
+        supplements[existingIndex] = { ...supplements[existingIndex], ...companySupplement };
+      } else {
+        supplements.push(companySupplement);
+      }
+    }
     const supplementByTicker = new Map(
       supplements.map((item) => [item.ticker, item])
     );

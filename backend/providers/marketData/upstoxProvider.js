@@ -1,4 +1,5 @@
 const axios = require("axios");
+const zlib = require("zlib");
 const yahooProvider = require("./yahooProvider");
 
 const API_BASE_URL = "https://api.upstox.com";
@@ -66,11 +67,16 @@ async function loadInstrumentMap() {
     instrumentMapPromise = axios
       .get(NSE_INSTRUMENTS_URL, {
         timeout: 30000,
-        responseType: "json",
+        responseType: "arraybuffer",
       })
       .then(({ data }) => {
+        const bytes = Buffer.from(data);
+        const decoded = bytes[0] === 0x1f && bytes[1] === 0x8b
+          ? zlib.gunzipSync(bytes).toString("utf8")
+          : bytes.toString("utf8");
+        const instruments = JSON.parse(decoded);
         const map = new Map();
-        (Array.isArray(data) ? data : [])
+        (Array.isArray(instruments) ? instruments : [])
           .filter(
             (instrument) =>
               instrument?.segment === "NSE_EQ" &&
