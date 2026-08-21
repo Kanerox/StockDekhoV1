@@ -1954,15 +1954,23 @@ const mostActive = [...performerStocks]
   const leadershipAsOf = Number.isFinite(leadershipObservationTime)
     ? formatMarketAsOf(new Date(leadershipObservationTime).toISOString())
     : leadershipDate;
+  const describeIndexMove = (label, value) => {
+    const absoluteMove = Math.abs(value);
+    if (absoluteMove < 0.005) return `${label} was flat at 0.00%`;
+    if (absoluteMove < 0.1) return `${label} was broadly flat at ${value > 0 ? "+" : "-"}${absoluteMove.toFixed(2)}%`;
+    return `${label} ${value > 0 ? "rose" : "fell"} ${absoluteMove.toFixed(2)}%`;
+  };
   const leadershipHeadline = hasLeadershipSnapshot
-    ? nifty50.changePercent >= 0
+    ? Math.abs(nifty50.changePercent) < 0.1
+      ? `Nifty 50 stays broadly flat as ${leadingStock.name} leads index constituents`
+      : nifty50.changePercent >= 0
       ? `Nifty 50 advances as ${leadingStock.name} leads index constituents`
       : `Nifty 50 declines as ${laggingStock.name} weighs on index constituents`
     : niftyDetail
       ? "Consistent market leadership snapshot unavailable"
       : "Loading the latest Indian market leadership snapshot";
   const leadershipSummary = hasLeadershipSnapshot
-    ? `The Nifty 50 ${nifty50.changePercent >= 0 ? "rose" : "fell"} ${Math.abs(nifty50.changePercent).toFixed(2)}% while the Sensex ${sensex.changePercent >= 0 ? "gained" : "declined"} ${Math.abs(sensex.changePercent).toFixed(2)}%. ${leadingStock.name} led the Nifty constituents with a ${leadingStock.chgPct >= 0 ? "gain" : "move"} of ${Math.abs(leadingStock.chgPct).toFixed(2)}%, while ${laggingStock.name} was the weakest at ${laggingStock.chgPct.toFixed(2)}%. Index breadth was ${advancing} advancing, ${unchanged} unchanged and ${declining} declining.${hasClosingLeadershipSnapshot ? "" : " This is the latest complete intraday snapshot; closing breadth is still being refreshed."}`
+    ? `${describeIndexMove("The Nifty 50", nifty50.changePercent)}, while ${describeIndexMove("the Sensex", sensex.changePercent)}. ${leadingStock.name} led the Nifty constituents with a ${leadingStock.chgPct >= 0 ? "gain" : "move"} of ${Math.abs(leadingStock.chgPct).toFixed(2)}%, while ${laggingStock.name} was the weakest at ${laggingStock.chgPct.toFixed(2)}%. Index breadth was ${advancing} advancing, ${unchanged} unchanged and ${declining} declining.${hasClosingLeadershipSnapshot ? "" : " This is the latest complete intraday snapshot; closing breadth is still being refreshed."}`
     : niftyDetail
       ? "The index and constituent observations do not currently belong to the same market session, so StockDekho is withholding the headline and breadth rather than showing mismatched figures."
       : "Current Nifty 50 leadership and breadth data are loading from the market-data provider.";

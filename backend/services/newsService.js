@@ -1406,6 +1406,27 @@ function isPlausibleMarketPublication(article, cleanedArticle) {
   return true;
 }
 
+function isMarketMovementArticle(article, cleanedArticle) {
+  const title = String(
+    cleanedArticle?.title || article?.title || ""
+  ).toLowerCase();
+
+  // These can be useful on sector, company and topic-search pages, but they do
+  // not explain an observed move in the current market session.
+  const nonMovementPatterns = [
+    /\btop\s+\d+\b.*\bstocks?\b/,
+    /\b\d+\s+.*\bstocks?\s+in\s+india\b/,
+    /\bstocks?\s+to\s+(?:buy|watch|own)\b/,
+    /\bwhich\s+.*\bstock\b/,
+    /\b[a-z0-9&.-]+\s+vs\.?\s+[a-z0-9&.-]+\b/,
+    /\bbest\s+.*\bstocks?\b/,
+    /\bportfolio\s+(?:pick|picks|ideas?)\b/,
+    /\bpositioned\s+for\b/,
+  ];
+
+  return !nonMovementPatterns.some((pattern) => pattern.test(title));
+}
+
 function getMarketArticleScore(item) {
   const source = String(
     item.cleanedArticle?.source || ""
@@ -1891,6 +1912,10 @@ async function getNiftyMarketEventsFromService() {
       cleanedArticle.title
     ) &&
     isIndiaMarketRelevantArticle(
+      article,
+      cleanedArticle
+    ) &&
+    isMarketMovementArticle(
       article,
       cleanedArticle
     ) &&

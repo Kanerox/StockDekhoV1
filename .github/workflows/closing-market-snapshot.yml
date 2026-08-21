@@ -2,8 +2,9 @@ name: Capture closing market snapshot
 
 on:
   schedule:
-    # GitHub schedules use UTC. These are 3:31, 3:36 and 3:41 PM IST.
-    - cron: "1,6,11 10 * * 1-5"
+    # GitHub schedules use UTC. These are 3:47, 3:54 and 4:02 PM IST,
+    # after the closing-settlement window and beyond the five-minute quote cache.
+    - cron: "17,24,32 10 * * 1-5"
   workflow_dispatch:
 
 permissions:
