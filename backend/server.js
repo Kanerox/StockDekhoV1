@@ -5,6 +5,7 @@ const eventsRoutes = require("./routes/eventsRoutes");
 const financialsRoutes = require("./routes/financialsRoutes");
 const historyRoutes = require("./routes/historyRoutes");
 const indexRoutes = require("./routes/indexRoutes");
+const gsecRoutes = require("./routes/gsecRoutes");
 const marketRoutes = require("./routes/marketRoutes");
 const newsRoutes = require("./routes/newsRoutes");
 const sectorRoutes = require("./routes/sectorRoutes");
@@ -25,6 +26,7 @@ app.use("/api/events", eventsRoutes);
 app.use("/api/financials", financialsRoutes);
 app.use("/api/history", historyRoutes);
 app.use("/api/indices", indexRoutes);
+app.use("/api/gsec", gsecRoutes);
 
 app.get("/", (req, res) => {
   res.json({

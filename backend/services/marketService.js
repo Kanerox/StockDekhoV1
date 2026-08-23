@@ -23,6 +23,7 @@ const getStockDataFromService = async (symbol) => {
 
     price: quote.regularMarketPrice,
     previousClose: quote.regularMarketPreviousClose,
+    change: quote.regularMarketChange,
     changePercent: quote.regularMarketChangePercent,
 
     open: quote.regularMarketOpen,
@@ -46,6 +47,9 @@ const getStockDataFromService = async (symbol) => {
     currency: quote.currency,
     asOf: quote.regularMarketTime || null,
     dataProvider: getMarketDataProviderName(),
+    quoteSource: quote.quoteSourceName || getMarketDataProviderName(),
+    dataStatus: quote.dataStatus || null,
+    isStale: Boolean(quote.isStale),
   };
 };
 
@@ -160,6 +164,8 @@ const quoteByTicker = new Map(
     : `${ticker}.NS`),
       name: quote?.longName || quote?.shortName || ticker,
       price,
+      previousClose: valueOrNull(quote?.regularMarketPreviousClose),
+      change: valueOrNull(quote?.regularMarketChange),
       chgPct: valueOrNull(quote?.regularMarketChangePercent),
       mcap: marketCap === null ? null : marketCap / 10000000,
       tradedVal:
@@ -177,6 +183,9 @@ de: null,
       ret1y: valueOrNull(quote?.fiftyTwoWeekChangePercent),
       asOf: quote?.regularMarketTime || null,
       dataProvider: getMarketDataProviderName(),
+      quoteSource: quote?.quoteSourceName || getMarketDataProviderName(),
+      dataStatus: quote?.dataStatus || null,
+      isStale: Boolean(quote?.isStale),
     };
   });
 };

@@ -3,7 +3,17 @@ const {
   getGlobalMarketNewsFromService,
   getVixMarketNewsFromService,
   getNiftyMarketEventsFromService,
+  getIndiaGsecNewsFromService,
 } = require("../services/newsService");
+
+async function getIndiaGsecNews(req, res) {
+  try {
+    return res.status(200).json(await getIndiaGsecNewsFromService());
+  } catch (error) {
+    console.error("Error fetching India G-Sec news:", error.message);
+    return res.status(500).json({ error: "Unable to fetch India G-Sec news." });
+  }
+}
 
 async function getNiftyMarketEvents(req, res) {
   try {
@@ -77,4 +87,5 @@ module.exports = {
   getGlobalMarketNews,
   getVixMarketNews,
   getNiftyMarketEvents,
+  getIndiaGsecNews,
 };

@@ -4,6 +4,7 @@ const {
 } = require("../providers/marketData");
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 const { fetchHistoricalPrices } = require("./historyClient");
+const { validateQuote } = require("../utils/marketDataValidation");
 
 const FRESH_QUOTE_TTL_MS = 5 * 60 * 1000;
 const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
@@ -129,12 +130,31 @@ async function getStaleQuotes(symbols) {
       getCachedValue(quoteCacheKey(symbol), STALE_QUOTE_TTL_MS)
     )
   );
-  return quotes.filter(Boolean);
+  return quotes
+    .filter(Boolean)
+    .map((quote) => {
+      try { return validateQuote(quote, { requestedSymbol: quote.symbol, allowStale: true }); }
+      catch (error) { console.warn(`Discarding invalid cached quote: ${error.message}`); return null; }
+    })
+    .filter(Boolean);
 }
 
 function quoteTimestamp(quote) {
   const timestamp = new Date(quote?.regularMarketTime).getTime();
   return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function chooseNewerQuote(candidate, cached, requestedSymbol) {
+  const validatedCandidate = validateQuote(candidate, { requestedSymbol, allowStale: true });
+  if (!cached) return validatedCandidate;
+  try {
+    const validatedCached = validateQuote(cached, { requestedSymbol, allowStale: true });
+    return quoteTimestamp(validatedCached) > quoteTimestamp(validatedCandidate)
+      ? validatedCached
+      : validatedCandidate;
+  } catch {
+    return validatedCandidate;
+  }
 }
 
 function endOfDayTimestamp(value) {
@@ -152,15 +172,7 @@ function endOfDayTimestamp(value) {
 function historyObservationTimestamp(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  const sessionDate = date.toLocaleDateString("en-CA", {
-    timeZone: "Asia/Kolkata",
-  });
-  const today = new Date().toLocaleDateString("en-CA", {
-    timeZone: "Asia/Kolkata",
-  });
-  return sessionDate === today
-    ? new Date().toISOString()
-    : endOfDayTimestamp(date);
+  return endOfDayTimestamp(date);
 }
 
 async function preserveLegacyQuoteFields(quote) {
@@ -249,13 +261,14 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
   const quote = quoteTimestamp(historyQuote) > quoteTimestamp(baseQuote)
     ? { ...(baseQuote || {}), ...historyQuote }
     : baseQuote || historyQuote;
+  const validatedQuote = validateQuote(quote, { requestedSymbol: normalizedSymbol });
 
   await setCacheEntry(
     quoteCacheKey(normalizedSymbol),
-    quote,
+    validatedQuote,
     STALE_QUOTE_TTL_MS
   );
-  return quote;
+  return validatedQuote;
 }
 
 async function getFallbackQuotes(symbols) {
@@ -281,7 +294,10 @@ async function fetchMarketData(symbol) {
   const normalizedSymbol = normalizeSymbol(symbol);
   const key = quoteCacheKey(normalizedSymbol);
   const freshQuote = await getCachedValue(key, FRESH_QUOTE_TTL_MS);
-  if (freshQuote) return freshQuote;
+  if (freshQuote) {
+    try { return validateQuote(freshQuote, { requestedSymbol: normalizedSymbol }); }
+    catch (error) { console.warn(`Ignoring invalid or stale fresh-cache quote: ${error.message}`); }
+  }
 
   if (await isYahooCoolingDown()) {
     const staleQuote = await getCachedValue(key, STALE_QUOTE_TTL_MS);
@@ -303,7 +319,12 @@ async function fetchMarketData(symbol) {
         () => fetchProviderQuotes(normalizedSymbol),
         { label: `Market quote ${normalizedSymbol}` }
       );
-      const quote = await preserveLegacyQuoteFields(providerQuote);
+      const cachedQuote = await getCachedValue(key, STALE_QUOTE_TTL_MS);
+      const quote = chooseNewerQuote(
+        await preserveLegacyQuoteFields(providerQuote),
+        cachedQuote,
+        normalizedSymbol
+      );
 
       if (quote?.symbol) {
         await setCacheEntry(
@@ -320,7 +341,7 @@ async function fetchMarketData(symbol) {
       } catch (historyError) {
         if (staleQuote) {
           console.warn(`Using stale cached quote for ${normalizedSymbol}`);
-          return staleQuote;
+          return validateQuote(staleQuote, { requestedSymbol: normalizedSymbol, allowStale: true });
         }
         throw historyError;
       }
@@ -337,8 +358,13 @@ async function collectCachedQuotes(symbols, maxAgeMs) {
   const values = await Promise.all(
     symbols.map((symbol) => getCachedValue(quoteCacheKey(symbol), maxAgeMs))
   );
-  const cachedQuotes = values.filter(Boolean);
-  const missingSymbols = symbols.filter((symbol, index) => !values[index]);
+  const validatedValues = values.map((quote, index) => {
+    if (!quote) return null;
+    try { return validateQuote(quote, { requestedSymbol: symbols[index] }); }
+    catch (error) { console.warn(`Ignoring invalid or stale cached quote: ${error.message}`); return null; }
+  });
+  const cachedQuotes = validatedValues.filter(Boolean);
+  const missingSymbols = symbols.filter((symbol, index) => !validatedValues[index]);
   return { cachedQuotes, missingSymbols };
 }
 
@@ -382,6 +408,8 @@ async function fetchMarketDataBatch(symbols) {
   }
 
   batchRequestInFlight = (async () => {
+    const existingQuotes = await getStaleQuotes(missingSymbols);
+    const existingBySymbol = new Map(existingQuotes.map((quote) => [normalizeSymbol(quote.symbol), quote]));
     const result = await withRetry(
       () => fetchProviderQuotes(missingSymbols),
       { label: "Market batch quote request" }
@@ -389,7 +417,14 @@ async function fetchMarketDataBatch(symbols) {
     const fetchedQuotes = await Promise.all(
       (Array.isArray(result) ? result : [result])
         .filter(Boolean)
-        .map(preserveLegacyQuoteFields)
+    .map(async (quote) => {
+      const requestedSymbol = normalizeSymbol(quote.symbol);
+      return chooseNewerQuote(
+        await preserveLegacyQuoteFields(quote),
+        existingBySymbol.get(requestedSymbol),
+        requestedSymbol
+      );
+    })
     );
 
     await Promise.all(

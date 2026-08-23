@@ -19,3 +19,8 @@ export async function getNiftyMarketEvents() {
   const response = await cachedGet("/news/market-events", {}, 5 * 60 * 1000);
   return response.data;
 }
+
+export async function getIndiaGsecNews() {
+  const response = await cachedGet("/news/gsec", {}, 10 * 60 * 1000);
+  return response.data;
+}

@@ -5,7 +5,8 @@ import { getCurrencies, getCurrencyHistory } from "./api/currencyApi";
 import { getCompanyEvents } from "./api/eventsApi";
 import { getCompanyFinancials } from "./api/financialsApi";
 import { getIndexDetail, getIndices } from "./api/indexApi";
-import { getCompanyNews, getGlobalMarketNews, getNiftyMarketEvents, getVixMarketNews } from "./api/newsApi";
+import { getIndiaTenYearYield } from "./api/gsecApi";
+import { getCompanyNews, getGlobalMarketNews, getIndiaGsecNews, getNiftyMarketEvents, getVixMarketNews } from "./api/newsApi";
 import { getPerformanceHistory } from "./api/performanceApi";
 import { getSectorDetail, getSectors } from "./api/sectorApi";
 import stockUniverse from "./data/stockUniverse.json";
@@ -996,12 +997,14 @@ function hasFreshCurrencyQuote(currency, now = new Date()) {
 function LiveTag({ live, approx, small, statusLabel }) {
   if (live) {
     const label = statusLabel || (approx ? "Live · approx" : isIndianMarketOpen() ? "Live" : "EOD");
+    const caution = label === "Delayed" || label === "Stale";
+    const tagColor = caution ? THEME.gold : THEME.up;
     return (
       <span title={statusLabel === "Live" ? "Market is currently open" : statusLabel === "EOD" ? "Latest end-of-day value" : approx ? "Live-anchored (approximate reference level)" : "Live-anchored EOD snapshot"}
         style={{
           fontSize: small ? 9 : 10, letterSpacing: 0.5, textTransform: "uppercase", fontWeight: 700,
-          color: THEME.up, border: `1px solid ${THEME.up}55`, borderRadius: 3, padding: small ? "1px 5px" : "2px 6px",
-          background: "rgba(63,167,114,0.08)", whiteSpace: "nowrap", flexShrink: 0,
+          color: tagColor, border: `1px solid ${tagColor}55`, borderRadius: 3, padding: small ? "1px 5px" : "2px 6px",
+          background: caution ? "rgba(201,162,75,0.08)" : "rgba(63,167,114,0.08)", whiteSpace: "nowrap", flexShrink: 0,
         }}>
         {label}
       </span>
@@ -1016,6 +1019,15 @@ function LiveTag({ live, approx, small, statusLabel }) {
       Demo
     </span>
   );
+}
+
+function quoteStatusLabel(quote, marketOpen = isIndianMarketOpen()) {
+  const status = String(quote?.dataStatus || "").toLowerCase();
+  if (status === "live") return "Live";
+  if (status === "delayed") return "Delayed";
+  if (status === "stale") return "Stale";
+  if (status === "eod") return "EOD";
+  return marketOpen ? "Live" : "EOD";
 }
 
 function marketProviderLabel(value) {
@@ -1299,6 +1311,14 @@ function Header({
    ========================================================================================= */
 function IndexCard({ idx, onOpen }) {
   const isDemo = Boolean(idx.demo);
+  const isRateContext = idx.isVix || idx.isGsec;
+  const todayPointChange = idx.isVix ? idx.change : null;
+  const monthPointChange = idx.isVix && idx.sparkline?.length
+    ? idx.value - idx.sparkline[0]
+    : null;
+  const neutralDelta = (value, suffix) => Number.isFinite(value)
+    ? <span className="sd-mono" style={{ color: THEME.creamDim, fontWeight: 600, fontSize: 10.5 }}>{value > 0 ? "+" : ""}{value.toFixed(2)} {suffix}</span>
+    : <span style={{ color: THEME.inkDim }}>—</span>;
 
   return (
     <div
@@ -1312,31 +1332,33 @@ function IndexCard({ idx, onOpen }) {
         <div>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: THEME.creamDim, lineHeight: 1.3, maxWidth: 124, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{idx.name}</div>
           <div className="sd-mono" style={{ fontSize: 17, marginTop: 12 }}>
-            {idx.isVix ? fmtNum(idx.value) : fmtInt(Math.round(idx.value))}
+            {idx.isGsec ? `${fmtNum(idx.value, 2)}%` : idx.isVix ? fmtNum(idx.value) : fmtInt(Math.round(idx.value))}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 1 }}>
-            <span style={{ fontSize: 9.5, color: THEME.inkDim }}>Daily</span>
-            <Move value={idx.changePercent} size={11} />
+            <span style={{ fontSize: 9.5, color: THEME.inkDim }}>{isRateContext ? "Today" : "Daily"}</span>
+            {idx.isGsec ? neutralDelta(idx.todayBps, "bps") : idx.isVix ? neutralDelta(todayPointChange, "pts") : <Move value={idx.changePercent} size={11} />}
           </div>
         </div>
         <LiveTag
           live={!isDemo}
           small
-          statusLabel={isDemo ? undefined : isIndianMarketOpen() ? "Live" : "EOD"}
+          statusLabel={isDemo ? undefined : idx.isGsec ? "EOD" : quoteStatusLabel(idx)}
         />
       </div>
       <div>
         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 44px", columnGap: 12, alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap", flexShrink: 0 }}>
-            <span style={{ fontSize: 9.5, color: THEME.inkDim, whiteSpace: "nowrap" }}>1M return</span>
-            <Move value={idx.oneMonthReturn} size={10} />
+            <span style={{ fontSize: 9.5, color: THEME.inkDim, whiteSpace: "nowrap" }}>{isRateContext ? "1M change" : "1M return"}</span>
+            {idx.isGsec ? neutralDelta(idx.oneMonthBps, "bps") : idx.isVix ? neutralDelta(monthPointChange, "pts") : <Move value={idx.oneMonthReturn} size={10} />}
           </div>
           <Sparkline data={idx.sparkline || []} width={44} height={24} />
         </div>
         <div style={{ fontSize: 10, color: THEME.inkDim, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {isDemo
             ? "Illustrative 1M series · Demo"
-            : `As of ${formatMarketAsOf(idx.asOf || idx.marketTime)}`}
+            : idx.isGsec
+              ? `FBIL EOD · ${new Date(`${idx.observationDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
+              : `As of ${formatMarketAsOf(idx.asOf || idx.marketTime)}`}
         </div>
       </div>
     </div>
@@ -1346,6 +1368,94 @@ function IndexCard({ idx, onOpen }) {
 /* =========================================================================================
    BENCHMARK RESEARCH PAGE — opened by clicking any index card on the Markets homepage
    ========================================================================================= */
+function GsecDetailPage({ back }) {
+  const [range, setRange] = useState("1Y");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [news, setNews] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    getIndiaTenYearYield(range)
+      .then((result) => { if (!cancelled) setData(result); })
+      .catch(() => { if (!cancelled) { setData(null); setError("India 10Y G-Sec yield data is currently unavailable."); } })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [range]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getIndiaGsecNews()
+      .then((result) => { if (!cancelled) setNews(result.articles || []); })
+      .catch(() => { if (!cancelled) setNews([]); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const chartData = (data?.points || []).map((point, index, points) => ({
+    date: new Date(`${point.date}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: points.length > 60 ? "2-digit" : undefined }),
+    yield: point.yield,
+    change: index ? Math.round((point.yield - points[index - 1].yield) * 100) : null,
+  }));
+
+  return (
+    <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
+      <button onClick={back} style={{ background: "none", border: "none", color: THEME.gold, cursor: "pointer", fontSize: 12.5, display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
+        <ChevronLeft size={14} /> Back to markets
+      </button>
+      <Panel style={{ padding: 20, marginBottom: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h1 className="sd-serif" style={{ fontSize: 24, margin: 0 }}>India 10Y G-Sec</h1>
+              <LiveTag live statusLabel="EOD" />
+            </div>
+            <p style={{ fontSize: 12.5, color: THEME.creamDim, lineHeight: 1.55, maxWidth: 760 }}>
+              India’s 10-year government-security benchmark yield, providing interest-rate context for equity research.
+            </p>
+            <div style={{ fontSize: 11, color: THEME.inkDim }}>Official FBIL annualized par yield · Published EOD data</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div className="sd-mono" style={{ fontSize: 28 }}>{Number.isFinite(data?.value) ? `${data.value.toFixed(2)}%` : "—"}</div>
+            <div style={{ fontSize: 11.5, color: THEME.creamDim, marginTop: 4 }}>Today {Number.isFinite(data?.todayBps) ? `${data.todayBps > 0 ? "+" : ""}${data.todayBps} bps` : "—"}</div>
+            <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 5 }}>{data?.observationDate ? `FBIL EOD · ${new Date(`${data.observationDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : "Latest publication unavailable"}</div>
+          </div>
+        </div>
+      </Panel>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        {["1M", "3M", "6M", "1Y"].map((item) => <Pill key={item} active={range === item} onClick={() => setRange(item)}>{item}</Pill>)}
+      </div>
+      <Panel style={{ padding: 16 }}>
+        {loading ? <div style={{ height: 320, display: "grid", placeItems: "center", color: THEME.inkDim }}>Loading official yield history...</div>
+          : error ? <div style={{ height: 320, display: "grid", placeItems: "center", color: THEME.down }}>{error}</div>
+          : <ResponsiveContainer width="100%" height={320}>
+              <LineChart data={chartData} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke={THEME.hairline} strokeDasharray="2 4" vertical={false} />
+                <XAxis dataKey="date" tick={{ fill: THEME.inkDim, fontSize: 10 }} minTickGap={40} tickLine={false} />
+                <YAxis tick={{ fill: THEME.inkDim, fontSize: 10 }} domain={["auto", "auto"]} width={58} tickFormatter={(value) => `${Number(value).toFixed(2)}%`} />
+                <Tooltip contentStyle={{ background: THEME.panelAlt, border: `1px solid ${THEME.hairline}`, borderRadius: 4 }} formatter={(value, name, item) => [`${Number(value).toFixed(2)}%${Number.isFinite(item?.payload?.change) ? ` · ${item.payload.change > 0 ? "+" : ""}${item.payload.change} bps` : ""}`, "Yield"]} />
+                <Line type="monotone" dataKey="yield" stroke={THEME.gold} strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>}
+      </Panel>
+      <div style={{ marginTop: 40 }}><SectionHeading title="What moved the Yield?" /></div>
+      <p style={{ fontSize: 11.5, color: THEME.inkDim, marginTop: -8, marginBottom: 12 }}>Reporting from the last 15 days that explicitly connects developments to Indian government securities or sovereign yields.</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {news.map((article) => (
+          <Panel key={article.id || article.link} style={{ padding: 14 }}>
+            <div style={{ fontSize: 10.5, color: THEME.gold, textTransform: "uppercase", fontWeight: 700 }}>{article.topic}</div>
+            <a href={article.link} target="_blank" rel="noopener noreferrer" style={{ display: "block", color: THEME.ink, textDecoration: "none", fontSize: 13, fontWeight: 600, marginTop: 5 }}>{article.title}</a>
+            <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 6 }}>{article.source} · {formatNewsDate(article.publishedAt)}</div>
+          </Panel>
+        ))}
+        {!news.length && <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim }}>No sufficiently relevant India G-Sec reporting is available from the last 15 days.</Panel>}
+      </div>
+    </div>
+  );
+}
+
 function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWatch, compareList, toggleCompare }) {
   const demoConfig = null;
   const isDemo = false;
@@ -1530,7 +1640,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
               <h1 className="sd-serif" style={{ fontSize: 24, margin: 0 }}>
                 {indexData?.name || "Indian benchmark"}
               </h1>
-              <LiveTag live={!isDemo} statusLabel={isDemo ? undefined : isIndianMarketOpen() ? "Live" : "EOD"} />
+              <LiveTag live={!isDemo} statusLabel={isDemo ? undefined : quoteStatusLabel(indexData)} />
             </div>
             <p style={{ fontSize: 12.5, color: THEME.creamDim, lineHeight: 1.55, margin: "10px 0 0" }}>
               {indexData?.description || "Loading benchmark description..."}
@@ -1838,6 +1948,7 @@ function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, tog
   const [liveIndices, setLiveIndices] = useState([]);
   const [indicesLoading, setIndicesLoading] = useState(true);
   const [indicesError, setIndicesError] = useState("");
+  const [gsec, setGsec] = useState(null);
   const [niftyDetail, setNiftyDetail] = useState(null);
   const [marketEvents, setMarketEvents] = useState([]);
   const [marketEventsLoading, setMarketEventsLoading] = useState(true);
@@ -1982,13 +2093,13 @@ const mostActive = [...performerStocks]
 );
     const marketIndexCards = [
   liveIndices.find((idx) => idx.key === "NIFTY50"),
-  liveIndices.find((idx) => idx.key === "NEXT50"),
-  liveIndices.find((idx) => idx.key === "BANKNIFTY"),
   liveIndices.find((idx) => idx.key === "SENSEX"),
-  liveIndices.find((idx) => idx.key === "VIX"),
+  liveIndices.find((idx) => idx.key === "BANKNIFTY"),
+  liveIndices.find((idx) => idx.key === "NEXT50"),
   liveIndices.find((idx) => idx.key === "MIDCAP150"),
   liveIndices.find((idx) => idx.key === "SMALLCAP250"),
-  liveIndices.find((idx) => idx.key === "NIFTY500"),
+  liveIndices.find((idx) => idx.key === "VIX"),
+  gsec ? { ...gsec, isGsec: true } : null,
 ].filter(Boolean);
 
 useEffect(() => {
@@ -2034,6 +2145,17 @@ useEffect(() => {
     cancelled = true;
     window.clearInterval(refreshTimer);
   };
+}, []);
+
+useEffect(() => {
+  let cancelled = false;
+  getIndiaTenYearYield("1M")
+    .then((data) => { if (!cancelled) setGsec(data); })
+    .catch((error) => {
+      console.error("Unable to load India 10Y G-Sec:", error);
+      if (!cancelled) setGsec(null);
+    });
+  return () => { cancelled = true; };
 }, []);
 
 useEffect(() => {
@@ -2288,7 +2410,7 @@ useEffect(() => {
 ]);
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <SectionHeading eyebrow="India Equities · Markets" title="Major Indian Indices" />
+      <SectionHeading eyebrow="India Equities · Markets" title="Indian Markets" />
 
       <div className="sd-scroll" style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6, marginBottom: 20, alignItems: "flex-start" }}>
         {marketIndexCards.map((idx) => <IndexCard key={idx.key} idx={idx} onOpen={openBenchmark} />)}
@@ -3259,7 +3381,7 @@ function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compar
                     <td style={{ ...stocksTd }}><WatchStar active={watchlist.includes(s.ticker)} onClick={() => handleToggleWatch(s.ticker)} /></td>
                     <td style={{ ...stocksTd, whiteSpace: "normal" }} onClick={() => openCompany(s.ticker)}>
                       <div style={{ cursor: "pointer", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</div>
-                      <div style={{ fontSize: 10.5, color: THEME.inkDim, display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>{s.ticker} · {s.cap} cap {s.live && <LiveTag live small />}</div>
+                      <div style={{ fontSize: 10.5, color: THEME.inkDim, display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>{s.ticker} · {s.cap} cap {s.live && <LiveTag live small statusLabel={quoteStatusLabel(s)} />}</div>
                     </td>
                     <td style={{ ...stocksTd, overflow: "hidden", textOverflow: "ellipsis" }}>{s.sector}</td>
                     <td style={{ ...stocksTd, textAlign: "right" }} className="sd-mono">{Number.isFinite(s.price) ? `₹${fmtNum(s.price)}` : "—"}</td>
@@ -4450,7 +4572,7 @@ useEffect(() => {
              <h1 className="sd-serif" style={{ fontSize: 24, margin: 0 }}>
   {quote.company || s.name}
 </h1>
-              <LiveTag live={Boolean(stockData)} statusLabel={stockData ? isIndianMarketOpen() ? "Live" : "EOD" : undefined} />
+              <LiveTag live={Boolean(stockData)} statusLabel={stockData ? quoteStatusLabel(stockData) : undefined} />
             </div>
             <div style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: 4 }}>
   {quote.symbol || s.ticker}· {quote.exchange || "NSE"} · {s.sector} · {s.cap} Cap
@@ -4461,16 +4583,16 @@ useEffect(() => {
           </div>
           <div style={{ textAlign: "right" }}>
 <div className="sd-mono" style={{ fontSize: 28 }}>
-  ₹{fmtNum(quote.price || s.price)}
+  {Number.isFinite(quote.price) ? `₹${fmtNum(quote.price)}` : "—"}
 </div>
 
           <Move 
-  value={quote.changePercent ?? s.chgPct}
+  value={quote.changePercent}
   size={14} 
 />
             
             <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 6 }}>
-  Mkt Cap {Number.isFinite(quote.marketCap) && quote.marketCap > 0 ? fmtCr(quote.marketCap / 10000000) : fmtCr(s.mcap)}
+  Mkt Cap {Number.isFinite(quote.marketCap) && quote.marketCap > 0 ? fmtCr(quote.marketCap / 10000000) : "—"}
 </div>
 
 <div style={{ fontSize: 11, color: THEME.inkDim }}>
@@ -4495,7 +4617,7 @@ useEffect(() => {
     paddingTop: 10,
   }}
 >
-  Market data sourced from {marketProviderLabel(quote.dataProvider)}{quote.supplementalDataProvider ? ` + ${quote.supplementalDataProvider}` : ""} · As of {formatMarketAsOf(quote.asOf)}. For research purposes only. Not investment advice.
+  Market data sourced from {quote.quoteSource || marketProviderLabel(quote.dataProvider)}{quote.supplementalDataProvider ? ` + ${quote.supplementalDataProvider}` : ""} · {quote.isStale ? "Stale snapshot" : quote.dataStatus === "delayed" ? "Delayed snapshot" : "As of"} {formatMarketAsOf(quote.asOf)}. For research purposes only. Not investment advice.
 </div>
       </Panel>
 
@@ -6852,7 +6974,9 @@ const [notes, setNotes] = useState({});
         query={query} setQuery={setQuery} onSelectSearch={openCompany} onSearchTopic={openSearch} />
       <div style={{ flex: 1 }}>
         {page === "markets" && <MarketsPage mode={mode} setPage={setPage} openCompany={openCompany} openBenchmark={openBenchmark} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />}
-        {page === "benchmark" && <BenchmarkDetailPage indexKey={activeBenchmark} back={() => setPage("markets")} openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />}
+        {page === "benchmark" && (activeBenchmark === "INDIA10Y"
+          ? <GsecDetailPage back={() => setPage("markets")} />
+          : <BenchmarkDetailPage indexKey={activeBenchmark} back={() => setPage("markets")} openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />)}
         {page === "stocks" && <StocksPage mode={mode} setPage={setPage} openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />}
         {page === "sectors" && <SectorsPage mode={mode} openCompany={openCompany} openSector={setActiveSector} activeSector={activeSector} />}
         {page === "company" && <CompanyPage ticker={activeTicker} mode={mode} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} notes={notes} setNote={setNote} openCompany={openCompany} />}

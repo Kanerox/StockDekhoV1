@@ -208,6 +208,13 @@ const NIFTY_MARKET_TOPICS = [
 
 ];
 
+const GSEC_NEWS_TOPICS = [
+  { topic: "Indian G-Secs", query: '("Indian government bonds" OR "India 10-year bond" OR "10-year G-sec") yield' },
+  { topic: "RBI & Liquidity", query: '(RBI OR "Reserve Bank of India") ("government bonds" OR G-sec OR "bond yields" OR liquidity)' },
+  { topic: "Inflation & Borrowing", query: '(India inflation OR CPI OR "government borrowing" OR "fiscal deficit") (G-sec OR "government bond yield")' },
+  { topic: "Debt Flows", query: '(FPI OR "foreign flows" OR "bond index") ("Indian government bonds" OR G-sec)' },
+];
+
 const TRUSTED_GLOBAL_SOURCES = [
   "reuters",
   "bloomberg",
@@ -2276,9 +2283,48 @@ const companyName =
   };
 }
 
+function isRelevantToIndiaGsec(article, cleanedArticle) {
+  const text = [cleanedArticle.title, cleanedArticle.snippet, article.contentSnippet, article.content]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  const indiaContext = /\b(india|indian|rbi|reserve bank of india|goi)\b/.test(text);
+  const directBondContext = /(g[ -]?sec|government securit|sovereign bond|government bond|bond yield|10[ -]?year yield|10[ -]?year bond)/.test(text);
+  const movementContext = /(yield|auction|borrowing|liquidity|repo rate|monetary policy|inflation|cpi|fiscal deficit|bond index|foreign flow|treasury yield)/.test(text);
+  return indiaContext && directBondContext && movementContext;
+}
+
+async function getIndiaGsecNewsFromService() {
+  const topicResults = await Promise.allSettled(
+    GSEC_NEWS_TOPICS.map(async ({ topic, query }) => ({ topic, articles: await fetchGlobalMarketNews(query) }))
+  );
+  const candidates = topicResults.flatMap((result) => {
+    if (result.status !== "fulfilled") return [];
+    return result.value.articles
+      .filter((article) => isWithinLastDays(article.pubDate, 15))
+      .map((article) => ({ article, cleanedArticle: cleanGoogleNewsArticle(article), topic: result.value.topic }))
+      .filter(({ article, cleanedArticle }) =>
+        !isBlockedGlobalArticle(article, cleanedArticle) &&
+        isTrustedGlobalSource(cleanedArticle.source) &&
+        isRelevantToIndiaGsec(article, cleanedArticle)
+      );
+  });
+  const articles = deduplicateAndLimit(candidates, 15).map(({ article, cleanedArticle, topic }, index) => ({
+    id: article.guid || article.link || `india-gsec-${index}`,
+    topic,
+    title: cleanedArticle.title,
+    source: cleanedArticle.source,
+    publishedAt: article.pubDate,
+    link: article.link,
+    summary: isMeaningfulSummary(cleanedArticle.title, cleanedArticle.snippet) ? cleanedArticle.snippet : "",
+  }));
+  return { range: "Last 15 days", articleCount: articles.length, articles };
+}
+
 module.exports = {
   getCompanyNewsFromService,
   getGlobalMarketNewsFromService,
   getVixMarketNewsFromService,
   getNiftyMarketEventsFromService,
+  getIndiaGsecNewsFromService,
 };

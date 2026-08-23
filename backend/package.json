@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "audit:market-data": "node scripts/auditMarketData.js"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +17,7 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "fflate": "^0.8.3",
     "redis": "^5.8.2",
     "rss-parser": "^3.13.0",
     "yahoo-finance2": "^4.0.0"

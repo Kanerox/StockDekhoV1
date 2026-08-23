@@ -126,6 +126,8 @@ function mapConstituent(quote, fallbackTicker) {
     price: valueOrNull(quote?.regularMarketPrice),
     chgPct: valueOrNull(quote?.regularMarketChangePercent),
     marketTime: quote?.regularMarketTime || null,
+    dataStatus: quote?.dataStatus || null,
+    isStale: Boolean(quote?.isStale),
     mcap: marketCap === null ? null : marketCap / 10000000,
     pe: valueOrNull(quote?.trailingPE),
     ret1y: valueOrNull(quote?.fiftyTwoWeekChangePercent),
@@ -163,6 +165,9 @@ function mapQuote(definition, quote) {
     marketTime: quote.regularMarketTime || null,
     asOf: quote.regularMarketTime || null,
     dataProvider: getMarketDataProviderName(),
+    quoteSource: quote.quoteSourceName || getMarketDataProviderName(),
+    dataStatus: quote.dataStatus || null,
+    isStale: Boolean(quote.isStale),
   };
 }
 
