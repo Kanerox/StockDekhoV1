@@ -1,4 +1,5 @@
 import { cachedGet } from "./apiClient";
+import { getYahooCompanySupplement, getYahooQuoteSupplements } from "./yahooSupplementApi";
 
 export async function getStockQuote(symbol) {
   try {
@@ -30,14 +31,51 @@ export async function getStockUniverse(symbols) {
     for (let index = 0; index < symbols.length; index += 40) {
       chunks.push(symbols.slice(index, index + 40));
     }
-    const responses = await Promise.all(
+    const [responses, batchSupplements] = await Promise.all([
+      Promise.all(
         chunks.map((chunk) =>
           cachedGet("/market/stocks", {
             params: { symbols: chunk.join(",") },
           })
         )
-      );
-    return responses.flatMap((response) => response.data.stocks || []);
+      ),
+      getYahooQuoteSupplements(symbols),
+    ]);
+    const supplements = [...batchSupplements];
+    const supplementByTicker = new Map(supplements.map((item) => [item.ticker, item]));
+    const missingMarketCaps = symbols.filter((symbol) => {
+      const item = supplementByTicker.get(symbol);
+      return !Number.isFinite(item?.marketCap) || item.marketCap <= 0;
+    });
+    const detailResults = await Promise.allSettled(
+      missingMarketCaps.slice(0, 20).map((symbol) => getYahooCompanySupplement(symbol))
+    );
+    detailResults.forEach((result) => {
+      if (result.status === "fulfilled" && result.value?.ticker) {
+        supplementByTicker.set(result.value.ticker, {
+          ...(supplementByTicker.get(result.value.ticker) || {}),
+          ...result.value,
+        });
+      }
+    });
+    return responses
+      .flatMap((response) => response.data.stocks || [])
+      .map((stock) => {
+        const supplement = supplementByTicker.get(stock.ticker);
+        if (!supplement) return stock;
+        return {
+          ...stock,
+          name: supplement.company || stock.name,
+          mcap: Number.isFinite(supplement.marketCap) && supplement.marketCap > 0
+            ? supplement.marketCap / 10000000
+            : stock.mcap,
+          pe: supplement.trailingPE ?? stock.pe,
+          pb: supplement.priceToBook ?? stock.pb,
+          bookValue: supplement.bookValue ?? stock.bookValue,
+          divYield: supplement.dividendYield ?? stock.divYield,
+          ret1y: supplement.fiftyTwoWeekChangePercent ?? stock.ret1y,
+        };
+      });
   } catch (error) {
     console.error("Failed to fetch live stock universe:", error);
     throw error;
