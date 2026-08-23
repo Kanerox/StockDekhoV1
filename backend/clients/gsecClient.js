@@ -106,7 +106,12 @@ async function mapWithConcurrency(values, limit, mapper) {
   async function worker() {
     while (nextIndex < values.length) {
       const index = nextIndex++;
-      results[index] = await mapper(values[index]);
+      try {
+        results[index] = await mapper(values[index]);
+      } catch (error) {
+        console.warn(`Skipping unavailable FBIL G-Sec publication ${values[index]}: ${error.message}`);
+        results[index] = null;
+      }
     }
   }
   await Promise.all(Array.from({ length: Math.min(limit, values.length) }, worker));
@@ -129,7 +134,8 @@ async function getIndiaTenYearYield(range = "1M") {
     ...dates.slice(-2),
     ...(monthBaselineDate ? [monthBaselineDate] : []),
   ])].sort();
-  const points = await mapWithConcurrency(selectedDates, 5, fetchObservation);
+  const points = (await mapWithConcurrency(selectedDates, 5, fetchObservation)).filter(Boolean);
+  if (points.length < 2) throw new Error("Insufficient FBIL G-Sec observations are available for this range");
   const latest = points.at(-1);
   const previous = points.at(-2) || latest;
   const monthReference = [...points]
