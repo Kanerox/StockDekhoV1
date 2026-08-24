@@ -3,8 +3,6 @@ const GLOBAL_INDICES = [
   { key: "NASDAQ", name: "NASDAQ Composite", symbol: "^IXIC", region: "Americas", description: "Tracks thousands of Nasdaq-listed companies, with a strong concentration in technology and growth businesses." },
   { key: "DOW", name: "Dow Jones Industrial Average", symbol: "^DJI", region: "Americas", description: "A price-weighted benchmark of 30 prominent US companies across major industries." },
   { key: "HANGSENG", name: "Hang Seng", symbol: "^HSI", region: "APAC", description: "Tracks the largest and most liquid companies listed in Hong Kong and is an important gauge of Chinese and regional risk appetite." },
-  { key: "SHANGHAI", name: "Shanghai Composite", symbol: "^SSEC", region: "APAC", description: "Tracks all A- and B-shares listed on the Shanghai Stock Exchange and provides a broad view of mainland Chinese equities." },
-  { key: "CSI300", name: "CSI 300", symbol: "000300.SS", region: "APAC", description: "Tracks 300 large and liquid A-shares listed in Shanghai and Shenzhen." },
   { key: "NIKKEI225", name: "Nikkei 225", symbol: "^N225", region: "APAC", description: "A price-weighted benchmark of 225 leading companies listed in Japan." },
   { key: "FTSE100", name: "FTSE 100", symbol: "^FTSE", region: "EMEA", description: "Tracks 100 of the largest companies listed on the London Stock Exchange." },
   { key: "DAX", name: "DAX", symbol: "^GDAXI", region: "EMEA", description: "Tracks 40 major German blue-chip companies listed on the Frankfurt Stock Exchange." },

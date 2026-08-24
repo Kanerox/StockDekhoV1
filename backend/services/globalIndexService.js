@@ -88,12 +88,8 @@ async function getGlobalIndexOverview() {
       };
       })
     );
-    results.forEach((result, index) => {
-      values.push(result.status === "fulfilled" ? result.value : {
-        ...definitions[index], value: null, change: null, changePercent: null,
-        oneMonthReturn: null, sparkline: [], marketTime: null, asOf: null,
-        dataStatus: "unavailable", isStale: false, dataProvider: null,
-      });
+    results.forEach((result) => {
+      if (result.status === "fulfilled") values.push(result.value);
     });
   }
   return values;
