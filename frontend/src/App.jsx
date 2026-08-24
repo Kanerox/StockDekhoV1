@@ -1338,7 +1338,7 @@ function IndexCard({ idx, onOpen, matchCurrencyCard = false }) {
     ? idx.value - idx.sparkline[0]
     : null;
   const neutralDelta = (value, suffix) => Number.isFinite(value)
-    ? <span className="sd-mono" style={{ color: THEME.creamDim, fontWeight: 600, fontSize: 10.5 }}>{value > 0 ? "+" : ""}{value.toFixed(2)} {suffix}</span>
+    ? <span className="sd-mono" style={{ color: THEME.creamDim, fontWeight: 600, fontSize: matchCurrencyCard ? 12 : 10.5 }}>{value > 0 ? "+" : ""}{value.toFixed(2)} {suffix}</span>
     : <span style={{ color: THEME.inkDim }}>—</span>;
 
   return (
@@ -1346,22 +1346,22 @@ function IndexCard({ idx, onOpen, matchCurrencyCard = false }) {
       onClick={() => onOpen(idx.key)}
       className="sd-row-hover"
       style={{
-      cursor: "pointer", border: `1px solid ${THEME.hairline}`, borderRadius: 6, padding: "12px 14px",
+      cursor: "pointer", border: `1px solid ${THEME.hairline}`, borderRadius: 6, padding: matchCurrencyCard ? 14 : "12px 14px",
       background: THEME.panel,
       width: matchCurrencyCard ? 220 : 184,
       minWidth: matchCurrencyCard ? 220 : 184,
-      height: matchCurrencyCard ? 159 : 136,
+      height: matchCurrencyCard ? 188 : 136,
       display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <div style={{ fontSize: 12.5, fontWeight: 700, color: THEME.creamDim, lineHeight: 1.3, maxWidth: 124, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{idx.name}</div>
-          <div className="sd-mono" style={{ fontSize: 17, marginTop: 12 }}>
+          <div style={{ fontSize: matchCurrencyCard ? 13.5 : 12.5, fontWeight: 700, color: THEME.creamDim, lineHeight: 1.3, maxWidth: matchCurrencyCard ? 158 : 124, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{idx.name}</div>
+          <div className="sd-mono" style={{ fontSize: matchCurrencyCard ? 20 : 17, marginTop: 12 }}>
             {Number.isFinite(idx.value) ? (idx.isGsec ? `${fmtNum(idx.value, 2)}%` : idx.isVix ? fmtNum(idx.value) : fmtInt(Math.round(idx.value))) : "—"}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 1 }}>
-            <span style={{ fontSize: 9.5, color: THEME.inkDim }}>{idx.isGsec ? "Prev. pub." : isRateContext ? "Today" : "Daily"}</span>
-            {idx.isGsec ? neutralDelta(idx.todayBps, "bps") : idx.isVix ? neutralDelta(todayPointChange, "pts") : <Move value={idx.changePercent} size={11} />}
+            <span style={{ fontSize: matchCurrencyCard ? 10.5 : 9.5, color: THEME.inkDim }}>{idx.isGsec ? "Prev. pub." : isRateContext ? "Today" : "Daily"}</span>
+            {idx.isGsec ? neutralDelta(idx.todayBps, "bps") : idx.isVix ? neutralDelta(todayPointChange, "pts") : <Move value={idx.changePercent} size={matchCurrencyCard ? 13 : 11} />}
           </div>
         </div>
         <LiveTag
@@ -1371,12 +1371,12 @@ function IndexCard({ idx, onOpen, matchCurrencyCard = false }) {
         />
       </div>
       <div>
-        <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 44px", columnGap: 12, alignItems: "center" }}>
+        <div style={{ display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${matchCurrencyCard ? 56 : 44}px`, columnGap: 12, alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap", flexShrink: 0 }}>
-            <span style={{ fontSize: 9.5, color: THEME.inkDim, whiteSpace: "nowrap" }}>{isRateContext ? "1M change" : "1M return"}</span>
-            {idx.isGsec ? neutralDelta(idx.oneMonthBps, "bps") : idx.isVix ? neutralDelta(monthPointChange, "pts") : <Move value={idx.oneMonthReturn} size={10} />}
+            <span style={{ fontSize: matchCurrencyCard ? 10.5 : 9.5, color: THEME.inkDim, whiteSpace: "nowrap" }}>{isRateContext ? "1M change" : "1M return"}</span>
+            {idx.isGsec ? neutralDelta(idx.oneMonthBps, "bps") : idx.isVix ? neutralDelta(monthPointChange, "pts") : <Move value={idx.oneMonthReturn} size={matchCurrencyCard ? 11.5 : 10} />}
           </div>
-          <Sparkline data={idx.sparkline || []} width={44} height={24} />
+          <Sparkline data={idx.sparkline || []} width={matchCurrencyCard ? 56 : 44} height={matchCurrencyCard ? 30 : 24} />
         </div>
         <div style={{ fontSize: 10, color: THEME.inkDim, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {isDemo
