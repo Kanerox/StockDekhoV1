@@ -1330,7 +1330,7 @@ function Header({
 /* =========================================================================================
    MARKETS HOME PAGE
    ========================================================================================= */
-function IndexCard({ idx, onOpen }) {
+function IndexCard({ idx, onOpen, matchCurrencyCard = false }) {
   const isDemo = Boolean(idx.demo);
   const isRateContext = idx.isVix || idx.isGsec;
   const todayPointChange = idx.isVix ? idx.change : null;
@@ -1347,7 +1347,11 @@ function IndexCard({ idx, onOpen }) {
       className="sd-row-hover"
       style={{
       cursor: "pointer", border: `1px solid ${THEME.hairline}`, borderRadius: 6, padding: "12px 14px",
-      background: THEME.panel, width: 184, minWidth: 184, height: 136, display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0,
+      background: THEME.panel,
+      width: matchCurrencyCard ? 220 : 184,
+      minWidth: matchCurrencyCard ? 220 : 184,
+      height: matchCurrencyCard ? 159 : 136,
+      display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
@@ -6589,7 +6593,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
       <div className="sd-scroll" style={{ display: "flex", gap: 14, marginBottom: 32, overflowX: "auto", paddingBottom: 8 }}>
         {globalIndicesLoading && <Panel style={{ padding: 24, color: THEME.inkDim }}>Loading global indices...</Panel>}
         {!globalIndicesLoading && globalIndicesError && <Panel style={{ padding: 24, color: THEME.down }}>{globalIndicesError}</Panel>}
-        {!globalIndicesLoading && !globalIndicesError && visibleGlobalIndices.map((index) => <IndexCard key={index.key} idx={index} onOpen={setActiveGlobalIndex} />)}
+        {!globalIndicesLoading && !globalIndicesError && visibleGlobalIndices.map((index) => <IndexCard key={index.key} idx={index} onOpen={setActiveGlobalIndex} matchCurrencyCard />)}
       </div>
 
       <SectionHeading title="INR reference rates" />
