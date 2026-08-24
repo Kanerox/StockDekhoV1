@@ -1,6 +1,9 @@
 const { fetchMarketData } = require("../clients/marketClient");
 const { fetchHistoricalPrices } = require("../clients/historyClient");
+const yahooProvider = require("../providers/marketData/yahooProvider");
 const { GLOBAL_INDICES, getGlobalIndexDefinition } = require("../config/globalIndexConfig");
+
+const DIRECT_GLOBAL_QUOTE_KEYS = new Set(["NASDAQ", "DOW", "EUROSTOXX50"]);
 
 function finite(value) {
   return Number.isFinite(Number(value)) ? Number(value) : null;
@@ -91,10 +94,23 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const definition = getGlobalIndexDefinition(key);
   if (!definition) throw new Error("Unknown global index");
   const { period1, period2 } = resolvePeriod(range);
-  const [quote, rawPoints] = await Promise.all([
+  const [baseQuote, rawPoints] = await Promise.all([
     fetchMarketData(definition.symbol),
     fetchHistoricalPrices(definition.symbol, period1, period2),
   ]);
+  let quote = baseQuote;
+  if (DIRECT_GLOBAL_QUOTE_KEYS.has(definition.key)) {
+    try {
+      const directQuote = await yahooProvider.quote(definition.symbol);
+      const directTime = new Date(directQuote?.regularMarketTime).getTime();
+      const baseTime = new Date(baseQuote?.regularMarketTime).getTime();
+      if (Number.isFinite(directTime) && (!Number.isFinite(baseTime) || directTime >= baseTime)) {
+        quote = directQuote;
+      }
+    } catch (error) {
+      console.warn(`Direct global quote unavailable for ${definition.key}: ${error.message}`);
+    }
+  }
   let points = validPoints(rawPoints);
   if (points.length < 2) throw new Error("Insufficient global-index history");
   const historyBacked = /historical/i.test(String(quote.quoteSourceName || ""));

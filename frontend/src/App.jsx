@@ -6476,11 +6476,31 @@ function CurrenciesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    getGlobalIndices()
-      .then((result) => { if (!cancelled) setGlobalIndices(result); })
-      .catch(() => { if (!cancelled) { setGlobalIndices([]); setGlobalIndicesError("Global index data is currently unavailable."); } })
-      .finally(() => { if (!cancelled) setGlobalIndicesLoading(false); });
-    return () => { cancelled = true; };
+    let hasLoadedGlobalIndices = false;
+
+    async function loadGlobalIndices() {
+      try {
+        const result = await getGlobalIndices();
+        if (!cancelled) {
+          setGlobalIndices(result);
+          setGlobalIndicesError("");
+          hasLoadedGlobalIndices = true;
+        }
+      } catch {
+        if (!cancelled && !hasLoadedGlobalIndices) {
+          setGlobalIndicesError("Global index data is currently unavailable.");
+        }
+      } finally {
+        if (!cancelled) setGlobalIndicesLoading(false);
+      }
+    }
+
+    loadGlobalIndices();
+    const refreshTimer = window.setInterval(loadGlobalIndices, MARKET_REFRESH_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshTimer);
+    };
   }, []);
 
   useEffect(() => {
@@ -6520,20 +6540,28 @@ function CurrenciesPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadGlobalNews() {
+    async function loadGlobalNews(attempt = 0) {
       setGlobalNewsLoading(true);
       setGlobalNewsError("");
 
       try {
         const data = await getGlobalMarketNews();
 
+        const articles = data.articles || [];
+        if (!cancelled && articles.length === 0 && attempt < 2) {
+          window.setTimeout(() => loadGlobalNews(attempt + 1), 1500);
+          return;
+        }
         if (!cancelled) {
-          setGlobalNewsData(data.articles || []);
+          setGlobalNewsData(articles);
           setGlobalNewsPage(1);
         }
       } catch (error) {
+        if (!cancelled && attempt < 2) {
+          window.setTimeout(() => loadGlobalNews(attempt + 1), 1500);
+          return;
+        }
         if (!cancelled) {
-          setGlobalNewsData([]);
           setGlobalNewsError("Unable to load current global market news.");
         }
       } finally {
