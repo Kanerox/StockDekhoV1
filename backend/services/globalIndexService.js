@@ -42,6 +42,11 @@ function globalQuoteStatus(quote) {
   return quote?.dataStatus || null;
 }
 
+function observationDate(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
 async function getGlobalIndexDetail(key, range = "1Y") {
   const definition = getGlobalIndexDefinition(key);
   if (!definition) throw new Error("Unknown global index");
@@ -54,13 +59,14 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   if (points.length < 2) throw new Error("Insufficient global-index history");
   const closes = points.map((point) => point.adjustedClose);
   const historyBacked = /historical/i.test(String(quote.quoteSourceName || ""));
+  const latestSessionDate = observationDate(points.at(-1)?.date);
   return {
     ...definition,
     value: finite(quote.regularMarketPrice) ?? closes.at(-1),
     change: finite(quote.regularMarketChange),
     changePercent: finite(quote.regularMarketChangePercent),
-    marketTime: historyBacked ? points.at(-1)?.date : (quote.regularMarketTime || points.at(-1)?.date || null),
-    asOf: historyBacked ? points.at(-1)?.date : (quote.regularMarketTime || points.at(-1)?.date || null),
+    marketTime: historyBacked ? latestSessionDate : (quote.regularMarketTime || latestSessionDate || null),
+    asOf: historyBacked ? latestSessionDate : (quote.regularMarketTime || latestSessionDate || null),
     sessionDateOnly: historyBacked,
     isGlobalIndex: true,
     dataStatus: globalQuoteStatus(quote),
