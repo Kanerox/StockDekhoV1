@@ -155,7 +155,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
           regularMarketPrice: intraday.price,
           regularMarketTime: intraday.marketTime,
           quoteSourceName: "Yahoo Finance intraday",
-          marketState: "REGULAR",
+          marketState: preflightOpen ? "REGULAR" : "CLOSED",
         };
       }
     } catch (error) {
