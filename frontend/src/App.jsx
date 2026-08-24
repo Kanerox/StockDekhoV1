@@ -882,6 +882,18 @@ const formatMarketAsOf = (value) => {
   });
 };
 
+const formatChartDate = (value, includeYear = false) => {
+  if (!value) return "Date unavailable";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date unavailable";
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: includeYear ? "2-digit" : undefined,
+    timeZone: "UTC",
+  });
+};
+
 /* =========================================================================================
    SMALL SHARED COMPONENTS
    ========================================================================================= */
@@ -6400,9 +6412,9 @@ function GlobalIndexDetailPage({ indexKey, back }) {
   }, [indexKey]);
 
   const series = (data?.points || []).map((point) => point.adjustedClose);
-  const labels = (data?.points || []).map((point) => new Date(`${point.date}T00:00:00`).toLocaleDateString("en-IN", {
-    day: "2-digit", month: "short", year: series.length > 400 ? "2-digit" : undefined,
-  }));
+  const labels = (data?.points || []).map((point) =>
+    formatChartDate(point.date, series.length > 400)
+  );
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>

@@ -150,6 +150,9 @@ function chooseNewerQuote(candidate, cached, requestedSymbol) {
   if (!cached) return validatedCandidate;
   try {
     const validatedCached = validateQuote(cached, { requestedSymbol, allowStale: true });
+    const candidateIsDirect = !/historical/i.test(String(validatedCandidate.quoteSourceName || ""));
+    const cachedIsHistorical = /historical/i.test(String(validatedCached.quoteSourceName || ""));
+    if (candidateIsDirect && cachedIsHistorical) return validatedCandidate;
     return quoteTimestamp(validatedCached) > quoteTimestamp(validatedCandidate)
       ? validatedCached
       : validatedCandidate;

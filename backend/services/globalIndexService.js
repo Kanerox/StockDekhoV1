@@ -60,7 +60,8 @@ function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked =
 function exchangeSessionCloseTimestamp(dateKey, definition) {
   if (!dateKey || !definition?.timeZone || !definition?.sessions?.length) return null;
   const [year, month, day] = dateKey.split("-").map(Number);
-  const closeMinutes = Math.max(...definition.sessions.map((session) => session[1]));
+  const closeMinutes = Math.max(...definition.sessions.map((session) => session[1])) +
+    Number(definition.settlementBufferMinutes || 0);
   const targetHour = Math.floor(closeMinutes / 60);
   const targetMinute = closeMinutes % 60;
   let instant = new Date(Date.UTC(year, month - 1, day, targetHour, targetMinute));
@@ -94,19 +95,31 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     fetchMarketData(definition.symbol),
     fetchHistoricalPrices(definition.symbol, period1, period2),
   ]);
-  const points = validPoints(rawPoints);
+  let points = validPoints(rawPoints);
   if (points.length < 2) throw new Error("Insufficient global-index history");
-  const closes = points.map((point) => point.adjustedClose);
   const historyBacked = /historical/i.test(String(quote.quoteSourceName || ""));
+  const currentClock = exchangeClock(definition);
+  const latestRawSessionDate = observationDate(points.at(-1)?.date);
+  const exchangeIsOpen = !["Sat", "Sun"].includes(currentClock.weekday) &&
+    definition.sessions.some(([open, close]) => currentClock.minutes >= open && currentClock.minutes < close);
+  if (historyBacked && exchangeIsOpen && latestRawSessionDate === currentClock.date && points.length > 2) {
+    points = points.slice(0, -1);
+  }
+  const closes = points.map((point) => point.adjustedClose);
   const latestSessionDate = observationDate(points.at(-1)?.date);
+  const previousClose = closes.at(-2);
+  const latestClose = closes.at(-1);
+  const historyChange = latestClose - previousClose;
   const observationTime = historyBacked
     ? exchangeSessionCloseTimestamp(latestSessionDate, definition)
     : (quote.regularMarketTime || latestSessionDate || null);
   return {
     ...definition,
-    value: finite(quote.regularMarketPrice) ?? closes.at(-1),
-    change: finite(quote.regularMarketChange),
-    changePercent: finite(quote.regularMarketChangePercent),
+    value: historyBacked ? latestClose : (finite(quote.regularMarketPrice) ?? latestClose),
+    change: historyBacked ? historyChange : finite(quote.regularMarketChange),
+    changePercent: historyBacked
+      ? (previousClose ? (historyChange / previousClose) * 100 : null)
+      : finite(quote.regularMarketChangePercent),
     marketTime: observationTime,
     asOf: observationTime,
     sessionDateOnly: false,
