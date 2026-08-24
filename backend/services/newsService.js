@@ -2359,18 +2359,20 @@ async function getGlobalIndexNewsFromService(key) {
   const config = GLOBAL_INDEX_NEWS[String(key || "").toUpperCase()];
   if (!config) throw new Error("Unknown global index");
   const fetched = await fetchGlobalMarketNews(config.query);
-  const candidates = fetched
+  const baseCandidates = fetched
     .filter((article) => isWithinLastDays(article.pubDate, 15))
     .map((article) => ({ article, cleanedArticle: cleanGoogleNewsArticle(article), topic: config.topic }))
     .filter(({ article, cleanedArticle }) => {
       const title = String(cleanedArticle.title || "").toLowerCase();
-      const indexContext = /(rise|rises|rose|gain|gains|gained|advance|advances|advanced|fall|falls|fell|drop|drops|dropped|decline|declines|declined|rally|rallies|rallied|slide|slides|slid|selloff|record|close|closes|closed|open|opens|opened|futures|session|market|index|rebalance|rebalancing|inclusion|removal|fed|inflation|tariff|rate|yield|earnings)/.test(title);
       return config.terms.some((term) => title.includes(term)) &&
-        indexContext &&
         !isBlockedGlobalArticle(article, cleanedArticle) &&
         isTrustedGlobalSource(cleanedArticle.source) &&
         isAccessibleNewsSource(cleanedArticle.source);
     });
+  const contextualCandidates = baseCandidates.filter(({ cleanedArticle }) =>
+    /(rise|rises|rose|gain|gains|gained|advance|advances|advanced|fall|falls|fell|drop|drops|dropped|decline|declines|declined|rally|rallies|rallied|slide|slides|slid|selloff|record|close|closes|closed|open|opens|opened|futures|session|market|index|rebalance|rebalancing|inclusion|removal|fed|inflation|tariff|rate|yield|earnings)/.test(String(cleanedArticle.title || "").toLowerCase())
+  );
+  const candidates = contextualCandidates.length ? contextualCandidates : baseCandidates;
   const articles = deduplicateAndLimit(candidates, 15).map(({ article, cleanedArticle, topic }, index) => ({
     id: article.guid || article.link || `global-index-${key}-${index}`,
     topic,
