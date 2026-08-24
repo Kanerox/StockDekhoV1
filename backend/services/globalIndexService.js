@@ -53,13 +53,16 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const points = validPoints(rawPoints);
   if (points.length < 2) throw new Error("Insufficient global-index history");
   const closes = points.map((point) => point.adjustedClose);
+  const historyBacked = /historical/i.test(String(quote.quoteSourceName || ""));
   return {
     ...definition,
     value: finite(quote.regularMarketPrice) ?? closes.at(-1),
     change: finite(quote.regularMarketChange),
     changePercent: finite(quote.regularMarketChangePercent),
-    marketTime: quote.regularMarketTime || points.at(-1)?.date || null,
-    asOf: quote.regularMarketTime || points.at(-1)?.date || null,
+    marketTime: historyBacked ? points.at(-1)?.date : (quote.regularMarketTime || points.at(-1)?.date || null),
+    asOf: historyBacked ? points.at(-1)?.date : (quote.regularMarketTime || points.at(-1)?.date || null),
+    sessionDateOnly: historyBacked,
+    isGlobalIndex: true,
     dataStatus: globalQuoteStatus(quote),
     isStale: Boolean(quote.isStale),
     dataProvider: quote.quoteSourceName || "market provider",
@@ -84,7 +87,8 @@ async function getGlobalIndexOverview() {
         changePercent: detail.changePercent, oneMonthReturn: detail.periodReturn,
         sparkline: detail.points.map((point) => point.adjustedClose), marketTime: detail.marketTime,
         asOf: detail.asOf, dataStatus: detail.dataStatus, isStale: detail.isStale,
-        dataProvider: detail.dataProvider,
+        dataProvider: detail.dataProvider, sessionDateOnly: detail.sessionDateOnly,
+        isGlobalIndex: true,
       };
       })
     );

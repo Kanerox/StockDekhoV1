@@ -1379,6 +1379,8 @@ function IndexCard({ idx, onOpen }) {
             ? "Illustrative 1M series · Demo"
             : idx.isGsec
               ? `${idx.dataProvider || "FBIL"} · ${idx.asOf?.includes("T") ? formatMarketAsOf(idx.asOf) : new Date(`${idx.observationDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
+              : idx.sessionDateOnly
+                ? `Latest session ${new Date(`${idx.asOf}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
               : `As of ${formatMarketAsOf(idx.asOf || idx.marketTime)}`}
         </div>
       </div>
@@ -6409,7 +6411,7 @@ function GlobalIndexDetailPage({ indexKey, back }) {
               {data && <LiveTag live statusLabel={quoteStatusLabel(data)} />}
             </div>
             <p style={{ fontSize: 12.5, color: THEME.creamDim, lineHeight: 1.55 }}>{data?.description || "Global equity-market benchmark."}</p>
-            <div style={{ fontSize: 11, color: THEME.inkDim }}>{data ? `${marketProviderLabel(data.dataProvider)} market data · As of ${formatMarketAsOf(data.asOf || data.marketTime)}` : "Loading market source..."}</div>
+            <div style={{ fontSize: 11, color: THEME.inkDim }}>{data ? `${marketProviderLabel(data.dataProvider)} market data · ${data.sessionDateOnly ? `Latest session ${new Date(`${data.asOf}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : `As of ${formatMarketAsOf(data.asOf || data.marketTime)}`}` : "Loading market source..."}</div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="sd-mono" style={{ fontSize: 28 }}>{Number.isFinite(data?.value) ? fmtNum(data.value, 2) : "—"}</div>
