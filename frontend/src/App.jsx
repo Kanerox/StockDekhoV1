@@ -6579,7 +6579,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
       <SectionHeading eyebrow="Global" title="Global Indices" action={
-        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: THEME.inkDim, transform: "translateY(24px)" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: THEME.inkDim, transform: "translateY(48px)" }}>
           Filter by Region
           <select value={globalRegion} onChange={(event) => setGlobalRegion(event.target.value)} style={{ background: THEME.panel, border: `1px solid ${THEME.hairline}`, color: THEME.creamDim, borderRadius: 4, padding: "6px 8px", fontSize: 11.5 }}>
             {["All Regions", "Americas", "EMEA", "APAC"].map((region) => <option key={region}>{region}</option>)}
