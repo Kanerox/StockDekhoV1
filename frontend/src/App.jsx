@@ -1350,7 +1350,7 @@ function IndexCard({ idx, onOpen, matchCurrencyCard = false }) {
       background: THEME.panel,
       width: matchCurrencyCard ? 220 : 184,
       minWidth: matchCurrencyCard ? 220 : 184,
-      height: matchCurrencyCard ? 188 : 136,
+      height: matchCurrencyCard ? 159 : 136,
       display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
