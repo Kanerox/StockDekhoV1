@@ -1101,7 +1101,7 @@ async function getGlobalMarketNewsFromService() {
     ) &&
     isTrustedGlobalSource(
       cleanedArticle.source
-    ) && isAccessibleNewsSource(cleanedArticle.source) &&
+    ) &&
     isRelevantToGlobalTopic(
       article,
       cleanedArticle,

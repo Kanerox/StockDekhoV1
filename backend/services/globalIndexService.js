@@ -33,13 +33,27 @@ function returnPercent(points) {
   return ((points.at(-1).adjustedClose / points[0].adjustedClose) - 1) * 100;
 }
 
-function globalQuoteStatus(quote) {
+function exchangeClock(definition, now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: definition.timeZone,
+    weekday: "short", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+  return {
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    weekday: parts.weekday,
+    minutes: Number(parts.hour) * 60 + Number(parts.minute),
+  };
+}
+
+function globalQuoteStatus(quote, definition, latestSessionDate) {
   const marketState = String(quote?.marketState || "").toUpperCase();
   if (marketState === "REGULAR") return "live";
   if (["CLOSED", "POST", "POSTPOST", "PRE", "PREPRE"].includes(marketState)) return "eod";
-  const timestamp = new Date(quote?.regularMarketTime).getTime();
-  if (Number.isFinite(timestamp)) return Date.now() - timestamp <= 30 * 60 * 1000 ? "live" : "eod";
-  return quote?.dataStatus || null;
+  const clock = exchangeClock(definition);
+  const weekday = !["Sat", "Sun"].includes(clock.weekday);
+  const scheduledOpen = weekday && definition.sessions.some(([open, close]) => clock.minutes >= open && clock.minutes < close);
+  return scheduledOpen && latestSessionDate === clock.date ? "live" : "eod";
 }
 
 function observationDate(value) {
@@ -69,7 +83,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     asOf: historyBacked ? latestSessionDate : (quote.regularMarketTime || latestSessionDate || null),
     sessionDateOnly: historyBacked,
     isGlobalIndex: true,
-    dataStatus: globalQuoteStatus(quote),
+    dataStatus: globalQuoteStatus(quote, definition, latestSessionDate),
     isStale: Boolean(quote.isStale),
     dataProvider: quote.quoteSourceName || "market provider",
     periodReturn: returnPercent(points),
