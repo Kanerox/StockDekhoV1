@@ -6311,11 +6311,7 @@ function CurrencyDetail({ currency, back }) {
 
   const series = (history?.points || []).map((point) => point.close);
   const labels = (history?.points || []).map((point) =>
-    new Date(`${point.date}T00:00:00`).toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: (history?.points || []).length > 400 ? "2-digit" : undefined,
-    })
+    formatChartDate(point.date, (history?.points || []).length > 400)
   );
   const precision = c.code === "JPY" ? 3 : 2;
 
@@ -6325,6 +6321,9 @@ function CurrencyDetail({ currency, back }) {
         <ChevronLeft size={14} /> Back to Global
       </button>
       <SectionHeading eyebrow="Reference rate" title={`${c.code}/INR`} />
+      <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16 }}>
+        Latest available Yahoo Finance reference rate. Not a live tradable FX quote. Shown for research context, not currency forecasting.
+      </p>
       <div className="sd-grid-2" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
         <Panel style={{ padding: 16 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -6639,9 +6638,6 @@ const globalMarketNews = globalNewsData.map((article) => ({
       </div>
 
       <SectionHeading title="INR reference rates" />
-      <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16 }}>
-        Latest available Yahoo Finance reference rates. Not live tradable FX quotes. Shown for research context, not currency forecasting.
-      </p>
       <div className="sd-scroll" style={{ display: "flex", gap: 14, marginBottom: 32, overflowX: "auto", paddingBottom: 8 }}>
         {currenciesLoading && (
           <Panel style={{ padding: 24, color: THEME.inkDim, gridColumn: "1 / -1" }}>

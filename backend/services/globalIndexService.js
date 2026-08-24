@@ -4,6 +4,8 @@ const yahooProvider = require("../providers/marketData/yahooProvider");
 const { GLOBAL_INDICES, getGlobalIndexDefinition } = require("../config/globalIndexConfig");
 
 const DIRECT_GLOBAL_QUOTE_KEYS = new Set(["NASDAQ", "DOW", "EUROSTOXX50"]);
+const intradayCache = new Map();
+const INTRADAY_TTL_MS = 5 * 60 * 1000;
 
 function finite(value) {
   return Number.isFinite(Number(value)) ? Number(value) : null;
@@ -90,6 +92,26 @@ function observationDate(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
 }
 
+async function getIntradayObservation(definition) {
+  const cached = intradayCache.get(definition.key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value;
+  const period2 = new Date();
+  const period1 = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+  const result = await yahooProvider.chart(definition.symbol, {
+    period1,
+    period2,
+    interval: "5m",
+  });
+  const latest = (result.quotes || [])
+    .filter((point) => point.date && Number.isFinite(point.close))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .at(-1);
+  if (!latest) throw new Error(`No intraday observation for ${definition.key}`);
+  const value = { price: latest.close, marketTime: new Date(latest.date).toISOString() };
+  intradayCache.set(definition.key, { value, expiresAt: Date.now() + INTRADAY_TTL_MS });
+  return value;
+}
+
 async function getGlobalIndexDetail(key, range = "1Y") {
   const definition = getGlobalIndexDefinition(key);
   if (!definition) throw new Error("Unknown global index");
@@ -109,6 +131,27 @@ async function getGlobalIndexDetail(key, range = "1Y") {
       }
     } catch (error) {
       console.warn(`Direct global quote unavailable for ${definition.key}: ${error.message}`);
+    }
+  }
+  const preflightClock = exchangeClock(definition);
+  const preflightOpen = !["Sat", "Sun"].includes(preflightClock.weekday) &&
+    definition.sessions.some(([open, close]) => preflightClock.minutes >= open && preflightClock.minutes < close);
+  const quoteSessionDate = observationDate(quote?.regularMarketTime);
+  const preflightHistoryBacked = /historical/i.test(String(quote?.quoteSourceName || ""));
+  if (preflightOpen && (quoteSessionDate !== preflightClock.date || preflightHistoryBacked)) {
+    try {
+      const intraday = await getIntradayObservation(definition);
+      if (observationDate(intraday.marketTime) === preflightClock.date) {
+        quote = {
+          ...quote,
+          regularMarketPrice: intraday.price,
+          regularMarketTime: intraday.marketTime,
+          quoteSourceName: "Yahoo Finance intraday",
+          marketState: "REGULAR",
+        };
+      }
+    } catch (error) {
+      console.warn(`Intraday global quote unavailable for ${definition.key}: ${error.message}`);
     }
   }
   let points = validPoints(rawPoints);

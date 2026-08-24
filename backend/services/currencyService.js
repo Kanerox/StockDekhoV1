@@ -2,6 +2,7 @@ const {
   CURRENCY_SYMBOLS,
   fetchCurrencyQuotes,
   fetchCurrencyHistory,
+  fetchCurrencyIntraday,
 } = require("../clients/currencyClient");
 
 const SYMBOL_TO_CODE = Object.fromEntries(
@@ -78,6 +79,9 @@ async function getCurrencyOverview() {
       fetchCurrencyHistory(code, period1, period2)
     )
   );
+  const intradayResults = await Promise.allSettled(
+    Object.keys(CURRENCY_SYMBOLS).map((code) => fetchCurrencyIntraday(code))
+  );
 
   return Object.keys(CURRENCY_SYMBOLS).map((code, index) => {
     const symbol = CURRENCY_SYMBOLS[code];
@@ -86,6 +90,9 @@ async function getCurrencyOverview() {
       historyResults[index]?.status === "fulfilled"
         ? historyResults[index].value
         : [];
+    const intraday = intradayResults[index]?.status === "fulfilled"
+      ? intradayResults[index].value
+      : null;
     const latestClose =
       history.length > 0
         ? valueOrNull(history[history.length - 1].close)
@@ -104,14 +111,14 @@ async function getCurrencyOverview() {
     return {
       code,
       symbol,
-      rate: valueOrNull(quote?.regularMarketPrice) ?? latestClose,
+      rate: valueOrNull(intraday?.rate) ?? valueOrNull(quote?.regularMarketPrice) ?? latestClose,
       changePercent:
         valueOrNull(quote?.regularMarketChangePercent) ??
         historyChangePercent,
       fiftyTwoWeekLow: valueOrNull(quote?.fiftyTwoWeekLow),
       fiftyTwoWeekHigh: valueOrNull(quote?.fiftyTwoWeekHigh),
-      marketTime: quote?.regularMarketTime || null,
-      source: quote?.quoteSourceName || "Yahoo Finance",
+      marketTime: intraday?.marketTime || quote?.regularMarketTime || null,
+      source: intraday ? "Yahoo Finance intraday" : (quote?.quoteSourceName || "Yahoo Finance"),
       sparkline: history.map((point) => point.close),
     };
   });
