@@ -1342,7 +1342,7 @@ function IndexCard({ idx, onOpen }) {
         <LiveTag
           live={!isDemo}
           small
-          statusLabel={isDemo ? undefined : idx.isGsec ? "EOD" : quoteStatusLabel(idx)}
+          statusLabel={isDemo ? undefined : idx.isGsec ? (idx.status || "EOD") : quoteStatusLabel(idx)}
         />
       </div>
       <div>
@@ -1357,7 +1357,7 @@ function IndexCard({ idx, onOpen }) {
           {isDemo
             ? "Illustrative 1M series · Demo"
             : idx.isGsec
-              ? `FBIL EOD · ${new Date(`${idx.observationDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
+              ? `${idx.dataProvider || "FBIL"} · ${idx.asOf?.includes("T") ? formatMarketAsOf(idx.asOf) : new Date(`${idx.observationDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
               : `As of ${formatMarketAsOf(idx.asOf || idx.marketTime)}`}
         </div>
       </div>
@@ -1410,17 +1410,25 @@ function GsecDetailPage({ back }) {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <h1 className="sd-serif" style={{ fontSize: 24, margin: 0 }}>India 10Y G-Sec</h1>
-              <LiveTag live statusLabel="EOD" />
+              <LiveTag live statusLabel={data?.status || "EOD"} />
             </div>
             <p style={{ fontSize: 12.5, color: THEME.creamDim, lineHeight: 1.55, maxWidth: 760 }}>
               India’s 10-year government-security benchmark yield, providing interest-rate context for equity research.
             </p>
-            <div style={{ fontSize: 11, color: THEME.inkDim }}>Official FBIL annualized par yield · Published EOD data</div>
+            <div style={{ fontSize: 11, color: THEME.inkDim }}>
+              {data?.dataProvider === "Upstox-derived"
+                ? "Yield calculated from the Upstox NSE price of the current 6.94% GS 2036 benchmark"
+                : "Official FBIL annualized par yield · Published EOD data"}
+            </div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="sd-mono" style={{ fontSize: 28 }}>{Number.isFinite(data?.value) ? `${data.value.toFixed(2)}%` : "—"}</div>
             <div style={{ fontSize: 11.5, color: THEME.creamDim, marginTop: 4 }}>Today {Number.isFinite(data?.todayBps) ? `${data.todayBps > 0 ? "+" : ""}${data.todayBps} bps` : "—"}</div>
-            <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 5 }}>{data?.observationDate ? `FBIL EOD · ${new Date(`${data.observationDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}` : "Latest publication unavailable"}</div>
+            <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 5 }}>
+              {data?.asOf
+                ? `${data.dataProvider || "FBIL"} · ${data.asOf.includes("T") ? formatMarketAsOf(data.asOf) : new Date(`${data.observationDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
+                : "Latest observation unavailable"}
+            </div>
           </div>
         </div>
       </Panel>
@@ -2094,12 +2102,12 @@ const mostActive = [...performerStocks]
     const marketIndexCards = [
   liveIndices.find((idx) => idx.key === "NIFTY50"),
   liveIndices.find((idx) => idx.key === "SENSEX"),
+  liveIndices.find((idx) => idx.key === "VIX"),
+  gsec ? { ...gsec, isGsec: true } : null,
   liveIndices.find((idx) => idx.key === "BANKNIFTY"),
   liveIndices.find((idx) => idx.key === "NEXT50"),
   liveIndices.find((idx) => idx.key === "MIDCAP150"),
   liveIndices.find((idx) => idx.key === "SMALLCAP250"),
-  liveIndices.find((idx) => idx.key === "VIX"),
-  gsec ? { ...gsec, isGsec: true } : null,
 ].filter(Boolean);
 
 useEffect(() => {
