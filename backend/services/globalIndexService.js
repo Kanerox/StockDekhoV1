@@ -46,7 +46,8 @@ function exchangeClock(definition, now = new Date()) {
   };
 }
 
-function globalQuoteStatus(quote, definition, latestSessionDate) {
+function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked = false) {
+  if (historyBacked) return "eod";
   const marketState = String(quote?.marketState || "").toUpperCase();
   if (marketState === "REGULAR") return "live";
   if (["CLOSED", "POST", "POSTPOST", "PRE", "PREPRE"].includes(marketState)) return "eod";
@@ -54,6 +55,30 @@ function globalQuoteStatus(quote, definition, latestSessionDate) {
   const weekday = !["Sat", "Sun"].includes(clock.weekday);
   const scheduledOpen = weekday && definition.sessions.some(([open, close]) => clock.minutes >= open && clock.minutes < close);
   return scheduledOpen && latestSessionDate === clock.date ? "live" : "eod";
+}
+
+function exchangeSessionCloseTimestamp(dateKey, definition) {
+  if (!dateKey || !definition?.timeZone || !definition?.sessions?.length) return null;
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const closeMinutes = Math.max(...definition.sessions.map((session) => session[1]));
+  const targetHour = Math.floor(closeMinutes / 60);
+  const targetMinute = closeMinutes % 60;
+  let instant = new Date(Date.UTC(year, month - 1, day, targetHour, targetMinute));
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: definition.timeZone,
+      year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(instant).reduce((result, part) => ({ ...result, [part.type]: part.value }), {});
+    const displayed = Date.UTC(
+      Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+      Number(parts.hour), Number(parts.minute)
+    );
+    const target = Date.UTC(year, month - 1, day, targetHour, targetMinute);
+    instant = new Date(instant.getTime() + (target - displayed));
+  }
+  return instant.toISOString();
 }
 
 function observationDate(value) {
@@ -74,16 +99,19 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const closes = points.map((point) => point.adjustedClose);
   const historyBacked = /historical/i.test(String(quote.quoteSourceName || ""));
   const latestSessionDate = observationDate(points.at(-1)?.date);
+  const observationTime = historyBacked
+    ? exchangeSessionCloseTimestamp(latestSessionDate, definition)
+    : (quote.regularMarketTime || latestSessionDate || null);
   return {
     ...definition,
     value: finite(quote.regularMarketPrice) ?? closes.at(-1),
     change: finite(quote.regularMarketChange),
     changePercent: finite(quote.regularMarketChangePercent),
-    marketTime: historyBacked ? latestSessionDate : (quote.regularMarketTime || latestSessionDate || null),
-    asOf: historyBacked ? latestSessionDate : (quote.regularMarketTime || latestSessionDate || null),
-    sessionDateOnly: historyBacked,
+    marketTime: observationTime,
+    asOf: observationTime,
+    sessionDateOnly: false,
     isGlobalIndex: true,
-    dataStatus: globalQuoteStatus(quote, definition, latestSessionDate),
+    dataStatus: globalQuoteStatus(quote, definition, latestSessionDate, historyBacked),
     isStale: Boolean(quote.isStale),
     dataProvider: quote.quoteSourceName || "market provider",
     periodReturn: returnPercent(points),
