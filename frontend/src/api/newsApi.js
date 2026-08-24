@@ -24,3 +24,8 @@ export async function getIndiaGsecNews() {
   const response = await cachedGet("/news/gsec", {}, 10 * 60 * 1000);
   return response.data;
 }
+
+export async function getGlobalIndexNews(key) {
+  const response = await cachedGet(`/news/global-index/${encodeURIComponent(key)}`, {}, 10 * 60 * 1000);
+  return response.data;
+}

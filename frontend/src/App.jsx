@@ -5,8 +5,9 @@ import { getCurrencies, getCurrencyHistory } from "./api/currencyApi";
 import { getCompanyEvents } from "./api/eventsApi";
 import { getCompanyFinancials } from "./api/financialsApi";
 import { getIndexDetail, getIndices } from "./api/indexApi";
+import { getGlobalIndexDetail, getGlobalIndices } from "./api/globalIndexApi";
 import { getIndiaTenYearYield } from "./api/gsecApi";
-import { getCompanyNews, getGlobalMarketNews, getIndiaGsecNews, getNiftyMarketEvents, getVixMarketNews } from "./api/newsApi";
+import { getCompanyNews, getGlobalIndexNews, getGlobalMarketNews, getIndiaGsecNews, getNiftyMarketEvents, getVixMarketNews } from "./api/newsApi";
 import { getPerformanceHistory } from "./api/performanceApi";
 import { getSectorDetail, getSectors } from "./api/sectorApi";
 import stockUniverse from "./data/stockUniverse.json";
@@ -1027,6 +1028,7 @@ function quoteStatusLabel(quote, marketOpen = isIndianMarketOpen()) {
   if (status === "delayed") return "Delayed";
   if (status === "stale") return "Stale";
   if (status === "eod") return "EOD";
+  if (status === "unavailable") return "Unavailable";
   return marketOpen ? "Live" : "EOD";
 }
 
@@ -1093,6 +1095,25 @@ function SectionHeading({ eyebrow, title, action }) {
 
 function Panel({ children, style, ...rest }) {
   return <div style={{ background: THEME.panel, border: `1px solid ${THEME.hairline}`, borderRadius: 6, ...style }} {...rest}>{children}</div>;
+}
+
+function WideNewsTile({ article, onClick, href }) {
+  const content = (
+    <>
+      <div style={{ fontSize: 10.5, color: THEME.gold, textTransform: "uppercase", letterSpacing: 0.5, fontWeight: 700 }}>
+        {article.topic || article.category || "Market"}
+      </div>
+      <div style={{ fontSize: 13, fontWeight: 600, color: THEME.ink, marginTop: 5 }}>{article.title}</div>
+      <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 6 }}>
+        {article.source || "Source unavailable"} · {article.date || formatNewsDate(article.publishedAt)}
+      </div>
+    </>
+  );
+  return (
+    <Panel onClick={onClick} className={(onClick || href) ? "sd-row-hover" : undefined} style={{ padding: 14, cursor: (onClick || href) ? "pointer" : "default" }}>
+      {href ? <a href={href} target="_blank" rel="noopener noreferrer" style={{ display: "block", textDecoration: "none" }}>{content}</a> : content}
+    </Panel>
+  );
 }
 
 function Pill({ active, children, onClick }) {
@@ -1332,10 +1353,10 @@ function IndexCard({ idx, onOpen }) {
         <div>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: THEME.creamDim, lineHeight: 1.3, maxWidth: 124, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{idx.name}</div>
           <div className="sd-mono" style={{ fontSize: 17, marginTop: 12 }}>
-            {idx.isGsec ? `${fmtNum(idx.value, 2)}%` : idx.isVix ? fmtNum(idx.value) : fmtInt(Math.round(idx.value))}
+            {Number.isFinite(idx.value) ? (idx.isGsec ? `${fmtNum(idx.value, 2)}%` : idx.isVix ? fmtNum(idx.value) : fmtInt(Math.round(idx.value))) : "—"}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 1 }}>
-            <span style={{ fontSize: 9.5, color: THEME.inkDim }}>{isRateContext ? "Today" : "Daily"}</span>
+            <span style={{ fontSize: 9.5, color: THEME.inkDim }}>{idx.isGsec ? "Prev. pub." : isRateContext ? "Today" : "Daily"}</span>
             {idx.isGsec ? neutralDelta(idx.todayBps, "bps") : idx.isVix ? neutralDelta(todayPointChange, "pts") : <Move value={idx.changePercent} size={11} />}
           </div>
         </div>
@@ -1423,7 +1444,7 @@ function GsecDetailPage({ back }) {
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="sd-mono" style={{ fontSize: 28 }}>{Number.isFinite(data?.value) ? `${data.value.toFixed(2)}%` : "—"}</div>
-            <div style={{ fontSize: 11.5, color: THEME.creamDim, marginTop: 4 }}>Today {Number.isFinite(data?.todayBps) ? `${data.todayBps > 0 ? "+" : ""}${data.todayBps} bps` : "—"}</div>
+            <div style={{ fontSize: 11.5, color: THEME.creamDim, marginTop: 4 }}>Change vs prior publication {Number.isFinite(data?.todayBps) ? `${data.todayBps > 0 ? "+" : ""}${data.todayBps} bps` : "—"}</div>
             <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 5 }}>
               {data?.asOf
                 ? `${data.dataProvider || "FBIL"} · ${data.asOf.includes("T") ? formatMarketAsOf(data.asOf) : new Date(`${data.observationDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
@@ -1451,13 +1472,7 @@ function GsecDetailPage({ back }) {
       <div style={{ marginTop: 40 }}><SectionHeading title="What moved the Yield?" /></div>
       <p style={{ fontSize: 11.5, color: THEME.inkDim, marginTop: -8, marginBottom: 12 }}>Reporting from the last 15 days that explicitly connects developments to Indian government securities or sovereign yields.</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {news.map((article) => (
-          <Panel key={article.id || article.link} style={{ padding: 14 }}>
-            <div style={{ fontSize: 10.5, color: THEME.gold, textTransform: "uppercase", fontWeight: 700 }}>{article.topic}</div>
-            <a href={article.link} target="_blank" rel="noopener noreferrer" style={{ display: "block", color: THEME.ink, textDecoration: "none", fontSize: 13, fontWeight: 600, marginTop: 5 }}>{article.title}</a>
-            <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 6 }}>{article.source} · {formatNewsDate(article.publishedAt)}</div>
-          </Panel>
-        ))}
+        {news.map((article) => <WideNewsTile key={article.id || article.link} article={article} href={article.link} />)}
         {!news.length && <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim }}>No sufficiently relevant India G-Sec reporting is available from the last 15 days.</Panel>}
       </div>
     </div>
@@ -1787,17 +1802,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
               : `Recent developments affecting tracked companies in ${indexData?.name || "this benchmark"}.`}
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 26 }}>
-            {news.map((n) => (
-              <Panel key={n.id || n.link || n.title} onClick={() => setNewsOpen(n)} className="sd-row-hover" style={{ padding: 14, cursor: "pointer" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{n.title}</div>
-                  <div style={{ fontSize: 11, color: THEME.inkDim, whiteSpace: "nowrap" }}>{n.date}</div>
-                </div>
-                {n.teaser && (
-                  <div style={{ fontSize: 12, color: THEME.creamDim, marginTop: 6, lineHeight: 1.5 }}>{n.teaser}</div>
-                )}
-              </Panel>
-            ))}
+            {news.map((n) => <WideNewsTile key={n.id || n.link || n.title} article={n} onClick={() => setNewsOpen(n)} />)}
             {newsLoading && (
               <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim }}>
                 {isVix ? "Loading current volatility drivers..." : "Loading current constituent news..."}
@@ -6360,8 +6365,86 @@ function CurrencyDetail({ currency, back }) {
   );
 }
 
+function GlobalIndexDetailPage({ indexKey, back }) {
+  const [range, setRange] = useState("1Y");
+  const [data, setData] = useState(null);
+  const [news, setNews] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError("");
+    getGlobalIndexDetail(indexKey, range)
+      .then((result) => { if (!cancelled) setData(result); })
+      .catch(() => { if (!cancelled) { setData(null); setError("This index is currently unavailable from the market-data providers."); } })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [indexKey, range]);
+
+  useEffect(() => {
+    let cancelled = false;
+    getGlobalIndexNews(indexKey)
+      .then((result) => { if (!cancelled) setNews(result.articles || []); })
+      .catch(() => { if (!cancelled) setNews([]); });
+    return () => { cancelled = true; };
+  }, [indexKey]);
+
+  const series = (data?.points || []).map((point) => point.adjustedClose);
+  const labels = (data?.points || []).map((point) => new Date(`${point.date}T00:00:00`).toLocaleDateString("en-IN", {
+    day: "2-digit", month: "short", year: series.length > 400 ? "2-digit" : undefined,
+  }));
+
+  return (
+    <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
+      <button onClick={back} style={{ background: "none", border: "none", color: THEME.gold, cursor: "pointer", fontSize: 12.5, display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
+        <ChevronLeft size={14} /> Back to Global
+      </button>
+      <Panel style={{ padding: 20, marginBottom: 18 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ maxWidth: 760 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <h1 className="sd-serif" style={{ fontSize: 24, margin: 0 }}>{data?.name || "Global index"}</h1>
+              {data && <LiveTag live statusLabel={quoteStatusLabel(data)} />}
+            </div>
+            <p style={{ fontSize: 12.5, color: THEME.creamDim, lineHeight: 1.55 }}>{data?.description || "Global equity-market benchmark."}</p>
+            <div style={{ fontSize: 11, color: THEME.inkDim }}>{data ? `${marketProviderLabel(data.dataProvider)} market data · As of ${formatMarketAsOf(data.asOf || data.marketTime)}` : "Loading market source..."}</div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <div className="sd-mono" style={{ fontSize: 28 }}>{Number.isFinite(data?.value) ? fmtNum(data.value, 2) : "—"}</div>
+            {Number.isFinite(data?.changePercent) && <Move value={data.changePercent} size={14} />}
+          </div>
+        </div>
+      </Panel>
+      <div style={{ marginBottom: 12 }}><ReturnRangeSelector active={range} onSelect={setRange} /></div>
+      <Panel style={{ padding: 16 }}>
+        {loading ? <div style={{ height: 320, display: "grid", placeItems: "center", color: THEME.inkDim }}>Loading historical index data...</div>
+          : error ? <div style={{ height: 320, display: "grid", placeItems: "center", color: THEME.down }}>{error}</div>
+          : <PriceChart series={series} labels={labels} height={320} color={THEME.gold} />}
+      </Panel>
+      <div className="sd-grid-4" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 14 }}>
+        {[[`${range} performance`, data?.periodReturn, null], ["Today's change", data?.changePercent, null], ["Period high", null, data?.periodHigh], ["Period low", null, data?.periodLow]].map(([label, move, value]) => (
+          <Panel key={label} style={{ padding: 12 }}><div style={{ fontSize: 10.5, color: THEME.inkDim }}>{label}</div><div className="sd-mono" style={{ fontSize: 15, marginTop: 4 }}>{Number.isFinite(move) ? <Move value={move} size={14} /> : Number.isFinite(value) ? fmtNum(value, 2) : "—"}</div></Panel>
+        ))}
+      </div>
+      <div style={{ marginTop: 40 }}><SectionHeading title="Index News" /></div>
+      <p style={{ fontSize: 11.5, color: THEME.inkDim, marginTop: -8, marginBottom: 12 }}>Reporting from the last 15 days that explicitly relates to this index.</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {news.map((article) => <WideNewsTile key={article.id || article.link} article={article} href={article.link} />)}
+        {!news.length && <Panel style={{ padding: 20, color: THEME.inkDim, textAlign: "center" }}>No sufficiently relevant reporting is currently available from the last 15 days.</Panel>}
+      </div>
+    </div>
+  );
+}
+
 function CurrenciesPage() {
   const [activeCode, setActiveCode] = useState(null);
+  const [activeGlobalIndex, setActiveGlobalIndex] = useState(null);
+  const [globalIndices, setGlobalIndices] = useState([]);
+  const [globalIndicesLoading, setGlobalIndicesLoading] = useState(true);
+  const [globalIndicesError, setGlobalIndicesError] = useState("");
+  const [globalRegion, setGlobalRegion] = useState("All Regions");
   const [newsOpen, setNewsOpen] = useState(null);
   const [currencyData, setCurrencyData] = useState([]);
   const [currenciesLoading, setCurrenciesLoading] = useState(true);
@@ -6370,6 +6453,15 @@ function CurrenciesPage() {
   const [globalNewsLoading, setGlobalNewsLoading] = useState(true);
   const [globalNewsError, setGlobalNewsError] = useState("");
   const [globalNewsPage, setGlobalNewsPage] = useState(1);
+
+  useEffect(() => {
+    let cancelled = false;
+    getGlobalIndices()
+      .then((result) => { if (!cancelled) setGlobalIndices(result); })
+      .catch(() => { if (!cancelled) { setGlobalIndices([]); setGlobalIndicesError("Global index data is currently unavailable."); } })
+      .finally(() => { if (!cancelled) setGlobalIndicesLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -6477,12 +6569,28 @@ const globalMarketNews = globalNewsData.map((article) => ({
     globalNewsPage * globalNewsPerPage
   );
   const active = currencies.find((currency) => currency.code === activeCode);
+  const visibleGlobalIndices = globalRegion === "All Regions" ? globalIndices : globalIndices.filter((index) => index.region === globalRegion);
 
   if (active) return <CurrencyDetail currency={active} back={() => setActiveCode(null)} />;
+  if (activeGlobalIndex) return <GlobalIndexDetailPage indexKey={activeGlobalIndex} back={() => setActiveGlobalIndex(null)} />;
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <SectionHeading eyebrow="Global" title="INR reference rates" />
+      <SectionHeading eyebrow="Global" title="Global Indices" action={
+        <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: THEME.inkDim }}>
+          Filter by Region
+          <select value={globalRegion} onChange={(event) => setGlobalRegion(event.target.value)} style={{ background: THEME.panel, border: `1px solid ${THEME.hairline}`, color: THEME.creamDim, borderRadius: 4, padding: "6px 8px", fontSize: 11.5 }}>
+            {["All Regions", "Americas", "EMEA", "APAC"].map((region) => <option key={region}>{region}</option>)}
+          </select>
+        </label>
+      } />
+      <div className="sd-scroll" style={{ display: "flex", gap: 14, marginBottom: 32, overflowX: "auto", paddingBottom: 8 }}>
+        {globalIndicesLoading && <Panel style={{ padding: 24, color: THEME.inkDim }}>Loading global indices...</Panel>}
+        {!globalIndicesLoading && globalIndicesError && <Panel style={{ padding: 24, color: THEME.down }}>{globalIndicesError}</Panel>}
+        {!globalIndicesLoading && !globalIndicesError && visibleGlobalIndices.map((index) => <IndexCard key={index.key} idx={index} onOpen={setActiveGlobalIndex} />)}
+      </div>
+
+      <SectionHeading title="INR reference rates" />
       <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16 }}>
         Latest available Yahoo Finance reference rates. Not live tradable FX quotes. Shown for research context, not currency forecasting.
       </p>
@@ -6541,18 +6649,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
             No trusted-source global market articles are available for the last 14 days.
           </Panel>
         )}
-        {!globalNewsLoading && !globalNewsError && paginatedGlobalMarketNews.map((n) => (
-          <Panel key={n.id} onClick={() => setNewsOpen(n)} className="sd-row-hover" style={{ padding: 14, cursor: "pointer" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-              <div>
-                <div style={{ fontSize: 10.5, color: THEME.gold, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 4 }}>{n.topic}</div>
-                <div style={{ fontSize: 13, fontWeight: 600 }}>{n.title}</div>
-              </div>
-              <div style={{ fontSize: 11, color: THEME.inkDim, whiteSpace: "nowrap" }}>{n.date}</div>
-            </div>
-            <div style={{ fontSize: 12, color: THEME.creamDim, marginTop: 6, lineHeight: 1.5 }}>{n.teaser}</div>
-          </Panel>
-        ))}
+        {!globalNewsLoading && !globalNewsError && paginatedGlobalMarketNews.map((n) => <WideNewsTile key={n.id} article={n} onClick={() => setNewsOpen(n)} />)}
       </div>
       {!globalNewsLoading && !globalNewsError && globalMarketNews.length > 0 && (
         <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: -4, marginBottom: 24, alignItems: "center" }}>
@@ -6636,6 +6733,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
    SEARCH RESULTS PAGE
    ========================================================================================= */
 const SEARCH_TOPIC_TICKERS = {
+  "global markets": [], "united states": [], china: [], "hong kong": [], japan: [], "south korea": [], taiwan: [], europe: [], "united kingdom": [], germany: [],
   "artificial intelligence": ["TCS", "INFY", "HCLTECH", "TECHM", "PERSISTENT", "TATAELXSI", "DIXON"],
   semiconductors: ["DIXON", "CGPOWER", "TATAELXSI", "BEL"],
   defence: ["HAL", "BEL", "BDL", "MAZDOCK", "COCHINSHIP", "SOLARINDS"],
@@ -6667,6 +6765,11 @@ const SEARCH_TOPIC_TICKERS = {
 };
 
 const SEARCH_TOPIC_ALIASES = {
+  global: "global markets", "world markets": "global markets",
+  us: "united states", usa: "united states", "us markets": "united states", "american stocks": "united states", "s&p 500": "united states", sp500: "united states", nasdaq: "united states", dow: "united states", "dow jones": "united states",
+  chinese: "china", "chinese stocks": "china", "csi 300": "china", "shanghai composite": "china",
+  "hang seng": "hong kong", nikkei: "japan", "nikkei 225": "japan", korea: "south korea", kospi: "south korea", taiex: "taiwan", "taiwan weighted": "taiwan",
+  european: "europe", "european markets": "europe", "euro stoxx": "europe", "euro stoxx 50": "europe", uk: "united kingdom", ftse: "united kingdom", "ftse 100": "united kingdom", dax: "germany",
   ai: "artificial intelligence", "artificial intelligence": "artificial intelligence", "machine learning": "artificial intelligence",
   chip: "semiconductors", chips: "semiconductors", semiconductor: "semiconductors",
   defence: "defence", defense: "defence", bank: "banking", banks: "banking",
@@ -6688,6 +6791,14 @@ function SearchResultsPage({ searchTerm, openCompany }) {
   const [loading, setLoading] = useState(true);
   const normalized = searchTerm.trim().toLowerCase();
   const canonicalTopic = SEARCH_TOPIC_ALIASES[normalized] || normalized;
+  const globalTopicTerms = {
+    "global markets": ["global", "world markets"],
+    "united states": ["united states", "u.s.", "us stocks", "wall street", "s&p 500", "nasdaq", "dow jones"],
+    china: ["china", "chinese stocks", "csi 300", "shanghai composite"],
+    "hong kong": ["hong kong", "hang seng"], japan: ["japan", "nikkei"],
+    "south korea": ["south korea", "korean stocks", "kospi"], taiwan: ["taiwan", "taiex", "taiwan weighted"],
+    europe: ["europe", "european stocks", "euro stoxx"], "united kingdom": ["united kingdom", "uk stocks", "ftse"], germany: ["germany", "german stocks", "dax"],
+  };
 
   const matchingDefinitions = useMemo(() => {
     if (!normalized) return [];
@@ -6729,6 +6840,7 @@ function SearchResultsPage({ searchTerm, openCompany }) {
         ...Object.entries(SEARCH_TOPIC_ALIASES)
           .filter(([, topic]) => topic === canonicalTopic)
           .map(([alias]) => alias),
+        ...(globalTopicTerms[canonicalTopic] || []),
         ...matchingDefinitions.flatMap((stock) => [stock.ticker.toLowerCase(), stock.name?.toLowerCase()]).filter(Boolean),
       ]);
       const seen = new Set();

@@ -82,9 +82,16 @@ const BLOCKED_TITLE_TERMS = [
   "cuts tp",
   "analyst picks",
   "brokerage picks",
+  "trade ideas",
+  "should you buy",
+  "should you consider",
 ];
 
 const GLOBAL_MARKET_TOPICS = [
+  { topic: "US Markets", query: '("S&P 500" OR Nasdaq OR "Dow Jones") stocks' },
+  { topic: "China & Hong Kong", query: '("Chinese stocks" OR "Hang Seng" OR "Shanghai Composite" OR "CSI 300")' },
+  { topic: "Japan & Asia", query: '("Nikkei 225" OR KOSPI OR "Taiwan stocks") markets' },
+  { topic: "European Markets", query: '("FTSE 100" OR DAX OR "EURO STOXX 50") stocks' },
   {
     topic: "Energy & Crude",
     query: '("crude oil" OR OPEC OR "energy markets") markets',
@@ -110,6 +117,21 @@ const GLOBAL_MARKET_TOPICS = [
     query: '(gold OR copper OR commodities) "global markets"',
   },
 ];
+
+const GLOBAL_INDEX_NEWS = {
+  SP500: { topic: "S&P 500", query: '"S&P 500" index stocks', terms: ["s&p 500", "s&p500"] },
+  NASDAQ: { topic: "NASDAQ", query: '"Nasdaq Composite" index', terms: ["nasdaq composite", "nasdaq"] },
+  DOW: { topic: "Dow Jones", query: '"Dow Jones Industrial Average" index', terms: ["dow jones industrial average", "dow jones", "the dow"] },
+  HANGSENG: { topic: "Hang Seng", query: '"Hang Seng" index', terms: ["hang seng"] },
+  SHANGHAI: { topic: "Shanghai Composite", query: '"Shanghai Composite" index', terms: ["shanghai composite"] },
+  CSI300: { topic: "CSI 300", query: '"CSI 300" index', terms: ["csi 300", "csi300"] },
+  NIKKEI225: { topic: "Nikkei 225", query: '"Nikkei 225" index', terms: ["nikkei 225", "nikkei"] },
+  FTSE100: { topic: "FTSE 100", query: '"FTSE 100" index', terms: ["ftse 100", "ftse"] },
+  DAX: { topic: "DAX", query: '"DAX index" Germany stocks', terms: ["dax index", "germany's dax", "german dax"] },
+  EUROSTOXX50: { topic: "EURO STOXX 50", query: '"EURO STOXX 50" index', terms: ["euro stoxx 50", "stoxx 50"] },
+  KOSPI: { topic: "KOSPI", query: 'KOSPI index Korean stocks', terms: ["kospi"] },
+  TAIWAN: { topic: "Taiwan Weighted", query: '("Taiwan Weighted" OR "Taiwan stocks" OR TAIEX) index', terms: ["taiwan weighted", "taiex", "taiwan stocks"] },
+};
 
 const VIX_MARKET_TOPICS = [
   {
@@ -602,6 +624,16 @@ function isTrustedGlobalSource(source) {
   );
 }
 
+function isAccessibleNewsSource(source) {
+  const normalized = normalizeSourceForMatching(source);
+  const subscriptionFirstSources = [
+    "bloomberg", "financial times", "wall street journal", "wsj",
+    "business standard", "economic times", "livemint", "mint",
+    "new york times", "the globe and mail",
+  ];
+  return !subscriptionFirstSources.some((blocked) => normalized.includes(blocked));
+}
+
 function isBlockedGlobalArticle(article, cleanedArticle) {
   const searchableText = [
     article.title,
@@ -1069,7 +1101,7 @@ async function getGlobalMarketNewsFromService() {
     ) &&
     isTrustedGlobalSource(
       cleanedArticle.source
-    ) &&
+    ) && isAccessibleNewsSource(cleanedArticle.source) &&
     isRelevantToGlobalTopic(
       article,
       cleanedArticle,
@@ -2233,7 +2265,8 @@ const companyName =
           article,
           companyName,
           symbol
-        )
+        ) &&
+        isAccessibleNewsSource(cleanGoogleNewsArticle(article).source)
       );
     })
     .map((article) => ({
@@ -2306,6 +2339,7 @@ async function getIndiaGsecNewsFromService() {
       .filter(({ article, cleanedArticle }) =>
         !isBlockedGlobalArticle(article, cleanedArticle) &&
         isTrustedGlobalSource(cleanedArticle.source) &&
+        isAccessibleNewsSource(cleanedArticle.source) &&
         isRelevantToIndiaGsec(article, cleanedArticle)
       );
   });
@@ -2321,10 +2355,39 @@ async function getIndiaGsecNewsFromService() {
   return { range: "Last 15 days", articleCount: articles.length, articles };
 }
 
+async function getGlobalIndexNewsFromService(key) {
+  const config = GLOBAL_INDEX_NEWS[String(key || "").toUpperCase()];
+  if (!config) throw new Error("Unknown global index");
+  const fetched = await fetchGlobalMarketNews(config.query);
+  const candidates = fetched
+    .filter((article) => isWithinLastDays(article.pubDate, 15))
+    .map((article) => ({ article, cleanedArticle: cleanGoogleNewsArticle(article), topic: config.topic }))
+    .filter(({ article, cleanedArticle }) => {
+      const title = String(cleanedArticle.title || "").toLowerCase();
+      const indexContext = /(rise|rises|rose|gain|gains|gained|advance|advances|advanced|fall|falls|fell|drop|drops|dropped|decline|declines|declined|rally|rallies|rallied|slide|slides|slid|selloff|record|close|closes|closed|open|opens|opened|futures|session|market|index|rebalance|rebalancing|inclusion|removal|fed|inflation|tariff|rate|yield|earnings)/.test(title);
+      return config.terms.some((term) => title.includes(term)) &&
+        indexContext &&
+        !isBlockedGlobalArticle(article, cleanedArticle) &&
+        isTrustedGlobalSource(cleanedArticle.source) &&
+        isAccessibleNewsSource(cleanedArticle.source);
+    });
+  const articles = deduplicateAndLimit(candidates, 15).map(({ article, cleanedArticle, topic }, index) => ({
+    id: article.guid || article.link || `global-index-${key}-${index}`,
+    topic,
+    title: cleanedArticle.title,
+    source: cleanedArticle.source,
+    publishedAt: article.pubDate,
+    link: article.link,
+    summary: isMeaningfulSummary(cleanedArticle.title, cleanedArticle.snippet) ? cleanedArticle.snippet : "",
+  }));
+  return { key: String(key).toUpperCase(), range: "Last 15 days", articleCount: articles.length, articles };
+}
+
 module.exports = {
   getCompanyNewsFromService,
   getGlobalMarketNewsFromService,
   getVixMarketNewsFromService,
   getNiftyMarketEventsFromService,
   getIndiaGsecNewsFromService,
+  getGlobalIndexNewsFromService,
 };

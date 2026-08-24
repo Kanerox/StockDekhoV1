@@ -4,7 +4,13 @@ const {
   getVixMarketNewsFromService,
   getNiftyMarketEventsFromService,
   getIndiaGsecNewsFromService,
+  getGlobalIndexNewsFromService,
 } = require("../services/newsService");
+
+async function getGlobalIndexNews(req, res) {
+  try { return res.status(200).json(await getGlobalIndexNewsFromService(req.params.key)); }
+  catch (error) { return res.status(error.message === "Unknown global index" ? 404 : 500).json({ error: "Unable to fetch global index news." }); }
+}
 
 async function getIndiaGsecNews(req, res) {
   try {
@@ -88,4 +94,5 @@ module.exports = {
   getVixMarketNews,
   getNiftyMarketEvents,
   getIndiaGsecNews,
+  getGlobalIndexNews,
 };

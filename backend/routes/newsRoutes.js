@@ -5,6 +5,7 @@ const {
   getVixMarketNews,
   getNiftyMarketEvents,
   getIndiaGsecNews,
+  getGlobalIndexNews,
 } = require("../controllers/newsController");
 
 const router = express.Router();
@@ -13,6 +14,7 @@ router.get("/global", getGlobalMarketNews);
 router.get("/vix", getVixMarketNews);
 router.get("/market-events", getNiftyMarketEvents);
 router.get("/gsec", getIndiaGsecNews);
+router.get("/global-index/:key", getGlobalIndexNews);
 router.get("/:symbol", getCompanyNews);
 
 module.exports = router;

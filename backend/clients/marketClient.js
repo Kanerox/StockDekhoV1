@@ -37,6 +37,7 @@ function normalizeSymbol(symbol) {
 
   if (
     normalized.startsWith("^") ||
+    /\.[A-Z]{1,4}$/.test(normalized) ||
     normalized.endsWith(".NS") ||
     normalized.endsWith(".BO")
   ) {
