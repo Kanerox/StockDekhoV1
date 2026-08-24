@@ -834,6 +834,45 @@ function isRelevantToGlobalTopic(
     .toLowerCase();
 
   const topicTerms = {
+    "US Markets": [
+      "s&p 500",
+      "s&p500",
+      "nasdaq",
+      "dow jones",
+      "wall street",
+      "us stocks",
+      "u.s. stocks",
+    ],
+
+    "China & Hong Kong": [
+      "chinese stocks",
+      "china stocks",
+      "hang seng",
+      "hong kong stocks",
+      "shanghai composite",
+      "csi 300",
+    ],
+
+    "Japan & Asia": [
+      "nikkei 225",
+      "nikkei",
+      "kospi",
+      "taiwan stocks",
+      "taiex",
+      "asian stocks",
+      "asia markets",
+    ],
+
+    "European Markets": [
+      "ftse 100",
+      "ftse",
+      "dax",
+      "euro stoxx 50",
+      "stoxx 50",
+      "european stocks",
+      "european markets",
+    ],
+
     "Energy & Crude": [
       "crude oil",
       "oil price",
