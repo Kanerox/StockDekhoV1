@@ -5,8 +5,8 @@ export async function getCompanyNews(symbol) {
   return response.data;
 }
 
-export async function getGlobalMarketNews() {
-  const response = await cachedGet("/news/global", {}, 5 * 60 * 1000);
+export async function getGlobalMarketNews(retryKey = 0) {
+  const response = await cachedGet("/news/global", { params: retryKey ? { retry: retryKey } : {} }, 5 * 60 * 1000);
   return response.data;
 }
 

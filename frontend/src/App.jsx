@@ -6544,10 +6544,10 @@ function CurrenciesPage() {
       setGlobalNewsError("");
 
       try {
-        const data = await getGlobalMarketNews();
+        const data = await getGlobalMarketNews(attempt);
 
         const articles = data.articles || [];
-        if (!cancelled && articles.length === 0 && attempt < 2) {
+        if (!cancelled && articles.length < 16 && attempt < 2) {
           window.setTimeout(() => loadGlobalNews(attempt + 1), 1500);
           return;
         }
