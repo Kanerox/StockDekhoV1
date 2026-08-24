@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { getPeerComparison, getStockQuote, getStockUniverse, getMarketPerformers } from "./api/marketApi";
 import CompanyHeader from "./components/CompanyHeader";
 import { getCurrencies, getCurrencyHistory } from "./api/currencyApi";
@@ -918,6 +919,44 @@ function GlobalStyle() {
   );
 }
 
+function PageLoadingOverlay({ active }) {
+  const [visible, setVisible] = useState(active);
+  const shownAt = useRef(active ? Date.now() : 0);
+
+  useEffect(() => {
+    let timer;
+    if (active) {
+      shownAt.current = Date.now();
+      setVisible(true);
+    } else if (visible) {
+      const remaining = Math.max(0, 450 - (Date.now() - shownAt.current));
+      timer = window.setTimeout(() => setVisible(false), remaining);
+    }
+    return () => { if (timer) window.clearTimeout(timer); };
+  }, [active, visible]);
+
+  if (!visible) return null;
+  return createPortal(
+    <div aria-live="polite" aria-label="Loading market data" style={{
+      position: "fixed", zIndex: 35, left: 0, right: 0,
+      top: "var(--sd-header-height, 78px)", bottom: 0,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: "rgba(7, 13, 24, 0.66)", backdropFilter: "blur(7px)",
+      WebkitBackdropFilter: "blur(7px)", pointerEvents: "auto",
+    }}>
+      <div style={{ textAlign: "center", transform: "translateY(-3vh)" }}>
+        <div className="sd-serif" style={{ color: THEME.cream, fontSize: "clamp(48px, 7vw, 72px)", fontWeight: 700, lineHeight: 1 }}>
+          SD<span style={{ color: THEME.gold }}>.</span>
+        </div>
+        <div style={{ marginTop: 18, color: THEME.creamDim, fontSize: "clamp(13px, 1.5vw, 17px)", letterSpacing: 0.1 }}>
+          Loading Market Data...
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function isIndianMarketOpen(now = new Date()) {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
@@ -1237,8 +1276,20 @@ function Header({
   onSelectSearch,
   onSearchTopic,
 }) {
+  const headerRef = useRef(null);
   const [searchOpen, setSearchOpen] =
     useState(false);
+
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return undefined;
+    const updateHeight = () => document.documentElement.style.setProperty("--sd-header-height", `${header.getBoundingClientRect().bottom}px`);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(header);
+    window.addEventListener("resize", updateHeight);
+    return () => { observer.disconnect(); window.removeEventListener("resize", updateHeight); };
+  }, []);
 
   const results = useMemo(() => {
     if (!query.trim()) {
@@ -1272,7 +1323,7 @@ function Header({
   ];
 
   return (
-    <div style={{ position: "sticky", top: 0, zIndex: 40, background: THEME.navy, borderBottom: `1px solid ${THEME.hairline}` }}>
+    <div ref={headerRef} style={{ position: "sticky", top: 0, zIndex: 40, background: THEME.navy, borderBottom: `1px solid ${THEME.hairline}` }}>
       <DemoBanner />
       <div className="sd-header-main" style={{ display: "flex", alignItems: "center", gap: 22, padding: "10px 20px" }}>
         <div onClick={() => setPage("markets")} style={{ cursor: "pointer", display: "flex", alignItems: "baseline", gap: 0, flexShrink: 0 }}>
@@ -1444,6 +1495,7 @@ function GsecDetailPage({ back }) {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={loading} />
       <button onClick={back} style={{ background: "none", border: "none", color: THEME.gold, cursor: "pointer", fontSize: 12.5, display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
         <ChevronLeft size={14} /> Back to markets
       </button>
@@ -1673,6 +1725,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={loading} />
       <button onClick={back} style={{ background: "none", border: "none", color: THEME.gold, cursor: "pointer", fontSize: 12.5, display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
         <ChevronLeft size={14} /> Back to markets
       </button>
@@ -2444,6 +2497,7 @@ useEffect(() => {
 ]);
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={[indicesLoading, sectorLoading, performersLoading].filter(Boolean).length > 1} />
       <SectionHeading eyebrow="India Equities · Markets" title="Indian Markets" />
 
       <div className="sd-scroll" style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6, marginBottom: 20, alignItems: "flex-start" }}>
@@ -3344,6 +3398,7 @@ function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compar
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={stocksLoading} />
       <SectionHeading eyebrow="Screener" title="All NSE Stocks" />
       <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16, maxWidth: 760 }}>
         Tracks a representative universe of 200 NSE-listed equities across market-cap bands — not only Nifty 50 constituents.
@@ -3510,6 +3565,7 @@ function SectorsPage({ mode, openCompany, openSector, activeSector }) {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={loading} />
       <SectionHeading eyebrow="Sector intelligence" title="Where is market leadership occurring?" />
       {loading && (
         <Panel style={{ padding: 30, textAlign: "center", color: THEME.inkDim }}>
@@ -3696,6 +3752,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={loading} />
       <button onClick={back} style={{ background: "none", border: "none", color: THEME.gold, cursor: "pointer", fontSize: 12.5, display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
         <ChevronLeft size={14} /> Back to sectors
       </button>
@@ -4599,6 +4656,7 @@ useEffect(() => {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={newsLoading} />
       <Panel style={{ padding: 20, marginBottom: 18 }}>
         <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
           <div>
@@ -6127,6 +6185,7 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={loading} />
       <SectionHeading eyebrow="Research workspace" title="Compare companies" />
       <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16 }}>Select 2–5 stocks. Highlighting shows relative context only — not a recommendation.</p>
 
@@ -6318,6 +6377,7 @@ function CurrencyDetail({ currency, back }) {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={historyLoading} />
       <button onClick={back} style={{ background: "none", border: "none", color: THEME.gold, cursor: "pointer", fontSize: 12.5, display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
         <ChevronLeft size={14} /> Back to Global
       </button>
@@ -6418,6 +6478,7 @@ function GlobalIndexDetailPage({ indexKey, back }) {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={loading} />
       <button onClick={back} style={{ background: "none", border: "none", color: THEME.gold, cursor: "pointer", fontSize: 12.5, display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
         <ChevronLeft size={14} /> Back to Global
       </button>
@@ -6637,6 +6698,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={globalIndicesLoading || currenciesLoading} />
       <SectionHeading eyebrow="Global" title="Global Indices" action={
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: THEME.inkDim, transform: "translateY(24px)" }}>
           Filter by Region
@@ -6843,12 +6905,27 @@ const SEARCH_TOPIC_ALIASES = {
   property: "real estate", electronics: "consumer electronics", jewelry: "jewellery",
 };
 
-function SearchResultsPage({ searchTerm, openCompany }) {
+const SEARCH_TOPIC_INDEX_KEYS = {
+  "global markets": ["SP500", "NASDAQ", "DOW", "HANGSENG", "NIKKEI225", "FTSE100", "DAX", "EUROSTOXX50", "KOSPI", "TAIWAN"],
+  "united states": ["SP500", "NASDAQ", "DOW"],
+  china: ["HANGSENG"],
+  "hong kong": ["HANGSENG"],
+  japan: ["NIKKEI225"],
+  "south korea": ["KOSPI"],
+  taiwan: ["TAIWAN"],
+  europe: ["FTSE100", "DAX", "EUROSTOXX50"],
+  "united kingdom": ["FTSE100"],
+  germany: ["DAX"],
+};
+
+function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
   const [stocks, setStocks] = useState([]);
+  const [indices, setIndices] = useState([]);
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
   const normalized = searchTerm.trim().toLowerCase();
   const canonicalTopic = SEARCH_TOPIC_ALIASES[normalized] || normalized;
+  const matchingIndexKeys = SEARCH_TOPIC_INDEX_KEYS[canonicalTopic] || [];
   const globalTopicTerms = {
     "global markets": ["global", "world markets"],
     "united states": ["united states", "u.s.", "us stocks", "wall street", "s&p 500", "nasdaq", "dow jones"],
@@ -6878,18 +6955,30 @@ function SearchResultsPage({ searchTerm, openCompany }) {
       const companyNewsResults = await Promise.allSettled(
         matchingDefinitions.slice(0, 4).map((stock) => getCompanyNews(stock.ticker))
       );
-      const [stockResult, globalResult, marketResult] = await Promise.allSettled([
+      const indexNewsResults = await Promise.allSettled(
+        matchingIndexKeys.map((key) => getGlobalIndexNews(key))
+      );
+      const [stockResult, indicesResult, globalResult, marketResult] = await Promise.allSettled([
         matchingDefinitions.length
           ? getStockUniverse(matchingDefinitions.map((stock) => stock.ticker))
           : Promise.resolve([]),
+        getGlobalIndices(),
         getGlobalMarketNews(),
         getNiftyMarketEvents(),
       ]);
       if (cancelled) return;
       setStocks(stockResult.status === "fulfilled" ? stockResult.value : matchingDefinitions);
+      const allowedIndexKeys = new Set(SEARCH_TOPIC_INDEX_KEYS[canonicalTopic] || []);
+      const availableIndices = indicesResult.status === "fulfilled" ? indicesResult.value : [];
+      setIndices(availableIndices.filter((index) =>
+        allowedIndexKeys.has(index.key) ||
+        [index.name, index.key, index.region, index.description]
+          .filter(Boolean).join(" ").toLowerCase().includes(normalized)
+      ));
       const combined = [
         ...(globalResult.status === "fulfilled" ? globalResult.value?.articles || [] : []),
         ...(marketResult.status === "fulfilled" ? marketResult.value?.articles || [] : []),
+        ...indexNewsResults.flatMap((result) => result.status === "fulfilled" ? result.value?.articles || [] : []),
         ...companyNewsResults.flatMap((result) => result.status === "fulfilled" ? result.value?.articles || [] : []),
       ];
       const topicTerms = new Set([
@@ -6914,16 +7003,18 @@ function SearchResultsPage({ searchTerm, openCompany }) {
     }
     loadResults();
     return () => { cancelled = true; };
-  }, [normalized, matchingDefinitions]);
+  }, [normalized, canonicalTopic, matchingDefinitions]);
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto", width: "100%" }}>
       <SectionHeading eyebrow="Search" title={`Results for “${searchTerm}”`} />
-      <SectionHeading title="Relevant Stocks" />
+      <PageLoadingOverlay active={loading} />
+      <SectionHeading title="Relevant Stocks and Indices" />
       {loading && <div style={{ color: THEME.inkDim, fontSize: 12 }}>Loading relevant companies…</div>}
-      {!loading && stocks.length === 0 && <Panel style={{ padding: 18, color: THEME.inkDim, fontSize: 12.5 }}>No tracked companies directly match this topic.</Panel>}
-      {stocks.length > 0 && (
+      {!loading && stocks.length === 0 && indices.length === 0 && <Panel style={{ padding: 18, color: THEME.inkDim, fontSize: 12.5 }}>No tracked companies or indices directly match this topic.</Panel>}
+      {(stocks.length > 0 || indices.length > 0) && (
         <div className="sd-scroll" style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10, marginBottom: 24 }}>
+          {indices.map((index) => <IndexCard key={index.key} idx={index} onOpen={openGlobalIndex} matchCurrencyCard />)}
           {stocks.map((stock) => {
             const definition = RAW_STOCKS.find((item) => item.ticker === stock.ticker) || stock;
             return (
@@ -7020,6 +7111,7 @@ function WatchlistPage({ watchlist, toggleWatch, openCompany, setPage }) {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
+      <PageLoadingOverlay active={loading} />
       <SectionHeading eyebrow="Research workspace" title="Watchlist" />
       <Panel style={{ padding: 18, marginBottom: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Your Watchlist</div>
@@ -7128,6 +7220,7 @@ const [mode, setMode] = useState("explore");
 const [activeTicker, setActiveTicker] = useState("RELIANCE");
 const [activeSector, setActiveSector] = useState(null);
 const [activeBenchmark, setActiveBenchmark] = useState("NIFTY50");
+const [activeGlobalIndex, setActiveGlobalIndex] = useState(null);
 const [watchlist, setWatchlist] = useState(["RELIANCE", "TCS"]);
 const [compareList, setCompareList] = useState(["RELIANCE", "TCS", "INFY"]);
 const [query, setQuery] = useState("");
@@ -7139,6 +7232,7 @@ const [notes, setNotes] = useState({});
   const toggleCompare = (t) => setCompareList((c) => (c.includes(t) ? c.filter((x) => x !== t) : c.length >= 5 ? c : [...c, t]));
   const openCompany = (t) => { setActiveTicker(t); setPage("company"); };
   const openBenchmark = (key) => { setActiveBenchmark(key); setPage("benchmark"); };
+  const openGlobalIndex = (key) => { setActiveGlobalIndex(key); setPage("global-index"); };
   const openSearch = (term) => { setSearchTerm(term); setQuery(term); setPage("search"); };
   const setNote = (ticker, arr) => setNotes((n) => ({ ...n, [ticker]: arr }));
 
@@ -7160,8 +7254,9 @@ const [notes, setNotes] = useState({});
         {page === "company" && <CompanyPage ticker={activeTicker} mode={mode} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} notes={notes} setNote={setNote} openCompany={openCompany} />}
         {page === "compare" && <ComparePage compareList={compareList} toggleCompare={toggleCompare} openCompany={openCompany} />}
         {page === "currencies" && <CurrenciesPage />}
+        {page === "global-index" && <GlobalIndexDetailPage indexKey={activeGlobalIndex} back={() => setPage("search")} />}
         {page === "watchlist" && <WatchlistPage watchlist={watchlist} toggleWatch={toggleWatch} openCompany={openCompany} setPage={setPage} />}
-        {page === "search" && <SearchResultsPage searchTerm={searchTerm} openCompany={openCompany} />}
+        {page === "search" && <SearchResultsPage searchTerm={searchTerm} openCompany={openCompany} openGlobalIndex={openGlobalIndex} />}
       </div>
       <Footer />
     </div>
