@@ -320,12 +320,11 @@ async function getUpstoxIndiaTenYearYield(range = "1M") {
 }
 
 async function getIndiaTenYearYield(range = "1M") {
-  try {
-    return await getUpstoxIndiaTenYearYield(range);
-  } catch (error) {
-    console.warn(`Upstox G-Sec yield unavailable; using FBIL: ${error.message}`);
-    return getFbilIndiaTenYearYield(range);
-  }
+  // The Upstox-listed benchmark bond is thinly traded, so its last traded
+  // price is not a dependable proxy for the institutional benchmark yield.
+  // Prefer the delayed official FBIL par yield over a fresher but misleading
+  // derived value. The Upstox calculation remains available for diagnostics.
+  return getFbilIndiaTenYearYield(range);
 }
 
 module.exports = {
