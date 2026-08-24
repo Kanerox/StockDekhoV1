@@ -205,6 +205,8 @@ export default async function handler(request, response) {
       "Cache-Control",
       action === "events"
         ? "public, s-maxage=600, stale-while-revalidate=3600"
+        : action === "company"
+          ? "public, s-maxage=86400, stale-while-revalidate=604800"
         : "public, s-maxage=120, stale-while-revalidate=600"
     );
     const symbols = String(request.query?.symbols || request.query?.symbol || "")
@@ -240,7 +242,7 @@ export default async function handler(request, response) {
         }, { validateResult: false }),
       ]);
       const financialData = summary?.financialData || {};
-      const enrichedQuote = {
+      let enrichedQuote = {
         ...quote,
         marketCap: firstPositive(
           quote?.marketCap,
@@ -266,6 +268,49 @@ export default async function handler(request, response) {
           summary?.defaultKeyStatistics?.bookValue ??
           null,
       };
+
+      if (
+        !firstPositive(enrichedQuote.fiftyTwoWeekLow) ||
+        !firstPositive(enrichedQuote.fiftyTwoWeekHigh) ||
+        finite(enrichedQuote.fiftyTwoWeekChangePercent) === null
+      ) {
+        try {
+          const period2 = new Date();
+          period2.setDate(period2.getDate() + 1);
+          const period1 = new Date();
+          period1.setFullYear(period1.getFullYear() - 1);
+          const history = await yahooFinance.chart(symbol, {
+            period1,
+            period2,
+            interval: "1d",
+          });
+          const points = (history?.quotes || []).filter((point) =>
+            Number.isFinite(point?.close)
+          );
+          const closes = points.map((point) => point.close);
+          const first = points[0];
+          const last = points.at(-1);
+          const firstValue = finite(first?.adjclose) ?? finite(first?.close);
+          const lastValue = finite(last?.adjclose) ?? finite(last?.close);
+
+          enrichedQuote = {
+            ...enrichedQuote,
+            fiftyTwoWeekLow:
+              firstPositive(enrichedQuote.fiftyTwoWeekLow) ||
+              (closes.length ? Math.min(...closes) : null),
+            fiftyTwoWeekHigh:
+              firstPositive(enrichedQuote.fiftyTwoWeekHigh) ||
+              (closes.length ? Math.max(...closes) : null),
+            fiftyTwoWeekChangePercent:
+              finite(enrichedQuote.fiftyTwoWeekChangePercent) ??
+              (firstValue && lastValue
+                ? ((lastValue / firstValue) - 1) * 100
+                : null),
+          };
+        } catch (error) {
+          console.warn(`Yahoo 52-week fallback unavailable for ${symbol}: ${error.message}`);
+        }
+      }
       return response.status(200).json({
         ...quoteSupplement(enrichedQuote),
         returnOnEquity: finite(financialData.returnOnEquity) === null

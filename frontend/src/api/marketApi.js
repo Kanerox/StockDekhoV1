@@ -3,8 +3,38 @@ import { getYahooCompanySupplement, getYahooQuoteSupplements } from "./yahooSupp
 
 export async function getStockQuote(symbol) {
   try {
-    const response = await cachedGet(`/market/${symbol}`);
-    return response.data;
+    const [response, supplement] = await Promise.all([
+      cachedGet(`/market/${symbol}`),
+      getYahooCompanySupplement(symbol),
+    ]);
+    const quote = response.data;
+
+    if (!supplement) return quote;
+
+    // Upstox/backend remains authoritative for price, change, timestamp and
+    // trading status. Yahoo only fills descriptive/fundamental gaps.
+    return {
+      ...quote,
+      company: supplement.company || quote.company,
+      marketCap:
+        Number.isFinite(supplement.marketCap) && supplement.marketCap > 0
+          ? supplement.marketCap
+          : quote.marketCap,
+      trailingPE: supplement.trailingPE ?? quote.trailingPE,
+      priceToBook: supplement.priceToBook ?? quote.priceToBook,
+      bookValue: supplement.bookValue ?? quote.bookValue,
+      dividendYield: supplement.dividendYield ?? quote.dividendYield,
+      averageDailyVolume3Month:
+        supplement.averageVolume ?? quote.averageDailyVolume3Month,
+      fiftyTwoWeekLow:
+        supplement.fiftyTwoWeekLow ?? quote.fiftyTwoWeekLow,
+      fiftyTwoWeekHigh:
+        supplement.fiftyTwoWeekHigh ?? quote.fiftyTwoWeekHigh,
+      fiftyTwoWeekChangePercent:
+        supplement.fiftyTwoWeekChangePercent ??
+        quote.fiftyTwoWeekChangePercent,
+      supplementalDataProvider: "Yahoo Finance",
+    };
   } catch (error) {
     console.error("Failed to fetch stock quote:", error);
     throw error;
