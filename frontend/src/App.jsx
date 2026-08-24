@@ -6538,6 +6538,8 @@ function CurrenciesPage() {
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer = null;
+    let collectedArticles = [];
 
     async function loadGlobalNews(attempt = 0) {
       setGlobalNewsLoading(true);
@@ -6547,21 +6549,31 @@ function CurrenciesPage() {
         const data = await getGlobalMarketNews(attempt);
 
         const articles = data.articles || [];
-        if (!cancelled && articles.length < 16 && attempt < 2) {
-          window.setTimeout(() => loadGlobalNews(attempt + 1), 1500);
+        const byArticle = new Map(
+          [...collectedArticles, ...articles].map((article) => [article.id || article.link, article])
+        );
+        collectedArticles = [...byArticle.values()]
+          .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
+          .slice(0, 32);
+        if (!cancelled && collectedArticles.length < 25 && attempt < 3) {
+          retryTimer = window.setTimeout(() => loadGlobalNews(attempt + 1), 1500);
           return;
         }
         if (!cancelled) {
-          setGlobalNewsData(articles);
+          setGlobalNewsData(collectedArticles);
           setGlobalNewsPage(1);
         }
       } catch (error) {
-        if (!cancelled && attempt < 2) {
-          window.setTimeout(() => loadGlobalNews(attempt + 1), 1500);
+        if (!cancelled && attempt < 3) {
+          retryTimer = window.setTimeout(() => loadGlobalNews(attempt + 1), 1500);
           return;
         }
         if (!cancelled) {
-          setGlobalNewsError("Unable to load current global market news.");
+          if (collectedArticles.length) {
+            setGlobalNewsData(collectedArticles);
+          } else {
+            setGlobalNewsError("Unable to load current global market news.");
+          }
         }
       } finally {
         if (!cancelled) {
@@ -6574,6 +6586,7 @@ function CurrenciesPage() {
 
     return () => {
       cancelled = true;
+      if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, []);
 
