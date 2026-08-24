@@ -6957,6 +6957,19 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
     async function loadResults() {
       setLoading(true);
       setArticles([]);
+      const loadMatchingIndices = async () => {
+        if (!matchingIndexKeys.length || matchingIndexKeys.length > 3) return bounded(getGlobalIndices());
+        const focusedResults = await Promise.allSettled(
+          matchingIndexKeys.map((key) => bounded(getGlobalIndexDetail(key, "1M")))
+        );
+        return focusedResults
+          .filter((result) => result.status === "fulfilled")
+          .map((result) => ({
+            ...result.value,
+            oneMonthReturn: result.value.periodReturn,
+            sparkline: (result.value.points || []).map((point) => point.adjustedClose),
+          }));
+      };
       const companyNewsPromise = Promise.allSettled(
         matchingDefinitions.slice(0, 4).map((stock) => bounded(getCompanyNews(stock.ticker)))
       );
@@ -6971,7 +6984,7 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
         matchingDefinitions.length
           ? bounded(getStockUniverse(matchingDefinitions.map((stock) => stock.ticker)))
           : Promise.resolve([]),
-        bounded(getGlobalIndices()),
+        loadMatchingIndices(),
       ]);
       if (cancelled) return;
       setStocks(stockResult.status === "fulfilled" ? stockResult.value : matchingDefinitions);
