@@ -6950,21 +6950,28 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
 
   useEffect(() => {
     let cancelled = false;
+    const bounded = (promise, timeoutMs = 15000) => Promise.race([
+      promise,
+      new Promise((_, reject) => window.setTimeout(() => reject(new Error("Search request timed out")), timeoutMs)),
+    ]);
     async function loadResults() {
       setLoading(true);
-      const companyNewsResults = await Promise.allSettled(
-        matchingDefinitions.slice(0, 4).map((stock) => getCompanyNews(stock.ticker))
+      setArticles([]);
+      const companyNewsPromise = Promise.allSettled(
+        matchingDefinitions.slice(0, 4).map((stock) => bounded(getCompanyNews(stock.ticker)))
       );
-      const indexNewsResults = await Promise.allSettled(
-        matchingIndexKeys.map((key) => getGlobalIndexNews(key))
+      const indexNewsPromise = Promise.allSettled(
+        matchingIndexKeys.map((key) => bounded(getGlobalIndexNews(key)))
       );
-      const [stockResult, indicesResult, globalResult, marketResult] = await Promise.allSettled([
+      const secondaryNewsPromise = Promise.allSettled([
+        bounded(getGlobalMarketNews()),
+        bounded(getNiftyMarketEvents()),
+      ]);
+      const [stockResult, indicesResult] = await Promise.allSettled([
         matchingDefinitions.length
-          ? getStockUniverse(matchingDefinitions.map((stock) => stock.ticker))
+          ? bounded(getStockUniverse(matchingDefinitions.map((stock) => stock.ticker)))
           : Promise.resolve([]),
-        getGlobalIndices(),
-        getGlobalMarketNews(),
-        getNiftyMarketEvents(),
+        bounded(getGlobalIndices()),
       ]);
       if (cancelled) return;
       setStocks(stockResult.status === "fulfilled" ? stockResult.value : matchingDefinitions);
@@ -6975,6 +6982,15 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
         [index.name, index.key, index.region, index.description]
           .filter(Boolean).join(" ").toLowerCase().includes(normalized)
       ));
+      setLoading(false);
+
+      const [companyNewsResults, indexNewsResults, secondaryNewsResults] = await Promise.all([
+        companyNewsPromise,
+        indexNewsPromise,
+        secondaryNewsPromise,
+      ]);
+      if (cancelled) return;
+      const [globalResult, marketResult] = secondaryNewsResults;
       const combined = [
         ...(globalResult.status === "fulfilled" ? globalResult.value?.articles || [] : []),
         ...(marketResult.status === "fulfilled" ? marketResult.value?.articles || [] : []),
@@ -6999,9 +7015,8 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
         seen.add(key);
         return true;
       }).slice(0, 15));
-      setLoading(false);
     }
-    loadResults();
+    loadResults().catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [normalized, canonicalTopic, matchingDefinitions]);
 
