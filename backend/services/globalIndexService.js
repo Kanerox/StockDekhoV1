@@ -92,6 +92,11 @@ function observationDate(value) {
   return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
 }
 
+function observationAgeMs(value) {
+  const timestamp = new Date(value).getTime();
+  return Number.isFinite(timestamp) ? Date.now() - timestamp : Number.POSITIVE_INFINITY;
+}
+
 async function getIntradayObservation(definition) {
   const cached = intradayCache.get(definition.key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
@@ -138,7 +143,10 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     definition.sessions.some(([open, close]) => preflightClock.minutes >= open && preflightClock.minutes < close);
   const quoteSessionDate = observationDate(quote?.regularMarketTime);
   const preflightHistoryBacked = /historical/i.test(String(quote?.quoteSourceName || ""));
-  if (preflightOpen && (quoteSessionDate !== preflightClock.date || preflightHistoryBacked)) {
+  const preflightWeekday = !["Sat", "Sun"].includes(preflightClock.weekday);
+  const marketHasOpenedToday = preflightWeekday && preflightClock.minutes >= Math.min(...definition.sessions.map((session) => session[0]));
+  const quoteIsTooOldWhileOpen = preflightOpen && observationAgeMs(quote?.regularMarketTime) > 12 * 60 * 1000;
+  if (marketHasOpenedToday && (quoteSessionDate !== preflightClock.date || preflightHistoryBacked || quoteIsTooOldWhileOpen)) {
     try {
       const intraday = await getIntradayObservation(definition);
       if (observationDate(intraday.marketTime) === preflightClock.date) {
@@ -166,6 +174,20 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   }
   const closes = points.map((point) => point.adjustedClose);
   const latestSessionDate = observationDate(points.at(-1)?.date);
+
+  if (preflightOpen) {
+    const age = observationAgeMs(quote?.regularMarketTime);
+    if (age < -2 * 60 * 1000 || age > 20 * 60 * 1000) {
+      throw new Error(`No fresh live observation for ${definition.key}`);
+    }
+  }
+
+  // Once today's session has begun, do not publish an older session as if it
+  // were the latest one. The overview omits this index until a provider
+  // supplies a genuine observation for the current exchange date.
+  if (marketHasOpenedToday && observationDate(quote?.regularMarketTime) !== preflightClock.date && latestSessionDate !== preflightClock.date) {
+    throw new Error(`No current-session observation for ${definition.key}`);
+  }
   const previousClose = closes.at(-2);
   const latestClose = closes.at(-1);
   const historyChange = latestClose - previousClose;

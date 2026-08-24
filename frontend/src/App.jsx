@@ -1347,6 +1347,7 @@ function Header({
    MARKETS HOME PAGE
    ========================================================================================= */
 function IndexCard({ idx, onOpen, matchCurrencyCard = false }) {
+  const compactGlobal = matchCurrencyCard;
   const isDemo = Boolean(idx.demo);
   const isRateContext = idx.isVix || idx.isGsec;
   const todayPointChange = idx.isVix ? idx.change : null;
@@ -1362,17 +1363,17 @@ function IndexCard({ idx, onOpen, matchCurrencyCard = false }) {
       onClick={() => onOpen(idx.key)}
       className="sd-row-hover"
       style={{
-      cursor: "pointer", border: `1px solid ${THEME.hairline}`, borderRadius: 6, padding: matchCurrencyCard ? 14 : "12px 14px",
+      cursor: "pointer", border: `1px solid ${THEME.hairline}`, borderRadius: 6, padding: compactGlobal ? 12 : "12px 14px",
       background: THEME.panel,
-      width: matchCurrencyCard ? 220 : 184,
-      minWidth: matchCurrencyCard ? 220 : 184,
-      height: matchCurrencyCard ? 159 : 136,
+      width: compactGlobal ? 204 : 184,
+      minWidth: compactGlobal ? 204 : 184,
+      height: compactGlobal ? 148 : 136,
       display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <div style={{ fontSize: matchCurrencyCard ? 13.5 : 12.5, fontWeight: 700, color: THEME.creamDim, lineHeight: 1.3, maxWidth: matchCurrencyCard ? 158 : 124, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{idx.name}</div>
-          <div className="sd-mono" style={{ fontSize: matchCurrencyCard ? 20 : 17, marginTop: 12 }}>
+          <div style={{ fontSize: compactGlobal ? 13 : 12.5, fontWeight: 700, color: THEME.creamDim, lineHeight: 1.3, maxWidth: compactGlobal ? 144 : 124, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{idx.name}</div>
+          <div className="sd-mono" style={{ fontSize: compactGlobal ? 19 : 17, marginTop: compactGlobal ? 9 : 12 }}>
             {Number.isFinite(idx.value) ? (idx.isGsec ? `${fmtNum(idx.value, 2)}%` : idx.isVix ? fmtNum(idx.value) : fmtInt(Math.round(idx.value))) : "—"}
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 1 }}>
@@ -1387,12 +1388,12 @@ function IndexCard({ idx, onOpen, matchCurrencyCard = false }) {
         />
       </div>
       <div>
-        <div style={{ display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${matchCurrencyCard ? 56 : 44}px`, columnGap: 12, alignItems: "center" }}>
+        <div style={{ display: "grid", gridTemplateColumns: `minmax(0, 1fr) ${compactGlobal ? 52 : 44}px`, columnGap: 9, alignItems: "center" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 3, whiteSpace: "nowrap", flexShrink: 0 }}>
             <span style={{ fontSize: matchCurrencyCard ? 10.5 : 9.5, color: THEME.inkDim, whiteSpace: "nowrap" }}>{isRateContext ? "1M change" : "1M return"}</span>
             {idx.isGsec ? neutralDelta(idx.oneMonthBps, "bps") : idx.isVix ? neutralDelta(monthPointChange, "pts") : <Move value={idx.oneMonthReturn} size={matchCurrencyCard ? 11.5 : 10} />}
           </div>
-          <Sparkline data={idx.sparkline || []} width={matchCurrencyCard ? 56 : 44} height={matchCurrencyCard ? 30 : 24} />
+          <Sparkline data={idx.sparkline || []} width={compactGlobal ? 52 : 44} height={compactGlobal ? 27 : 24} />
         </div>
         <div style={{ fontSize: 10, color: THEME.inkDim, marginTop: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {isDemo
@@ -6663,21 +6664,21 @@ const globalMarketNews = globalNewsData.map((article) => ({
           </Panel>
         )}
         {!currenciesLoading && !currenciesError && currencies.map((c) => (
-          <Panel key={c.code} onClick={() => setActiveCode(c.code)} className="sd-row-hover" style={{ padding: 14, cursor: "pointer", width: 220, minWidth: 220, flexShrink: 0 }}>
+          <Panel key={c.code} onClick={() => setActiveCode(c.code)} className="sd-row-hover" style={{ padding: 12, cursor: "pointer", width: 204, minWidth: 204, height: 148, display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0 }}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
-              <div style={{ fontWeight: 700, fontSize: 13.5 }}>{c.code}/INR</div>
+              <div style={{ fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>{c.code}/INR</div>
               <LiveTag live small statusLabel={hasFreshCurrencyQuote(c) ? "Live" : "EOD"} />
             </div>
             <div style={{ fontSize: 11, color: THEME.inkDim }}>{c.name}</div>
-            <div className="sd-mono" style={{ fontSize: 20, marginTop: 6 }}>
+            <div className="sd-mono" style={{ fontSize: 19, marginTop: 4 }}>
               {Number.isFinite(c.rate) ? `₹${fmtNum(c.rate, c.code === "JPY" ? 3 : 2)}` : "—"}
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 1, marginBottom: 8 }}>
               <span style={{ fontSize: 10.5, color: THEME.inkDim }}>Daily</span>
               {Number.isFinite(c.chgPct) ? <Move value={c.chgPct} /> : <span>—</span>}
             </div>
-            {c.spark.length > 1 && <Sparkline data={c.spark} width={140} height={30} />}
-            <div style={{ fontSize: 10, color: THEME.inkDim, marginTop: 4 }}>
+            {c.spark.length > 1 && <Sparkline data={c.spark} width={132} height={27} />}
+            <div style={{ fontSize: 9.5, color: THEME.inkDim, marginTop: 3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {Number.isFinite(c.low52) && Number.isFinite(c.high52)
                 ? `1M daily trend · 52W ₹${fmtNum(c.low52, c.code === "JPY" ? 3 : 2)}–₹${fmtNum(c.high52, c.code === "JPY" ? 3 : 2)} · ${c.sourceDate}`
                 : `1M daily trend · ${c.sourceDate}`}
