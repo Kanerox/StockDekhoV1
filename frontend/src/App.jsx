@@ -6842,8 +6842,8 @@ const globalMarketNews = globalNewsData.map((article) => ({
       )}
 
       <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 14, lineHeight: 1.5, maxWidth: 780 }}>
-        Educational context: currency levels reflect trade flows, interest-rate differentials and capital flows between
-        India and the relevant economy. This page does not forecast future currency movements.
+        Educational context: global indices, INR reference rates and related reporting are shown to provide international
+        market context for research. Reference rates are not tradable quotes, and this page does not forecast market or currency movements.
       </div>
     </div>
   );
