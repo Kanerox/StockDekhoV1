@@ -28,7 +28,7 @@ const PROVIDER_TTLS = {
   google: 15 * 60 * 1000,
 };
 const PROVIDER_RETENTION_MS = 48 * 60 * 60 * 1000;
-const DAILY_PROVIDER_LIMITS = { marketaux: 85, currents: 900 };
+const DAILY_PROVIDER_LIMITS = { marketaux: 85, currents: 225 };
 
 function diagnostic(message) {
   if (NEWS_DIAGNOSTICS) console.info(`[news] ${message}`);
