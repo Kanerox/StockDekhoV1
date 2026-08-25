@@ -108,7 +108,29 @@ async function getCachedValue(key, maxAgeMs) {
   return entry.value;
 }
 
+async function incrementCacheCounter(key, retentionMs) {
+  const redis = await getRedisClient();
+
+  if (redis) {
+    try {
+      const namespacedKey = cacheKey(key);
+      const count = await redis.incr(namespacedKey);
+      if (count === 1) await redis.pExpire(namespacedKey, retentionMs);
+      return count;
+    } catch (error) {
+      console.error(`Unable to increment Redis key ${key}:`, error.message);
+    }
+  }
+
+  const current = getMemoryEntry(key);
+  const count = Number(current?.value || 0) + 1;
+  const payload = { value: count, savedAt: Date.now() };
+  memoryCache.set(key, { payload, expiresAt: Date.now() + retentionMs });
+  return count;
+}
+
 module.exports = {
   getCachedValue,
   setCacheEntry,
+  incrementCacheCounter,
 };

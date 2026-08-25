@@ -11,6 +11,7 @@ const {
 const {
   getMarketDataProviderName,
 } = require("../providers/marketData");
+const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
 
 function valueOrNull(value) {
   return typeof value === "number" && Number.isFinite(value)
@@ -182,7 +183,11 @@ async function getSectorSummary(definition) {
 }
 
 async function getSectorOverview() {
-  return Promise.all(SECTORS.map(getSectorSummary));
+  const cached = await getCachedValue("sector-overview:v2", 15 * 60 * 1000);
+  if (cached) return cached;
+  const overview = await Promise.all(SECTORS.map(getSectorSummary));
+  await setCacheEntry("sector-overview:v2", overview, 24 * 60 * 60 * 1000);
+  return overview;
 }
 
 async function getSectorDetail(key, range = "1Y") {

@@ -123,7 +123,8 @@ export async function getMarketPerformers(
           symbols: symbols.join(","),
           range,
         },
-      }
+      },
+      15 * 60 * 1000
     );
 
     return response.data;

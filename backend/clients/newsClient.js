@@ -3,6 +3,7 @@ const Parser = require("rss-parser");
 const {
   getCachedValue,
   setCacheEntry,
+  incrementCacheCounter,
 } = require("./cacheClient");
 
 const currentsProvider = require(
@@ -20,6 +21,33 @@ const CACHE_RETENTION_MS =
 
 const inFlightRequests = new Map();
 const rssParser = new Parser();
+const NEWS_DIAGNOSTICS = process.env.NEWS_DIAGNOSTICS === "true";
+const PROVIDER_TTLS = {
+  marketaux: 6 * 60 * 60 * 1000,
+  currents: 30 * 60 * 1000,
+  google: 15 * 60 * 1000,
+};
+const PROVIDER_RETENTION_MS = 48 * 60 * 60 * 1000;
+const DAILY_PROVIDER_LIMITS = { marketaux: 85, currents: 900 };
+
+function diagnostic(message) {
+  if (NEWS_DIAGNOSTICS) console.info(`[news] ${message}`);
+}
+
+function providerDayKey(provider) {
+  return `news-provider-usage:${provider}:${new Date().toISOString().slice(0, 10)}`;
+}
+
+async function reserveProviderRequest(provider) {
+  const limit = DAILY_PROVIDER_LIMITS[provider];
+  if (!limit) return true;
+  const count = await incrementCacheCounter(providerDayKey(provider), 26 * 60 * 60 * 1000);
+  if (count > limit) {
+    if (count === limit + 1) console.warn(`[news] ${provider} daily safety budget reached; cached and alternate sources will be used.`);
+    return false;
+  }
+  return true;
+}
 
 function getMarketauxApiKey() {
   const apiKey =
@@ -235,11 +263,11 @@ async function getCachedArticles(
   );
 }
 
-async function saveCachedArticles(cacheKey, articles) {
+async function saveCachedArticles(cacheKey, articles, retentionMs = CACHE_RETENTION_MS) {
   await setCacheEntry(
     persistentCacheKey(cacheKey),
     articles,
-    CACHE_RETENTION_MS
+    retentionMs
   );
 }
 
@@ -247,29 +275,35 @@ function hasArticles(value) {
   return Array.isArray(value) && value.length > 0;
 }
 
-async function getOrFetchArticles(cacheKey, fetchArticles) {
+async function getOrFetchArticles(cacheKey, fetchArticles, options = {}) {
+  const freshTtlMs = options.freshTtlMs || CACHE_TTL_MS;
+  const retentionMs = options.retentionMs || CACHE_RETENTION_MS;
   const cachedArticles =
-    await getCachedArticles(cacheKey);
+    await getCachedArticles(cacheKey, freshTtlMs);
 
   if (hasArticles(cachedArticles)) {
+    diagnostic(`${options.label || "aggregate"} cache hit`);
     return cachedArticles;
   }
 
+  diagnostic(`${options.label || "aggregate"} cache miss`);
+
   if (inFlightRequests.has(cacheKey)) {
+    diagnostic(`${options.label || "aggregate"} request coalesced`);
     return inFlightRequests.get(cacheKey);
   }
 
   const request = (async () => {
     const staleArticles = await getCachedArticles(
       cacheKey,
-      CACHE_RETENTION_MS
+      retentionMs
     );
 
     try {
       const articles = await fetchArticles();
 
       if (articles.length > 0) {
-        await saveCachedArticles(cacheKey, articles);
+        await saveCachedArticles(cacheKey, articles, retentionMs);
         return articles;
       }
 
@@ -292,6 +326,19 @@ async function getOrFetchArticles(cacheKey, fetchArticles) {
 
   inFlightRequests.set(cacheKey, request);
   return request;
+}
+
+async function getProviderArticles(provider, search, fetchArticles) {
+  const cacheKey = getCacheKey({ type: `provider:${provider}`, search, numberOfDays: 14, countries: "shared" });
+  return getOrFetchArticles(cacheKey, async () => {
+    if (!(await reserveProviderRequest(provider))) return [];
+    diagnostic(`${provider} upstream request`);
+    return fetchArticles();
+  }, {
+    freshTtlMs: PROVIDER_TTLS[provider],
+    retentionMs: PROVIDER_RETENTION_MS,
+    label: provider,
+  });
 }
 
 async function fetchMarketauxNews({
@@ -363,6 +410,8 @@ async function fetchMarketauxNews({
       );
     }
 
+    if (expectedProviderFailure) console.warn(`[news] Marketaux quota/rate response (${status || errorCode || "unknown"}).`);
+
     return [];
   }
 }
@@ -404,16 +453,16 @@ async function fetchCompanyNews(
   return getOrFetchArticles(cacheKey, async () => {
     const results = await Promise.allSettled([
       settleWithin(
-        fetchMarketauxNews({
+        getProviderArticles("marketaux", `company:${companyName}`, () => fetchMarketauxNews({
           search: companyName,
           numberOfDays: 14,
           countries: "in",
-        }),
+        })),
         8000
       ),
 
       settleWithin(
-        currentsProvider.getCompanyNews({
+        getProviderArticles("currents", `company:${companyName}`, () => currentsProvider.getCompanyNews({
           companyName,
           aliases: [
             String(companyName)
@@ -422,12 +471,12 @@ async function fetchCompanyNews(
               .trim(),
           ],
           limit: 20,
-        }),
+        })),
         8000
       ),
 
       settleWithin(
-        fetchGoogleNewsRss(companyName, 14),
+        getProviderArticles("google", `company:${companyName}`, () => fetchGoogleNewsRss(companyName, 14)),
         12000
       ),
     ]);
@@ -495,23 +544,23 @@ async function fetchGlobalMarketNews(
   return getOrFetchArticles(cacheKey, async () => {
     const results = await Promise.allSettled([
       settleWithin(
-        fetchMarketauxNews({
+        getProviderArticles("marketaux", searchQuery, () => fetchMarketauxNews({
           search: searchQuery,
           numberOfDays: 14,
           countries: "",
-        }),
+        })),
         8000
       ),
 
       settleWithin(
-        currentsProvider.getGlobalMarketNews({
+        getProviderArticles("currents", searchQuery, () => currentsProvider.getGlobalMarketNews({
           topics: [normalizeSearchQuery(searchQuery)],
           limit: 20,
-        }),
+        })),
         8000
       ),
 
-      settleWithin(fetchGoogleNewsRss(searchQuery, 14), 12000),
+      settleWithin(getProviderArticles("google", searchQuery, () => fetchGoogleNewsRss(searchQuery, 14)), 12000),
     ]);
 
     const marketauxArticles =

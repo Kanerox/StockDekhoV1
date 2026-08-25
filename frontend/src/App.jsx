@@ -2032,6 +2032,7 @@ function EventStrip({ mode, onOpen, events, loading, error }) {
 }
 
 function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, toggleWatch, compareList, toggleCompare }) {
+  const readiness = useRef({ startedAt: performance.now(), reported: new Set(["shell"]) });
   const [liveIndices, setLiveIndices] = useState([]);
   const [indicesLoading, setIndicesLoading] = useState(true);
   const [indicesError, setIndicesError] = useState("");
@@ -2050,6 +2051,19 @@ function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, tog
   const [performerStocks, setPerformerStocks] = useState([]);
   const [performersLoading, setPerformersLoading] = useState(true);
   const [performersError, setPerformersError] = useState("");
+
+  const reportReadiness = (name, ready) => {
+    if (!ready || readiness.current.reported.has(name)) return;
+    readiness.current.reported.add(name);
+    console.info(`[markets-readiness] ${name}: ${Math.round(performance.now() - readiness.current.startedAt)}ms`);
+  };
+
+  useEffect(() => { reportReadiness("index-cards", !indicesLoading); }, [indicesLoading]);
+  useEffect(() => { reportReadiness("market-leadership-and-breadth", !marketEventsLoading && Boolean(niftyDetail)); }, [marketEventsLoading, niftyDetail]);
+  useEffect(() => { reportReadiness("sector-heatmap", !sectorLoading); }, [sectorLoading]);
+  useEffect(() => { reportReadiness("best-worst-performers", !performersLoading); }, [performersLoading]);
+  useEffect(() => { reportReadiness("market-news", !marketEventsLoading); }, [marketEventsLoading]);
+  useEffect(() => { reportReadiness("overlay-hidden", !indicesLoading); }, [indicesLoading]);
 
   const performerSymbols = useMemo(
   () => RAW_STOCKS.map((stock) => stock.ticker),
@@ -2497,7 +2511,7 @@ useEffect(() => {
 ]);
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <PageLoadingOverlay active={[indicesLoading, sectorLoading, performersLoading].filter(Boolean).length > 1} />
+      <PageLoadingOverlay active={indicesLoading} />
       <SectionHeading eyebrow="India Equities · Markets" title="Indian Markets" />
 
       <div className="sd-scroll" style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6, marginBottom: 20, alignItems: "flex-start" }}>
@@ -6600,42 +6614,26 @@ function CurrenciesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    let retryTimer = null;
-    let collectedArticles = [];
-
-    async function loadGlobalNews(attempt = 0) {
+    async function loadGlobalNews() {
       setGlobalNewsLoading(true);
       setGlobalNewsError("");
 
       try {
-        const data = await getGlobalMarketNews(attempt);
+        const data = await getGlobalMarketNews();
 
         const articles = data.articles || [];
-        const byArticle = new Map(
-          [...collectedArticles, ...articles].map((article) => [article.id || article.link, article])
-        );
-        collectedArticles = [...byArticle.values()]
+        const collectedArticles = [...new Map(
+          articles.map((article) => [article.id || article.link, article])
+        ).values()]
           .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
           .slice(0, 32);
-        if (!cancelled && collectedArticles.length < 25 && attempt < 3) {
-          retryTimer = window.setTimeout(() => loadGlobalNews(attempt + 1), 1500);
-          return;
-        }
         if (!cancelled) {
           setGlobalNewsData(collectedArticles);
           setGlobalNewsPage(1);
         }
       } catch (error) {
-        if (!cancelled && attempt < 3) {
-          retryTimer = window.setTimeout(() => loadGlobalNews(attempt + 1), 1500);
-          return;
-        }
         if (!cancelled) {
-          if (collectedArticles.length) {
-            setGlobalNewsData(collectedArticles);
-          } else {
-            setGlobalNewsError("Unable to load current global market news.");
-          }
+          setGlobalNewsError("Unable to load current global market news.");
         }
       } finally {
         if (!cancelled) {
@@ -6648,7 +6646,6 @@ function CurrenciesPage() {
 
     return () => {
       cancelled = true;
-      if (retryTimer) window.clearTimeout(retryTimer);
     };
   }, []);
 

@@ -2,10 +2,12 @@ const { fetchMarketData } = require("../clients/marketClient");
 const { fetchHistoricalPrices } = require("../clients/historyClient");
 const yahooProvider = require("../providers/marketData/yahooProvider");
 const { GLOBAL_INDICES, getGlobalIndexDefinition } = require("../config/globalIndexConfig");
+const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
 
 const DIRECT_GLOBAL_QUOTE_KEYS = new Set(["NASDAQ", "DOW", "EUROSTOXX50"]);
 const intradayCache = new Map();
 const INTRADAY_TTL_MS = 5 * 60 * 1000;
+let overviewInFlight = null;
 
 function finite(value) {
   return Number.isFinite(Number(value)) ? Number(value) : null;
@@ -52,14 +54,24 @@ function exchangeClock(definition, now = new Date()) {
 }
 
 function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked = false) {
-  if (historyBacked) return "eod";
-  const marketState = String(quote?.marketState || "").toUpperCase();
-  if (marketState === "REGULAR") return "live";
-  if (["CLOSED", "POST", "POSTPOST", "PRE", "PREPRE"].includes(marketState)) return "eod";
   const clock = exchangeClock(definition);
   const weekday = !["Sat", "Sun"].includes(clock.weekday);
   const scheduledOpen = weekday && definition.sessions.some(([open, close]) => clock.minutes >= open && clock.minutes < close);
-  return scheduledOpen && latestSessionDate === clock.date ? "live" : "eod";
+  const observation = exchangeClock(definition, new Date(quote?.regularMarketTime || 0));
+  const observationDate = observation.date;
+  const finalClose = Math.max(...definition.sessions.map((session) => session[1]));
+  const currentSessionComplete = observationDate === clock.date && observation.minutes >= finalClose - 2;
+  const marketState = String(quote?.marketState || "").toUpperCase();
+  const providerIsDelayed = /delayed/i.test(String(quote?.quoteSourceName || ""));
+  const observationIsFresh = observationAgeMs(quote?.regularMarketTime) <= 12 * 60 * 1000;
+
+  if (scheduledOpen && (providerIsDelayed || definition.delayMinutes > 0) && observationDate === clock.date) return "delayed";
+  if (!historyBacked && marketState === "REGULAR" && scheduledOpen && observationDate === clock.date) return "live";
+  if (!historyBacked && scheduledOpen && observationDate === clock.date && observationIsFresh) return "live";
+  if (scheduledOpen && observationDate === clock.date) return "delayed";
+  if (observationDate === clock.date && !currentSessionComplete) return "delayed";
+  if (historyBacked && latestSessionDate === clock.date && !currentSessionComplete) return "delayed";
+  return "eod";
 }
 
 function exchangeSessionCloseTimestamp(dateKey, definition) {
@@ -90,6 +102,11 @@ function exchangeSessionCloseTimestamp(dateKey, definition) {
 function observationDate(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+}
+
+function exchangeObservationDate(value, definition) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : exchangeClock(definition, date).date;
 }
 
 function observationAgeMs(value) {
@@ -141,7 +158,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const preflightClock = exchangeClock(definition);
   const preflightOpen = !["Sat", "Sun"].includes(preflightClock.weekday) &&
     definition.sessions.some(([open, close]) => preflightClock.minutes >= open && preflightClock.minutes < close);
-  const quoteSessionDate = observationDate(quote?.regularMarketTime);
+  const quoteSessionDate = exchangeObservationDate(quote?.regularMarketTime, definition);
   const preflightHistoryBacked = /historical/i.test(String(quote?.quoteSourceName || ""));
   const preflightWeekday = !["Sat", "Sun"].includes(preflightClock.weekday);
   const marketHasOpenedToday = preflightWeekday && preflightClock.minutes >= Math.min(...definition.sessions.map((session) => session[0]));
@@ -149,7 +166,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   if (marketHasOpenedToday && (quoteSessionDate !== preflightClock.date || preflightHistoryBacked || quoteIsTooOldWhileOpen)) {
     try {
       const intraday = await getIntradayObservation(definition);
-      if (observationDate(intraday.marketTime) === preflightClock.date) {
+      if (exchangeObservationDate(intraday.marketTime, definition) === preflightClock.date) {
         quote = {
           ...quote,
           regularMarketPrice: intraday.price,
@@ -185,7 +202,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   // Once today's session has begun, do not publish an older session as if it
   // were the latest one. The overview omits this index until a provider
   // supplies a genuine observation for the current exchange date.
-  if (marketHasOpenedToday && observationDate(quote?.regularMarketTime) !== preflightClock.date && latestSessionDate !== preflightClock.date) {
+  if (marketHasOpenedToday && exchangeObservationDate(quote?.regularMarketTime, definition) !== preflightClock.date && latestSessionDate !== preflightClock.date) {
     throw new Error(`No current-session observation for ${definition.key}`);
   }
   const previousClose = closes.at(-2);
@@ -217,9 +234,14 @@ async function getGlobalIndexDetail(key, range = "1Y") {
 }
 
 async function getGlobalIndexOverview() {
-  const values = [];
-  for (let offset = 0; offset < GLOBAL_INDICES.length; offset += 3) {
-    const definitions = GLOBAL_INDICES.slice(offset, offset + 3);
+  const cached = await getCachedValue("global-index-overview:v3", 5 * 60 * 1000);
+  if (cached) return cached;
+  if (overviewInFlight) return overviewInFlight;
+
+  overviewInFlight = (async () => {
+    const values = [];
+    for (let offset = 0; offset < GLOBAL_INDICES.length; offset += 5) {
+      const definitions = GLOBAL_INDICES.slice(offset, offset + 5);
     const results = await Promise.allSettled(
       definitions.map(async (definition) => {
       const detail = await getGlobalIndexDetail(definition.key, "1M");
@@ -234,11 +256,14 @@ async function getGlobalIndexOverview() {
       };
       })
     );
-    results.forEach((result) => {
-      if (result.status === "fulfilled") values.push(result.value);
-    });
-  }
-  return values;
+      results.forEach((result) => {
+        if (result.status === "fulfilled") values.push(result.value);
+      });
+    }
+    await setCacheEntry("global-index-overview:v3", values, 24 * 60 * 60 * 1000);
+    return values;
+  })().finally(() => { overviewInFlight = null; });
+  return overviewInFlight;
 }
 
 module.exports = { getGlobalIndexOverview, getGlobalIndexDetail };

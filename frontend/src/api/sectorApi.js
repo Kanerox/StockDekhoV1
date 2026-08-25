@@ -1,7 +1,7 @@
 import { cachedGet } from "./apiClient";
 
 export async function getSectors() {
-  const response = await cachedGet("/sectors");
+  const response = await cachedGet("/sectors", {}, 15 * 60 * 1000);
   return response.data.sectors || [];
 }
 

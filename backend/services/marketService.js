@@ -4,6 +4,7 @@ const {
   fetchPeerFundamentals,
 } = require("../clients/marketClient");
 const { fetchHistoricalPrices } = require("../clients/historyClient");
+const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
 const {
   getMarketDataProviderName,
 } = require("../providers/marketData");
@@ -15,7 +16,17 @@ const getMarketData = () => {
 };
 
 const getStockDataFromService = async (symbol) => {
-  const quote = await fetchMarketData(symbol);
+  const [quote, summary] = await Promise.all([
+    fetchMarketData(symbol),
+    fetchPeerFundamentals(symbol).catch(() => null),
+  ]);
+  const reportedRoe = valueOrNull(summary?.financialData?.returnOnEquity);
+  const reportedDebtToEquity = valueOrNull(summary?.financialData?.debtToEquity);
+  const trailingEps = valueOrNull(quote.epsTrailingTwelveMonths);
+  const bookValue = valueOrNull(quote.bookValue);
+  const calculatedRoe = trailingEps !== null && bookValue !== null && bookValue !== 0
+    ? (trailingEps / bookValue) * 100
+    : null;
 
   return {
     symbol: quote.symbol,
@@ -41,6 +52,8 @@ const getStockDataFromService = async (symbol) => {
 
     trailingPE: quote.trailingPE,
     trailingEps: quote.epsTrailingTwelveMonths,
+    returnOnEquity: reportedRoe === null ? calculatedRoe : reportedRoe * 100,
+    debtToEquity: reportedDebtToEquity === null ? null : reportedDebtToEquity / 100,
     dividendYield: quote.dividendYield,
 
     exchange: quote.fullExchangeName,
@@ -261,6 +274,21 @@ function calculatePeriodReturn(prices) {
   );
 }
 
+function calculateRangeReturn(prices, range) {
+  const valid = (Array.isArray(prices) ? prices : []).filter((point) =>
+    Number.isFinite(valueOrNull(point.adjustedClose) ?? valueOrNull(point.close))
+  );
+  if (valid.length < 2) return null;
+  const latest = new Date(valid.at(-1).date);
+  const cutoff = new Date(latest);
+  if (range === "1W") cutoff.setDate(cutoff.getDate() - 10);
+  else if (range === "1M") cutoff.setMonth(cutoff.getMonth() - 1);
+  else if (range === "6M") cutoff.setMonth(cutoff.getMonth() - 6);
+  else cutoff.setFullYear(cutoff.getFullYear() - 1);
+  const selected = valid.filter((point) => new Date(point.date) >= cutoff);
+  return calculatePeriodReturn(selected.length >= 2 ? selected : valid);
+}
+
 const getMarketPerformersFromService = async (
   symbols,
   range = "1M"
@@ -287,8 +315,13 @@ const getMarketPerformersFromService = async (
     );
   }
 
-  const { period1, period2 } =
-    getPerformerPeriod(normalizedRange);
+  const performerCacheKey = `market-performers:v2:${normalizedRange}:${uniqueSymbols.join(",")}`;
+  const cachedPerformers = await getCachedValue(performerCacheKey, 15 * 60 * 1000);
+  if (cachedPerformers) return cachedPerformers;
+
+  // All four tabs share one one-year history window. That lets Redis reuse the
+  // same 200 histories instead of downloading a different window per tab.
+  const { period1, period2 } = getPerformerPeriod("1Y");
 
   const historyResults = new Array(uniqueSymbols.length);
   let nextHistoryIndex = 0;
@@ -352,8 +385,7 @@ const getMarketPerformersFromService = async (
           ? historyResults[index].value
           : [];
 
-      const returnPercent =
-        calculatePeriodReturn(prices);
+      const returnPercent = calculateRangeReturn(prices, normalizedRange);
       const latestHistoricalVolume = [...prices]
         .reverse()
         .map((point) => valueOrNull(point?.volume))
@@ -409,11 +441,13 @@ const getMarketPerformersFromService = async (
         stockA.returnPercent
     );
 
-  return {
+  const response = {
     range: normalizedRange,
     stockCount: stocks.length,
     stocks,
   };
+  await setCacheEntry(performerCacheKey, response, 24 * 60 * 60 * 1000);
+  return response;
 };
 
 module.exports = {

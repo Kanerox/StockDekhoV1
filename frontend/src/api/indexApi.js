@@ -1,7 +1,7 @@
 import { cachedGet } from "./apiClient";
 
 export async function getIndices() {
-  const response = await cachedGet("/indices");
+  const response = await cachedGet("/indices", {}, 5 * 60 * 1000);
   return response.data.indices || [];
 }
 
