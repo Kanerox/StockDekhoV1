@@ -12,6 +12,11 @@ const {
 const {
   getMarketDataProviderName,
 } = require("../providers/marketData");
+const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
+const { sessionKey } = require("../utils/marketDataValidation");
+
+const LEADERSHIP_SNAPSHOT_FRESH_MS = 5 * 60 * 1000;
+const LEADERSHIP_SNAPSHOT_RETENTION_MS = 48 * 60 * 60 * 1000;
 
 function valueOrNull(value) {
   return typeof value === "number" && Number.isFinite(value)
@@ -171,6 +176,26 @@ function mapQuote(definition, quote) {
   };
 }
 
+function leadershipSnapshotCacheKey(range) {
+  return `index-detail-consistent:NIFTY50:${range}:v1`;
+}
+
+function isConsistentLeadershipDetail(detail) {
+  const indexSession = sessionKey(detail?.marketTime);
+  const constituents = Array.isArray(detail?.constituents)
+    ? detail.constituents
+    : [];
+  return Boolean(
+    indexSession &&
+    constituents.length === 50 &&
+    constituents.every(
+      (stock) =>
+        Number.isFinite(stock?.chgPct) &&
+        sessionKey(stock?.marketTime) === indexSession
+    )
+  );
+}
+
 async function getIndexSummary(definition) {
   const { period1, period2 } = resolvePeriod("1M");
   const [quote, points] = await Promise.all([
@@ -203,6 +228,17 @@ async function getIndexDetail(key, range = "1Y") {
     throw new Error("Unknown index");
   }
 
+  const leadershipCacheKey = definition.key === "NIFTY50"
+    ? leadershipSnapshotCacheKey(range)
+    : null;
+  if (leadershipCacheKey) {
+    const cached = await getCachedValue(
+      leadershipCacheKey,
+      LEADERSHIP_SNAPSHOT_FRESH_MS
+    );
+    if (cached) return cached;
+  }
+
   const { period1, period2 } = resolvePeriod(range);
   const [quote, points, constituents] = await Promise.all([
     fetchMarketData(definition.symbol),
@@ -219,7 +255,7 @@ async function getIndexDetail(key, range = "1Y") {
     .map((point) => point.adjustedClose)
     .filter(Number.isFinite);
 
-  return {
+  const detail = {
     ...mapQuote(definition, quote),
     ...(valueOrNull(quote.regularMarketChangePercent) === null
       ? calculateDailyMove(sessions)
@@ -238,6 +274,33 @@ async function getIndexDetail(key, range = "1Y") {
     })),
     constituents,
   };
+
+  if (!leadershipCacheKey) return detail;
+
+  if (isConsistentLeadershipDetail(detail)) {
+    await setCacheEntry(
+      leadershipCacheKey,
+      detail,
+      LEADERSHIP_SNAPSHOT_RETENTION_MS
+    );
+    return detail;
+  }
+
+  const previous = await getCachedValue(
+    leadershipCacheKey,
+    LEADERSHIP_SNAPSHOT_RETENTION_MS
+  );
+  if (
+    isConsistentLeadershipDetail(previous) &&
+    sessionKey(previous.marketTime) === sessionKey(detail.marketTime)
+  ) {
+    console.warn(
+      "Preserving the last consistent Nifty 50 leadership snapshot for the current session."
+    );
+    return previous;
+  }
+
+  return detail;
 }
 
 module.exports = {

@@ -339,9 +339,30 @@ async function upstoxChart(symbol, options = {}) {
   return { quotes };
 }
 
-function quoteDateKey(quote) {
+const GLOBAL_INDEX_TIME_ZONES = {
+  "^GSPC": "America/New_York",
+  "^IXIC": "America/New_York",
+  "^DJI": "America/New_York",
+  "^HSI": "Asia/Hong_Kong",
+  "^N225": "Asia/Tokyo",
+  "^GDAXI": "Europe/Berlin",
+  "^FTSE": "Europe/London",
+  "^STOXX50E": "Europe/Berlin",
+  "^KS11": "Asia/Seoul",
+  "^TWII": "Asia/Taipei",
+};
+
+function quoteDateKey(quote, symbol) {
   const date = new Date(quote?.date);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
+  if (Number.isNaN(date.getTime())) return null;
+  const timeZone = GLOBAL_INDEX_TIME_ZONES[normalizeYahooSymbol(symbol)];
+  if (!timeZone) return date.toISOString().slice(0, 10);
+  return date.toLocaleDateString("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
 }
 
 async function chartWithYahooSupplement(symbol, options) {
@@ -355,7 +376,7 @@ async function chartWithYahooSupplement(symbol, options) {
       ...(upstoxResult?.quotes || []),
       ...(yahooResult?.quotes || []),
     ]) {
-      const key = quoteDateKey(quote);
+      const key = quoteDateKey(quote, symbol);
       if (key && Number.isFinite(quote?.close)) byDate.set(key, quote);
     }
 

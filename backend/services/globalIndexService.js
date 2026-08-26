@@ -99,11 +99,6 @@ function exchangeSessionCloseTimestamp(dateKey, definition) {
   return instant.toISOString();
 }
 
-function observationDate(value) {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString().slice(0, 10);
-}
-
 function exchangeObservationDate(value, definition) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : exchangeClock(definition, date).date;
@@ -140,7 +135,9 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const { period1, period2 } = resolvePeriod(range);
   const [baseQuote, rawPoints] = await Promise.all([
     fetchMarketData(definition.symbol),
-    fetchHistoricalPrices(definition.symbol, period1, period2),
+    fetchHistoricalPrices(definition.symbol, period1, period2, {
+      appendLatestQuote: false,
+    }),
   ]);
   let quote = baseQuote;
   if (DIRECT_GLOBAL_QUOTE_KEYS.has(definition.key)) {
@@ -183,14 +180,20 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   if (points.length < 2) throw new Error("Insufficient global-index history");
   const historyBacked = /historical/i.test(String(quote.quoteSourceName || ""));
   const currentClock = exchangeClock(definition);
-  const latestRawSessionDate = observationDate(points.at(-1)?.date);
+  const latestRawSessionDate = exchangeObservationDate(
+    points.at(-1)?.date,
+    definition
+  );
   const exchangeIsOpen = !["Sat", "Sun"].includes(currentClock.weekday) &&
     definition.sessions.some(([open, close]) => currentClock.minutes >= open && currentClock.minutes < close);
   if (historyBacked && exchangeIsOpen && latestRawSessionDate === currentClock.date && points.length > 2) {
     points = points.slice(0, -1);
   }
   const closes = points.map((point) => point.adjustedClose);
-  const latestSessionDate = observationDate(points.at(-1)?.date);
+  const latestSessionDate = exchangeObservationDate(
+    points.at(-1)?.date,
+    definition
+  );
 
   if (preflightOpen) {
     const age = observationAgeMs(quote?.regularMarketTime);
@@ -208,21 +211,40 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const previousClose = closes.at(-2);
   const latestClose = closes.at(-1);
   const historyChange = latestClose - previousClose;
-  const observationTime = historyBacked
+  const status = globalQuoteStatus(
+    quote,
+    definition,
+    latestSessionDate,
+    historyBacked
+  );
+  const completedQuoteSessionDate = exchangeObservationDate(
+    quote?.regularMarketTime,
+    definition
+  );
+  const hasCompletedDailyClose =
+    status === "eod" &&
+    latestSessionDate === completedQuoteSessionDate &&
+    Number.isFinite(latestClose) &&
+    Number.isFinite(previousClose);
+  const observationTime = hasCompletedDailyClose || historyBacked
     ? exchangeSessionCloseTimestamp(latestSessionDate, definition)
     : (quote.regularMarketTime || latestSessionDate || null);
   return {
     ...definition,
-    value: historyBacked ? latestClose : (finite(quote.regularMarketPrice) ?? latestClose),
-    change: historyBacked ? historyChange : finite(quote.regularMarketChange),
-    changePercent: historyBacked
+    value: hasCompletedDailyClose || historyBacked
+      ? latestClose
+      : (finite(quote.regularMarketPrice) ?? latestClose),
+    change: hasCompletedDailyClose || historyBacked
+      ? historyChange
+      : finite(quote.regularMarketChange),
+    changePercent: hasCompletedDailyClose || historyBacked
       ? (previousClose ? (historyChange / previousClose) * 100 : null)
       : finite(quote.regularMarketChangePercent),
     marketTime: observationTime,
     asOf: observationTime,
     sessionDateOnly: false,
     isGlobalIndex: true,
-    dataStatus: globalQuoteStatus(quote, definition, latestSessionDate, historyBacked),
+    dataStatus: status,
     isStale: Boolean(quote.isStale),
     dataProvider: quote.quoteSourceName || "market provider",
     periodReturn: returnPercent(points),
@@ -234,11 +256,18 @@ async function getGlobalIndexDetail(key, range = "1Y") {
 }
 
 async function getGlobalIndexOverview() {
-  const cached = await getCachedValue("global-index-overview:v3", 5 * 60 * 1000);
+  const cacheKey = "global-index-overview:v4";
+  const cached = await getCachedValue(cacheKey, 5 * 60 * 1000);
   if (cached) return cached;
   if (overviewInFlight) return overviewInFlight;
 
   overviewInFlight = (async () => {
+    const retained =
+      await getCachedValue(cacheKey, 24 * 60 * 60 * 1000) ||
+      await getCachedValue("global-index-overview:v3", 24 * 60 * 60 * 1000);
+    const retainedByKey = new Map(
+      (Array.isArray(retained) ? retained : []).map((item) => [item.key, item])
+    );
     const values = [];
     for (let offset = 0; offset < GLOBAL_INDICES.length; offset += 5) {
       const definitions = GLOBAL_INDICES.slice(offset, offset + 5);
@@ -260,8 +289,27 @@ async function getGlobalIndexOverview() {
         if (result.status === "fulfilled") values.push(result.value);
       });
     }
-    await setCacheEntry("global-index-overview:v3", values, 24 * 60 * 60 * 1000);
-    return values;
+    const freshByKey = new Map(values.map((item) => [item.key, item]));
+    const merged = GLOBAL_INDICES.map((definition) => {
+      const fresh = freshByKey.get(definition.key);
+      const previous = retainedByKey.get(definition.key);
+      if (!fresh) {
+        return previous ? { ...previous, dataStatus: "stale", isStale: true } : null;
+      }
+      if (!previous) return fresh;
+
+      const freshSession = exchangeObservationDate(fresh.marketTime, definition);
+      const previousSession = exchangeObservationDate(previous.marketTime, definition);
+      if (freshSession === previousSession) {
+        if (previous.dataStatus === "eod" && fresh.dataStatus !== "eod") return previous;
+        if (new Date(previous.marketTime).getTime() > new Date(fresh.marketTime).getTime()) {
+          return previous;
+        }
+      }
+      return fresh;
+    }).filter(Boolean);
+    await setCacheEntry(cacheKey, merged, 24 * 60 * 60 * 1000);
+    return merged;
   })().finally(() => { overviewInFlight = null; });
   return overviewInFlight;
 }

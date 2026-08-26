@@ -35,14 +35,16 @@ function dateKey(date) {
   });
 }
 
-function historyCacheKey(symbol, period1, period2) {
-  const key = `history:${symbol}:1d:${dateKey(period1)}:${dateKey(period2)}`;
+function historyCacheKey(symbol, period1, period2, appendLatestQuote = true) {
+  const variant = appendLatestQuote ? "" : ":completed-only";
+  const key = `history:${symbol}:1d${variant}:${dateKey(period1)}:${dateKey(period2)}`;
   const providerName = getMarketDataProviderName();
   return providerName === "yahoo" ? key : `${providerName}:v7:${key}`;
 }
 
-function latestHistoryCacheKey(symbol) {
-  const key = `history:${symbol}:1d:latest`;
+function latestHistoryCacheKey(symbol, appendLatestQuote = true) {
+  const variant = appendLatestQuote ? "" : ":completed-only";
+  const key = `history:${symbol}:1d${variant}:latest`;
   const providerName = getMarketDataProviderName();
   return providerName === "yahoo" ? key : `${providerName}:v7:${key}`;
 }
@@ -60,9 +62,9 @@ function pricesWithinRange(prices, period1, period2) {
   });
 }
 
-async function getLatestCachedPrices(symbol, period1, period2) {
+async function getLatestCachedPrices(symbol, period1, period2, appendLatestQuote) {
   const latest = await getCachedValue(
-    latestHistoryCacheKey(symbol),
+    latestHistoryCacheKey(symbol, appendLatestQuote),
     STALE_HISTORY_TTL_MS
   );
   const prices = pricesWithinRange(latest, period1, period2);
@@ -131,9 +133,19 @@ async function startRateLimitCooldown() {
   await setCacheEntry(cooldownCacheKey(), blockedUntil, RATE_LIMIT_COOLDOWN_MS);
 }
 
-async function fetchHistoricalPrices(symbol, period1, period2) {
+async function fetchHistoricalPrices(
+  symbol,
+  period1,
+  period2,
+  { appendLatestQuote = true } = {}
+) {
   const normalizedSymbol = normalizeSymbol(symbol);
-  const key = historyCacheKey(normalizedSymbol, period1, period2);
+  const key = historyCacheKey(
+    normalizedSymbol,
+    period1,
+    period2,
+    appendLatestQuote
+  );
   const freshTtl = getMarketDataProviderName() === "upstox"
     ? UPSTOX_FRESH_HISTORY_TTL_MS
     : YAHOO_FRESH_HISTORY_TTL_MS;
@@ -146,7 +158,8 @@ async function fetchHistoricalPrices(symbol, period1, period2) {
     const latestPrices = await getLatestCachedPrices(
       normalizedSymbol,
       period1,
-      period2
+      period2,
+      appendLatestQuote
     );
     if (latestPrices) return latestPrices;
     throw new Error("Yahoo Finance is temporarily rate limited");
@@ -173,15 +186,17 @@ async function fetchHistoricalPrices(symbol, period1, period2) {
           adjustedClose: Number.isFinite(quote.adjclose) ? quote.adjclose : quote.close,
           volume: Number.isFinite(quote.volume) ? quote.volume : null,
         }));
-      const prices = await appendLatestUpstoxQuote(
-        normalizedSymbol,
-        historicalPrices,
-        period1,
-        period2
-      );
+      const prices = appendLatestQuote
+        ? await appendLatestUpstoxQuote(
+            normalizedSymbol,
+            historicalPrices,
+            period1,
+            period2
+          )
+        : historicalPrices;
 
       const existingLatest = await getCachedValue(
-        latestHistoryCacheKey(normalizedSymbol),
+        latestHistoryCacheKey(normalizedSymbol, appendLatestQuote),
         STALE_HISTORY_TTL_MS
       );
       const mergedLatest = mergePrices(existingLatest, prices);
@@ -189,7 +204,7 @@ async function fetchHistoricalPrices(symbol, period1, period2) {
       await Promise.all([
         setCacheEntry(key, prices, STALE_HISTORY_TTL_MS),
         setCacheEntry(
-          latestHistoryCacheKey(normalizedSymbol),
+          latestHistoryCacheKey(normalizedSymbol, appendLatestQuote),
           mergedLatest,
           STALE_HISTORY_TTL_MS
         ),
@@ -205,7 +220,8 @@ async function fetchHistoricalPrices(symbol, period1, period2) {
       const latestPrices = await getLatestCachedPrices(
         normalizedSymbol,
         period1,
-        period2
+        period2,
+        appendLatestQuote
       );
       if (latestPrices) {
         console.warn(`Using latest cached historical prices for ${normalizedSymbol}`);

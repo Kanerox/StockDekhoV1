@@ -6534,6 +6534,7 @@ function GlobalIndexDetailPage({ indexKey, back }) {
 }
 
 function CurrenciesPage() {
+  const readiness = useRef({ startedAt: performance.now(), reported: new Set(["shell"]) });
   const [activeCode, setActiveCode] = useState(null);
   const [activeGlobalIndex, setActiveGlobalIndex] = useState(null);
   const [globalIndices, setGlobalIndices] = useState([]);
@@ -6548,6 +6549,22 @@ function CurrenciesPage() {
   const [globalNewsLoading, setGlobalNewsLoading] = useState(true);
   const [globalNewsError, setGlobalNewsError] = useState("");
   const [globalNewsPage, setGlobalNewsPage] = useState(1);
+
+  const reportGlobalReadiness = (name, ready) => {
+    if (!ready || readiness.current.reported.has(name)) return;
+    readiness.current.reported.add(name);
+    console.info(`[global-readiness] ${name}: ${Math.round(performance.now() - readiness.current.startedAt)}ms`);
+  };
+
+  useEffect(() => {
+    reportGlobalReadiness("global-indices", !globalIndicesLoading);
+  }, [globalIndicesLoading]);
+  useEffect(() => {
+    reportGlobalReadiness("currencies", !currenciesLoading);
+  }, [currenciesLoading]);
+  useEffect(() => {
+    reportGlobalReadiness("global-news", !globalNewsLoading);
+  }, [globalNewsLoading]);
 
   useEffect(() => {
     let cancelled = false;
@@ -6689,13 +6706,21 @@ const globalMarketNews = globalNewsData.map((article) => ({
   );
   const active = currencies.find((currency) => currency.code === activeCode);
   const visibleGlobalIndices = globalRegion === "All Regions" ? globalIndices : globalIndices.filter((index) => index.region === globalRegion);
+  const hasGlobalCriticalContent = globalIndices.length > 0 ||
+    currencyData.some((currency) => Number.isFinite(currency?.rate));
+  const globalOverlayActive = !hasGlobalCriticalContent &&
+    (globalIndicesLoading || currenciesLoading);
+
+  useEffect(() => {
+    reportGlobalReadiness("overlay-hidden", !globalOverlayActive);
+  }, [globalOverlayActive]);
 
   if (active) return <CurrencyDetail currency={active} back={() => setActiveCode(null)} />;
   if (activeGlobalIndex) return <GlobalIndexDetailPage indexKey={activeGlobalIndex} back={() => setActiveGlobalIndex(null)} />;
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <PageLoadingOverlay active={globalIndicesLoading || currenciesLoading} />
+      <PageLoadingOverlay active={globalOverlayActive} />
       <SectionHeading eyebrow="Global" title="Global Indices" action={
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: THEME.inkDim, transform: "translateY(24px)" }}>
           Filter by Region
