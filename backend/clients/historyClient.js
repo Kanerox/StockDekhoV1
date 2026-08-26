@@ -16,8 +16,7 @@ function normalizeSymbol(symbol) {
 
   if (
     normalized.startsWith("^") ||
-    normalized.endsWith(".NS") ||
-    normalized.endsWith(".BO")
+    /\.[A-Z]+$/.test(normalized)
   ) {
     return normalized;
   }

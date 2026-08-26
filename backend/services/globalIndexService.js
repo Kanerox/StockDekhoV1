@@ -135,7 +135,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const { period1, period2 } = resolvePeriod(range);
   const [baseQuote, rawPoints] = await Promise.all([
     fetchMarketData(definition.symbol),
-    fetchHistoricalPrices(definition.symbol, period1, period2, {
+    fetchHistoricalPrices(definition.historySymbol || definition.symbol, period1, period2, {
       appendLatestQuote: false,
     }),
   ]);
