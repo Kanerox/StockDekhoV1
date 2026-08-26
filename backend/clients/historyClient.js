@@ -39,14 +39,16 @@ function historyCacheKey(symbol, period1, period2, appendLatestQuote = true) {
   const variant = appendLatestQuote ? "" : ":completed-only";
   const key = `history:${symbol}:1d${variant}:${dateKey(period1)}:${dateKey(period2)}`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v7:${key}`;
+  const version = appendLatestQuote ? "v7" : "v8";
+  return providerName === "yahoo" ? key : `${providerName}:${version}:${key}`;
 }
 
 function latestHistoryCacheKey(symbol, appendLatestQuote = true) {
   const variant = appendLatestQuote ? "" : ":completed-only";
   const key = `history:${symbol}:1d${variant}:latest`;
   const providerName = getMarketDataProviderName();
-  return providerName === "yahoo" ? key : `${providerName}:v7:${key}`;
+  const version = appendLatestQuote ? "v7" : "v8";
+  return providerName === "yahoo" ? key : `${providerName}:${version}:${key}`;
 }
 
 function cooldownCacheKey() {

@@ -256,7 +256,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
 }
 
 async function getGlobalIndexOverview() {
-  const cacheKey = "global-index-overview:v4";
+  const cacheKey = "global-index-overview:v5";
   const cached = await getCachedValue(cacheKey, 5 * 60 * 1000);
   if (cached) return cached;
   if (overviewInFlight) return overviewInFlight;
@@ -264,7 +264,7 @@ async function getGlobalIndexOverview() {
   overviewInFlight = (async () => {
     const retained =
       await getCachedValue(cacheKey, 24 * 60 * 60 * 1000) ||
-      await getCachedValue("global-index-overview:v3", 24 * 60 * 60 * 1000);
+      await getCachedValue("global-index-overview:v4", 24 * 60 * 60 * 1000);
     const retainedByKey = new Map(
       (Array.isArray(retained) ? retained : []).map((item) => [item.key, item])
     );
