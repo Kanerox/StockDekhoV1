@@ -138,13 +138,41 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const definition = getGlobalIndexDefinition(key);
   if (!definition) throw new Error("Unknown global index");
   const { period1, period2 } = resolvePeriod(range);
-  const [baseQuote, rawPoints] = await Promise.all([
+  const [quoteResult, historyResult] = await Promise.allSettled([
     fetchMarketData(definition.symbol),
     fetchHistoricalPrices(definition.historySymbol || definition.symbol, period1, period2, {
       appendLatestQuote: false,
     }),
   ]);
-  let quote = baseQuote;
+  let rawPoints = historyResult.status === "fulfilled" ? historyResult.value : null;
+  let usedFallbackHistory = false;
+  if ((!rawPoints || validPoints(rawPoints).length < 2) && definition.historySymbol) {
+    try {
+      rawPoints = await fetchHistoricalPrices(definition.symbol, period1, period2, {
+        appendLatestQuote: false,
+      });
+      usedFallbackHistory = true;
+    } catch (error) {
+      console.warn(`Fallback global history unavailable for ${definition.key}: ${error.message}`);
+    }
+  }
+  let points = validPoints(rawPoints);
+  if (points.length < 2) {
+    const reason = historyResult.status === "rejected" ? historyResult.reason?.message : "Insufficient global-index history";
+    throw new Error(reason || "Insufficient global-index history");
+  }
+  const latestHistoricalPoint = points.at(-1);
+  let quote = quoteResult.status === "fulfilled" ? quoteResult.value : {
+    symbol: definition.symbol,
+    regularMarketPrice: latestHistoricalPoint.adjustedClose,
+    regularMarketTime: latestHistoricalPoint.date,
+    quoteSourceName: "Historical market data",
+    marketState: "CLOSED",
+    isStale: true,
+  };
+  if (quoteResult.status === "rejected") {
+    console.warn(`Global quote unavailable for ${definition.key}; retaining historical observation: ${quoteResult.reason?.message}`);
+  }
   if (DIRECT_GLOBAL_QUOTE_KEYS.has(definition.key)) {
     try {
       const directQuote = await yahooProvider.quote(definition.symbol);
@@ -181,8 +209,6 @@ async function getGlobalIndexDetail(key, range = "1Y") {
       console.warn(`Intraday global quote unavailable for ${definition.key}: ${error.message}`);
     }
   }
-  let points = validPoints(rawPoints);
-  if (points.length < 2) throw new Error("Insufficient global-index history");
   const historyBacked = /historical/i.test(String(quote.quoteSourceName || ""));
   const currentClock = exchangeClock(definition);
   const latestRawSessionDate = exchangeObservationDate(
@@ -200,7 +226,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     definition
   );
 
-  if (preflightOpen) {
+  if (preflightOpen && !historyBacked) {
     const age = observationAgeMs(quote?.regularMarketTime);
     if (age < -2 * 60 * 1000 || age > 20 * 60 * 1000) {
       throw new Error(`No fresh live observation for ${definition.key}`);
@@ -213,7 +239,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const previousClose = closes.at(-2);
   const latestClose = closes.at(-1);
   const historyChange = latestClose - previousClose;
-  const status = servingPriorSession ? "stale" : globalQuoteStatus(
+  const status = servingPriorSession || usedFallbackHistory ? "stale" : globalQuoteStatus(
     quote,
     definition,
     latestSessionDate,
@@ -247,7 +273,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     sessionDateOnly: false,
     isGlobalIndex: true,
     dataStatus: status,
-    isStale: servingPriorSession || Boolean(quote.isStale),
+    isStale: servingPriorSession || usedFallbackHistory || Boolean(quote.isStale),
     dataProvider: quote.quoteSourceName || "market provider",
     periodReturn: returnPercent(points),
     periodHigh: Math.max(...closes),
