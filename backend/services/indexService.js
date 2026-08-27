@@ -17,6 +17,12 @@ const { sessionKey } = require("../utils/marketDataValidation");
 
 const LEADERSHIP_SNAPSHOT_FRESH_MS = 5 * 60 * 1000;
 const LEADERSHIP_SNAPSHOT_RETENTION_MS = 48 * 60 * 60 * 1000;
+const INDEX_OVERVIEW_RETENTION_MS = 48 * 60 * 60 * 1000;
+const lastConsistentLeadershipByRange = new Map();
+
+function indexSummaryCacheKey(key) {
+  return `index-summary:${key}:v1`;
+}
 
 function valueOrNull(value) {
   return typeof value === "number" && Number.isFinite(value)
@@ -218,7 +224,26 @@ async function getIndexSummary(definition) {
 }
 
 async function getIndexOverview() {
-  return Promise.all(INDICES.map(getIndexSummary));
+  const results = await Promise.allSettled(INDICES.map(getIndexSummary));
+  const summaries = await Promise.all(results.map(async (result, index) => {
+    const definition = INDICES[index];
+    if (result.status === "fulfilled") {
+      await setCacheEntry(
+        indexSummaryCacheKey(definition.key),
+        result.value,
+        INDEX_OVERVIEW_RETENTION_MS
+      );
+      return result.value;
+    }
+    const retained = await getCachedValue(
+      indexSummaryCacheKey(definition.key),
+      INDEX_OVERVIEW_RETENTION_MS
+    );
+    return retained ? { ...retained, dataStatus: "stale", isStale: true } : null;
+  }));
+  const available = summaries.filter(Boolean);
+  if (!available.length) throw new Error("No Indian index observations are available");
+  return available;
 }
 
 async function getIndexDetail(key, range = "1Y") {
@@ -278,6 +303,7 @@ async function getIndexDetail(key, range = "1Y") {
   if (!leadershipCacheKey) return detail;
 
   if (isConsistentLeadershipDetail(detail)) {
+    lastConsistentLeadershipByRange.set(range, detail);
     await setCacheEntry(
       leadershipCacheKey,
       detail,
@@ -289,7 +315,7 @@ async function getIndexDetail(key, range = "1Y") {
   const previous = await getCachedValue(
     leadershipCacheKey,
     LEADERSHIP_SNAPSHOT_RETENTION_MS
-  );
+  ) || lastConsistentLeadershipByRange.get(range);
   if (
     isConsistentLeadershipDetail(previous) &&
     sessionKey(previous.marketTime) === sessionKey(detail.marketTime)

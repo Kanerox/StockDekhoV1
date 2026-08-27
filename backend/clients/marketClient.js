@@ -134,7 +134,13 @@ async function getStaleQuotes(symbols) {
   return quotes
     .filter(Boolean)
     .map((quote) => {
-      try { return validateQuote(quote, { requestedSymbol: quote.symbol, allowStale: true }); }
+      try {
+        return {
+          ...validateQuote(quote, { requestedSymbol: quote.symbol, allowStale: true }),
+          dataStatus: "stale",
+          isStale: true,
+        };
+      }
       catch (error) { console.warn(`Discarding invalid cached quote: ${error.message}`); return null; }
     })
     .filter(Boolean);
@@ -281,17 +287,24 @@ async function getFallbackQuotes(symbols) {
     staleQuotes.map((quote) => [normalizeSymbol(quote.symbol), quote])
   );
 
+  const missingSymbols = symbols.filter(
+    (symbol) => !staleBySymbol.has(normalizeSymbol(symbol))
+  );
+
+  if (missingSymbols.length === 0) return staleQuotes;
+
   const results = await Promise.allSettled(
-    symbols.map((symbol) =>
-      fetchHistoryBackedQuote(symbol, staleBySymbol.get(normalizeSymbol(symbol)))
+    missingSymbols.map((symbol) =>
+      fetchHistoryBackedQuote(symbol)
     )
   );
 
-  return results.map((result, index) =>
+  const historyFallbacks = results.map((result) =>
     result.status === "fulfilled"
       ? result.value
-      : staleBySymbol.get(normalizeSymbol(symbols[index]))
+      : null
   ).filter(Boolean);
+  return [...staleQuotes, ...historyFallbacks];
 }
 
 async function fetchMarketData(symbol) {
@@ -308,7 +321,7 @@ async function fetchMarketData(symbol) {
     try {
       return await fetchHistoryBackedQuote(normalizedSymbol, staleQuote);
     } catch (error) {
-      if (staleQuote) return staleQuote;
+      if (staleQuote) return { ...staleQuote, dataStatus: "stale", isStale: true };
       throw error;
     }
   }
@@ -345,7 +358,11 @@ async function fetchMarketData(symbol) {
       } catch (historyError) {
         if (staleQuote) {
           console.warn(`Using stale cached quote for ${normalizedSymbol}`);
-          return validateQuote(staleQuote, { requestedSymbol: normalizedSymbol, allowStale: true });
+          return {
+            ...validateQuote(staleQuote, { requestedSymbol: normalizedSymbol, allowStale: true }),
+            dataStatus: "stale",
+            isStale: true,
+          };
         }
         throw historyError;
       }

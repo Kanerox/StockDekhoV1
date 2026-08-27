@@ -915,11 +915,17 @@ function GlobalStyle() {
       .sd-focusable:focus-visible { outline: 2px solid ${THEME.gold}; outline-offset: 2px; }
       .sd-underline-link { text-decoration: underline; text-decoration-color: rgba(201,162,75,0.4); text-underline-offset: 3px; cursor:pointer; }
       .sd-underline-link:hover { text-decoration-color: ${THEME.gold}; }
+      @keyframes sdPeriodBreathe {
+        0%, 100% { transform: scale(1); filter: brightness(1); }
+        50% { transform: scale(1.05); filter: brightness(1.22); }
+      }
+      .sd-loader-period { animation: sdPeriodBreathe 1.35s ease-in-out infinite; }
+      @media (prefers-reduced-motion: reduce) { .sd-loader-period { animation: none; } }
     `}</style>
   );
 }
 
-function PageLoadingOverlay({ active }) {
+function PageLoadingOverlay({ active, message = "Loading Market Data..." }) {
   const [visible, setVisible] = useState(active);
   const shownAt = useRef(active ? Date.now() : 0);
 
@@ -946,12 +952,47 @@ function PageLoadingOverlay({ active }) {
     }}>
       <div style={{ textAlign: "center", transform: "translateY(-3vh)" }}>
         <div className="sd-serif" style={{ color: THEME.cream, fontSize: "clamp(48px, 7vw, 72px)", fontWeight: 700, lineHeight: 1 }}>
-          SD<span style={{ color: THEME.gold }}>.</span>
+          SD<span className="sd-loader-period" style={{ color: THEME.gold, display: "inline-block", transformOrigin: "center" }}>.</span>
         </div>
         <div style={{ marginTop: 18, color: THEME.creamDim, fontSize: "clamp(13px, 1.5vw, 17px)", letterSpacing: 0.1 }}>
-          Loading Market Data...
+          {message}
         </div>
       </div>
+    </div>,
+    document.body
+  );
+}
+
+let introDecision;
+function shouldPlayBrandIntro() {
+  if (introDecision !== undefined) return introDecision;
+  try {
+    introDecision = window.sessionStorage.getItem("stockdekho-brand-intro-seen") !== "1";
+    if (introDecision) window.sessionStorage.setItem("stockdekho-brand-intro-seen", "1");
+  } catch {
+    introDecision = true;
+  }
+  return introDecision;
+}
+
+function BrandIntro({ onComplete }) {
+  const [leaving, setLeaving] = useState(false);
+  const finish = () => {
+    if (leaving) return;
+    setLeaving(true);
+    window.setTimeout(onComplete, 280);
+  };
+
+  return createPortal(
+    <div aria-label="StockDekho introduction" style={{
+      position: "fixed", inset: 0, zIndex: 100,
+      background: THEME.navyDeep, opacity: leaving ? 0 : 1,
+      transition: "opacity 280ms ease", overflow: "hidden",
+    }}>
+      <video autoPlay muted playsInline preload="auto" onEnded={finish} onError={finish}
+        style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}>
+        <source src="/StockDekho_Final_Loading.mp4" type="video/mp4" />
+      </video>
     </div>,
     document.body
   );
@@ -2145,8 +2186,7 @@ const mostActive = [...performerStocks]
     leadingStock &&
     laggingStock &&
     marketSessionDate(nifty50.marketTime || nifty50.asOf) === leadershipSession &&
-    marketSessionDate(sensex.marketTime || sensex.asOf) === leadershipSession &&
-    isCompleteLeadershipObservation(newestLeadershipTime)
+    marketSessionDate(sensex.marketTime || sensex.asOf) === leadershipSession
   );
   const hasClosingLeadershipSnapshot = hasLeadershipSnapshot &&
     isClosingLeadershipObservation(newestLeadershipTime);
@@ -2511,7 +2551,7 @@ useEffect(() => {
 ]);
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <PageLoadingOverlay active={indicesLoading} />
+      <PageLoadingOverlay active={indicesLoading} message="Loading Market Data..." />
       <SectionHeading eyebrow="India Equities · Markets" title="Indian Markets" />
 
       <div className="sd-scroll" style={{ display: "flex", gap: 10, overflowX: "auto", paddingBottom: 6, marginBottom: 20, alignItems: "flex-start" }}>
@@ -3412,7 +3452,7 @@ function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compar
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <PageLoadingOverlay active={stocksLoading} />
+      <PageLoadingOverlay active={stocksLoading} message="Loading Stocks..." />
       <SectionHeading eyebrow="Screener" title="All NSE Stocks" />
       <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16, maxWidth: 760 }}>
         Tracks a representative universe of 200 NSE-listed equities across market-cap bands — not only Nifty 50 constituents.
@@ -4670,7 +4710,7 @@ useEffect(() => {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
-      <PageLoadingOverlay active={newsLoading} />
+      <PageLoadingOverlay active={newsLoading} message="Loading Company Research..." />
       <Panel style={{ padding: 20, marginBottom: 18 }}>
         <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
           <div>
@@ -6199,7 +6239,7 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <PageLoadingOverlay active={loading} />
+      <PageLoadingOverlay active={loading} message="Preparing Comparison..." />
       <SectionHeading eyebrow="Research workspace" title="Compare companies" />
       <p style={{ fontSize: 12.5, color: THEME.inkDim, marginTop: -8, marginBottom: 16 }}>Select 2–5 stocks. Highlighting shows relative context only — not a recommendation.</p>
 
@@ -6720,7 +6760,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <PageLoadingOverlay active={globalOverlayActive} />
+      <PageLoadingOverlay active={globalOverlayActive} message="Loading Global Markets..." />
       <SectionHeading eyebrow="Global" title="Global Indices" action={
         <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: THEME.inkDim, transform: "translateY(24px)" }}>
           Filter by Region
@@ -7161,7 +7201,7 @@ function WatchlistPage({ watchlist, toggleWatch, openCompany, setPage }) {
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
-      <PageLoadingOverlay active={loading} />
+      <PageLoadingOverlay active={loading} message="Loading Watchlist..." />
       <SectionHeading eyebrow="Research workspace" title="Watchlist" />
       <Panel style={{ padding: 18, marginBottom: 16 }}>
         <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Your Watchlist</div>
@@ -7263,7 +7303,8 @@ function Footer() {
    APP ROOT
    ========================================================================================= */
 export default function StockDekho() {
- 
+
+const [showBrandIntro, setShowBrandIntro] = useState(shouldPlayBrandIntro);
 
 const [page, setPage] = useState("markets");
 const [mode, setMode] = useState("explore");
@@ -7290,6 +7331,8 @@ const [notes, setNotes] = useState({});
     <div className="sd-root" style={{ background: THEME.navy, minHeight: "100vh", display: "flex", flexDirection: "column" }}>
 
      <GlobalStyle />
+
+      {showBrandIntro && <BrandIntro onComplete={() => setShowBrandIntro(false)} />}
 
 
       <Header page={page} setPage={setPage} mode={mode} setMode={setMode} watchlist={watchlist} compareList={compareList}

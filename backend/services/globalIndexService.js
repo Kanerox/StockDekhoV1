@@ -7,7 +7,12 @@ const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
 const DIRECT_GLOBAL_QUOTE_KEYS = new Set(["NASDAQ", "DOW", "EUROSTOXX50"]);
 const intradayCache = new Map();
 const INTRADAY_TTL_MS = 5 * 60 * 1000;
+const GLOBAL_CARD_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 let overviewInFlight = null;
+
+function globalCardCacheKey(key) {
+  return `global-index-card:${key}:v1`;
+}
 
 function finite(value) {
   return Number.isFinite(Number(value)) ? Number(value) : null;
@@ -256,18 +261,32 @@ async function getGlobalIndexDetail(key, range = "1Y") {
 }
 
 async function getGlobalIndexOverview() {
-  const cacheKey = "global-index-overview:v5";
+  const cacheKey = "global-index-overview:v6";
   const cached = await getCachedValue(cacheKey, 5 * 60 * 1000);
   if (cached) return cached;
   if (overviewInFlight) return overviewInFlight;
 
   overviewInFlight = (async () => {
-    const retained =
-      await getCachedValue(cacheKey, 24 * 60 * 60 * 1000) ||
-      await getCachedValue("global-index-overview:v4", 24 * 60 * 60 * 1000);
-    const retainedByKey = new Map(
-      (Array.isArray(retained) ? retained : []).map((item) => [item.key, item])
+    const retainedSnapshots = await Promise.all([
+      getCachedValue(cacheKey, GLOBAL_CARD_RETENTION_MS),
+      getCachedValue("global-index-overview:v5", GLOBAL_CARD_RETENTION_MS),
+      getCachedValue("global-index-overview:v4", GLOBAL_CARD_RETENTION_MS),
+      getCachedValue("global-index-overview:v3", GLOBAL_CARD_RETENTION_MS),
+    ]);
+    const retainedByKey = new Map();
+    retainedSnapshots.filter(Array.isArray).forEach((snapshot) => {
+      snapshot.forEach((item) => {
+        if (item?.key && !retainedByKey.has(item.key)) retainedByKey.set(item.key, item);
+      });
+    });
+    const retainedCards = await Promise.all(
+      GLOBAL_INDICES.map((definition) =>
+        getCachedValue(globalCardCacheKey(definition.key), GLOBAL_CARD_RETENTION_MS)
+      )
     );
+    retainedCards.forEach((item) => {
+      if (item?.key) retainedByKey.set(item.key, item);
+    });
     const values = [];
     for (let offset = 0; offset < GLOBAL_INDICES.length; offset += 5) {
       const definitions = GLOBAL_INDICES.slice(offset, offset + 5);
@@ -308,7 +327,12 @@ async function getGlobalIndexOverview() {
       }
       return fresh;
     }).filter(Boolean);
-    await setCacheEntry(cacheKey, merged, 24 * 60 * 60 * 1000);
+    await Promise.all(
+      merged.map((item) =>
+        setCacheEntry(globalCardCacheKey(item.key), item, GLOBAL_CARD_RETENTION_MS)
+      )
+    );
+    await setCacheEntry(cacheKey, merged, GLOBAL_CARD_RETENTION_MS);
     return merged;
   })().finally(() => { overviewInFlight = null; });
   return overviewInFlight;

@@ -1,6 +1,7 @@
 const { createClient } = require("redis");
 
 const memoryCache = new Map();
+const MEMORY_MIRROR_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 let redisClient = null;
 let connectionPromise = null;
 let warnedAboutMemoryFallback = false;
@@ -66,7 +67,15 @@ async function getCacheEntry(key) {
   if (redis) {
     try {
       const serialized = await redis.get(cacheKey(key));
-      return serialized ? JSON.parse(serialized) : null;
+      if (serialized) {
+        const payload = JSON.parse(serialized);
+        memoryCache.set(key, {
+          payload,
+          expiresAt: Date.now() + MEMORY_MIRROR_RETENTION_MS,
+        });
+        return payload;
+      }
+      return null;
     } catch (error) {
       console.error(`Unable to read Redis key ${key}:`, error.message);
     }
@@ -77,6 +86,10 @@ async function getCacheEntry(key) {
 
 async function setCacheEntry(key, value, retentionMs) {
   const payload = { value, savedAt: Date.now() };
+  memoryCache.set(key, {
+    payload,
+    expiresAt: Date.now() + retentionMs,
+  });
   const redis = await getRedisClient();
 
   if (redis) {
@@ -89,11 +102,6 @@ async function setCacheEntry(key, value, retentionMs) {
       console.error(`Unable to write Redis key ${key}:`, error.message);
     }
   }
-
-  memoryCache.set(key, {
-    payload,
-    expiresAt: Date.now() + retentionMs,
-  });
 
   return payload;
 }
