@@ -207,16 +207,13 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     }
   }
 
-  // Once today's session has begun, do not publish an older session as if it
-  // were the latest one. The overview omits this index until a provider
-  // supplies a genuine observation for the current exchange date.
-  if (marketHasOpenedToday && exchangeObservationDate(quote?.regularMarketTime, definition) !== preflightClock.date && latestSessionDate !== preflightClock.date) {
-    throw new Error(`No current-session observation for ${definition.key}`);
-  }
+  const servingPriorSession = marketHasOpenedToday &&
+    exchangeObservationDate(quote?.regularMarketTime, definition) !== preflightClock.date &&
+    latestSessionDate !== preflightClock.date;
   const previousClose = closes.at(-2);
   const latestClose = closes.at(-1);
   const historyChange = latestClose - previousClose;
-  const status = globalQuoteStatus(
+  const status = servingPriorSession ? "stale" : globalQuoteStatus(
     quote,
     definition,
     latestSessionDate,
@@ -250,7 +247,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     sessionDateOnly: false,
     isGlobalIndex: true,
     dataStatus: status,
-    isStale: Boolean(quote.isStale),
+    isStale: servingPriorSession || Boolean(quote.isStale),
     dataProvider: quote.quoteSourceName || "market provider",
     periodReturn: returnPercent(points),
     periodHigh: Math.max(...closes),
