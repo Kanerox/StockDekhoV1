@@ -90,6 +90,12 @@ function validateQuote(quote, { requestedSymbol, allowStale = false } = {}) {
     freshness = observationSession === currentSession || indianMarketPhase() !== "live"
       ? "eod"
       : "stale";
+  } else if (quote.observationKind === "provisional_close") {
+    const phase = indianMarketPhase();
+    const ageMs = Date.now() - timestamp.getTime();
+    freshness = phase !== "live" && ageMs <= 3 * 24 * 60 * 60 * 1000
+      ? "last_updated"
+      : "stale";
   } else if (indianMarketPhase() === "reconciling" && sessionKey(timestamp) === sessionKey(new Date())) {
     freshness = "last_updated";
   } else if (indianMarketPhase() === "closed" && sessionKey(timestamp) === sessionKey(new Date())) {

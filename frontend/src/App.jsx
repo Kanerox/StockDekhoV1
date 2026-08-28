@@ -1108,20 +1108,6 @@ function isCompleteLeadershipObservation(value, now = new Date()) {
   return true;
 }
 
-function isClosingLeadershipObservation(value) {
-  const observation = new Date(value);
-  if (Number.isNaN(observation.getTime())) return false;
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Kolkata",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(observation).map((part) => [part.type, part.value])
-  );
-  return Number(parts.hour) * 60 + Number(parts.minute) >= 15 * 60 + 29;
-}
-
 function hasFreshCurrencyQuote(currency, now = new Date()) {
   const quoteTime = new Date(currency?.marketTime).getTime();
   return isCurrencyMarketOpen(now) &&
@@ -2238,8 +2224,7 @@ const mostActive = [...performerStocks]
   );
   const hasClosingLeadershipSnapshot = hasLeadershipSnapshot &&
     (niftyDetail?.observationKind === "session_close" ||
-      trackedNiftyStocks.every((stock) => stock.observationKind === "session_close") ||
-      isClosingLeadershipObservation(newestLeadershipTime));
+      trackedNiftyStocks.every((stock) => stock.observationKind === "session_close"));
   const leadershipDate = niftyDetail?.marketTime
     ? new Date(niftyDetail.marketTime).toLocaleDateString("en-IN", {
         day: "2-digit",
