@@ -11,8 +11,8 @@ const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
-const QUOTE_CACHE_VERSION = "v12";
-const PREVIOUS_QUOTE_CACHE_VERSION = "v11";
+const QUOTE_CACHE_VERSION = "v13";
+const PREVIOUS_QUOTE_CACHE_VERSION = "v12";
 const SUPPLEMENTAL_QUOTE_FIELDS = [
   "marketCap",
   "trailingPE",
@@ -233,10 +233,16 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
     normalizedSymbol,
     period1,
     period2,
-    { appendLatestQuote: false }
+    { appendLatestQuote: true }
   );
+  // A quote appended to history contains only close/adjustedClose. Requiring
+  // a complete OHLC candle prevents a provisional LTP from being promoted to
+  // EOD, while still allowing either provider's legitimate daily candle.
   const validPrices = prices.filter((point) =>
-    Number.isFinite(point?.close)
+    Number.isFinite(point?.close) &&
+    Number.isFinite(point?.open) &&
+    Number.isFinite(point?.high) &&
+    Number.isFinite(point?.low)
   );
 
   if (validPrices.length < 2) {
