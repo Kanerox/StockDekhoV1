@@ -133,6 +133,11 @@ function canReuseCompletedCard(card, definition, now = new Date()) {
   if (observationAgeMs(card.marketTime, now) < -60 * 1000) return false;
   const cardSession = exchangeObservationDate(card.marketTime, definition);
   if (!cardSession) return false;
+  const expectedClose = new Date(exchangeSessionCloseTimestamp(cardSession, definition)).getTime();
+  const observedClose = new Date(card.marketTime).getTime();
+  if (!Number.isFinite(expectedClose) || Math.abs(observedClose - expectedClose) > 2 * 60 * 1000) {
+    return false;
+  }
   const clock = exchangeClock(definition, now);
   const weekday = !["Sat", "Sun"].includes(clock.weekday);
   const firstOpen = Math.min(...definition.sessions.map((session) => session[0]));

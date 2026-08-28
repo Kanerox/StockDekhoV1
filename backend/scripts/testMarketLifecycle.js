@@ -63,6 +63,15 @@ assert.strictEqual(
   "Pre-market reuses the last completed session"
 );
 assert.strictEqual(
+  _test.canReuseCompletedCard(
+    { dataStatus: "eod", marketTime: "2026-08-27T08:30:00.000Z" },
+    hsi,
+    new Date("2026-08-28T00:30:00.000Z")
+  ),
+  false,
+  "Legacy settlement-time cache entries are not mistaken for exchange-close observations"
+);
+assert.strictEqual(
   _test.canReuseCompletedCard(retained, hsi, new Date("2026-08-28T02:30:00.000Z")),
   false,
   "A live new session invalidates the prior completed card"
