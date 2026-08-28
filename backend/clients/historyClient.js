@@ -49,7 +49,7 @@ function historyCacheKey(symbol, period1, period2, appendLatestQuote = true) {
   const variant = appendLatestQuote ? "" : ":completed-only";
   const key = `history:${symbol}:1d${variant}:${dateKey(period1)}:${dateKey(period2)}`;
   const providerName = getMarketDataProviderName();
-  const version = appendLatestQuote ? "v7" : "v8";
+  const version = appendLatestQuote ? "v7" : "v9";
   return providerName === "yahoo" ? key : `${providerName}:${version}:${key}`;
 }
 
@@ -57,7 +57,7 @@ function latestHistoryCacheKey(symbol, appendLatestQuote = true) {
   const variant = appendLatestQuote ? "" : ":completed-only";
   const key = `history:${symbol}:1d${variant}:latest`;
   const providerName = getMarketDataProviderName();
-  const version = appendLatestQuote ? "v7" : "v8";
+  const version = appendLatestQuote ? "v7" : "v9";
   return providerName === "yahoo" ? key : `${providerName}:${version}:${key}`;
 }
 
@@ -185,10 +185,11 @@ async function fetchHistoricalPrices(
         period1,
         period2,
         interval: "1d",
-        // A completed-session reconciliation must prefer the primary
-        // provider's daily candle. Yahoo remains the provider fallback when
-        // Upstox itself is unavailable.
-        supplement: appendLatestQuote,
+        // Upstox is primary. Its completed daily series can publish later
+        // than Yahoo's, so the existing Yahoo supplement may provide the
+        // same-session completed candle when Upstox is still one session
+        // behind. Neither source is replaced by an intraday LTP here.
+        supplement: true,
       });
 
       const historicalPrices = (result.quotes || [])
