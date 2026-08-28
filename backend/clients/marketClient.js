@@ -11,8 +11,8 @@ const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
-const QUOTE_CACHE_VERSION = "v9";
-const PREVIOUS_QUOTE_CACHE_VERSION = "v8";
+const QUOTE_CACHE_VERSION = "v10";
+const PREVIOUS_QUOTE_CACHE_VERSION = "v9";
 const SUPPLEMENTAL_QUOTE_FIELDS = [
   "marketCap",
   "trailingPE",
@@ -64,9 +64,13 @@ function cooldownCacheKey() {
   return `${getMarketDataProviderName()}:blocked-until`;
 }
 
-function fetchProviderQuotes(symbols) {
+function fetchProviderQuotes(symbols, { supplement = true } = {}) {
   const provider = getMarketDataProvider();
-  return typeof provider.quoteWithSupplement === "function"
+  const requested = Array.isArray(symbols) ? symbols : [symbols];
+  const requiresSupplement = supplement && requested.some(
+    (symbol) => !String(symbol || "").startsWith("^")
+  );
+  return requiresSupplement && typeof provider.quoteWithSupplement === "function"
     ? provider.quoteWithSupplement(symbols)
     : provider.quote(symbols);
 }
@@ -176,7 +180,10 @@ function endOfDayTimestamp(value) {
     month: "2-digit",
     day: "2-digit",
   });
-  return `${sessionDate}T10:30:00.000Z`;
+  // The daily candle represents the NSE cash-session close (15:30 IST).
+  // A later StockDekho reconciliation time must never be presented as though
+  // the instrument traded then.
+  return `${sessionDate}T10:00:00.000Z`;
 }
 
 function historyObservationTimestamp(value) {
@@ -307,7 +314,7 @@ async function getFallbackQuotes(symbols) {
   return [...staleQuotes, ...historyFallbacks];
 }
 
-async function fetchMarketData(symbol) {
+async function fetchMarketData(symbol, options = {}) {
   const normalizedSymbol = normalizeSymbol(symbol);
   const key = quoteCacheKey(normalizedSymbol);
   const freshQuote = await getCachedValue(key, FRESH_QUOTE_TTL_MS);
@@ -333,7 +340,7 @@ async function fetchMarketData(symbol) {
   const requestPromise = (async () => {
     try {
       const providerQuote = await withRetry(
-        () => fetchProviderQuotes(normalizedSymbol),
+        () => fetchProviderQuotes(normalizedSymbol, options),
         { label: `Market quote ${normalizedSymbol}` }
       );
       const cachedQuote = await getCachedValue(key, STALE_QUOTE_TTL_MS);
@@ -389,7 +396,7 @@ async function collectCachedQuotes(symbols, maxAgeMs) {
   return { cachedQuotes, missingSymbols };
 }
 
-async function fetchMarketDataBatch(symbols) {
+async function fetchMarketDataBatch(symbols, options = {}) {
   const normalizedSymbols = [...new Set(symbols.map(normalizeSymbol))];
   let { cachedQuotes, missingSymbols } = await collectCachedQuotes(
     normalizedSymbols,
@@ -432,7 +439,7 @@ async function fetchMarketDataBatch(symbols) {
     const existingQuotes = await getStaleQuotes(missingSymbols);
     const existingBySymbol = new Map(existingQuotes.map((quote) => [normalizeSymbol(quote.symbol), quote]));
     const result = await withRetry(
-      () => fetchProviderQuotes(missingSymbols),
+      () => fetchProviderQuotes(missingSymbols, options),
       { label: "Market batch quote request" }
     );
     const fetchedQuotes = await Promise.all(

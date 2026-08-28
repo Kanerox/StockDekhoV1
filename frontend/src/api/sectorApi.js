@@ -1,7 +1,7 @@
-import { cachedGet } from "./apiClient";
+import { cachedGet, indianMarketDataTtlMs } from "./apiClient";
 
-export async function getSectors() {
-  const response = await cachedGet("/sectors", {}, 15 * 60 * 1000);
+export async function getSectors({ force = false } = {}) {
+  const response = await cachedGet("/sectors", {}, indianMarketDataTtlMs(), { force });
   return response.data.sectors || [];
 }
 

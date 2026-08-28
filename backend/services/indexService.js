@@ -13,15 +13,49 @@ const {
   getMarketDataProviderName,
 } = require("../providers/marketData");
 const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
-const { sessionKey } = require("../utils/marketDataValidation");
+const {
+  sessionKey,
+  isIndianMarketOpen,
+  classifyFreshness,
+} = require("../utils/marketDataValidation");
 
 const LEADERSHIP_SNAPSHOT_FRESH_MS = 5 * 60 * 1000;
 const LEADERSHIP_SNAPSHOT_RETENTION_MS = 48 * 60 * 60 * 1000;
 const INDEX_OVERVIEW_RETENTION_MS = 48 * 60 * 60 * 1000;
 const lastConsistentLeadershipByRange = new Map();
+let overviewInFlight = null;
+
+function indianClockMinutes(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  return {
+    weekday: parts.weekday,
+    minutes: Number(parts.hour) * 60 + Number(parts.minute),
+  };
+}
+
+function indexOverviewFreshMs(now = new Date()) {
+  const clock = indianClockMinutes(now);
+  const weekday = ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(clock.weekday);
+  const reconciling = weekday && clock.minutes >= 15 * 60 + 30 && clock.minutes < 16 * 60 + 5;
+  return isIndianMarketOpen(now) || reconciling
+    ? 5 * 60 * 1000
+    : 6 * 60 * 60 * 1000;
+}
 
 function indexSummaryCacheKey(key) {
   return `index-summary:${key}:v1`;
+}
+
+function withCurrentFreshness(observation) {
+  if (!observation?.marketTime) return observation;
+  const dataStatus = classifyFreshness(observation.marketTime);
+  return {
+    ...observation,
+    dataStatus,
+    isStale: dataStatus === "stale",
+  };
 }
 
 function valueOrNull(value) {
@@ -148,7 +182,12 @@ function mapConstituent(quote, fallbackTicker) {
 async function fetchConstituents(definition) {
   if (definition.constituents.length === 0) return [];
 
-  const quotes = await fetchMarketDataBatch(definition.constituents);
+  // Leadership only needs authoritative prices/timestamps. Waiting for Yahoo
+  // fundamentals here made the whole same-session snapshot depend on an
+  // unrelated supplemental provider.
+  const quotes = await fetchMarketDataBatch(definition.constituents, {
+    supplement: false,
+  });
   const quoteByTicker = new Map(
     quotes.map((quote) => [
       String(quote.symbol || "").toUpperCase().replace(/\.(NS|BO)$/, ""),
@@ -193,10 +232,14 @@ function isConsistentLeadershipDetail(detail) {
     : [];
   return Boolean(
     indexSession &&
+    detail?.dataStatus !== "stale" &&
+    !detail?.isStale &&
     constituents.length === 50 &&
     constituents.every(
       (stock) =>
         Number.isFinite(stock?.chgPct) &&
+        stock?.dataStatus !== "stale" &&
+        !stock?.isStale &&
         sessionKey(stock?.marketTime) === indexSession
     )
   );
@@ -224,6 +267,12 @@ async function getIndexSummary(definition) {
 }
 
 async function getIndexOverview() {
+  const cacheKey = "index-overview:v2";
+  const cached = await getCachedValue(cacheKey, indexOverviewFreshMs());
+  if (cached) return cached;
+  if (overviewInFlight) return overviewInFlight;
+
+  overviewInFlight = (async () => {
   const results = await Promise.allSettled(INDICES.map(getIndexSummary));
   const summaries = await Promise.all(results.map(async (result, index) => {
     const definition = INDICES[index];
@@ -239,11 +288,14 @@ async function getIndexOverview() {
       indexSummaryCacheKey(definition.key),
       INDEX_OVERVIEW_RETENTION_MS
     );
-    return retained ? { ...retained, dataStatus: "stale", isStale: true } : null;
+    return retained ? withCurrentFreshness(retained) : null;
   }));
   const available = summaries.filter(Boolean);
   if (!available.length) throw new Error("No Indian index observations are available");
+  await setCacheEntry(cacheKey, available, INDEX_OVERVIEW_RETENTION_MS);
   return available;
+  })().finally(() => { overviewInFlight = null; });
+  return overviewInFlight;
 }
 
 async function getIndexDetail(key, range = "1Y") {
@@ -323,7 +375,11 @@ async function getIndexDetail(key, range = "1Y") {
     console.warn(
       "Preserving the last consistent Nifty 50 leadership snapshot for the current session."
     );
-    return previous;
+    const refreshedPrevious = withCurrentFreshness(previous);
+    return {
+      ...refreshedPrevious,
+      constituents: previous.constituents.map(withCurrentFreshness),
+    };
   }
 
   return detail;

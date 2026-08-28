@@ -12,6 +12,7 @@ import { getCompanyNews, getGlobalIndexNews, getGlobalMarketNews, getIndiaGsecNe
 import { getPerformanceHistory } from "./api/performanceApi";
 import { getSectorDetail, getSectors } from "./api/sectorApi";
 import stockUniverse from "./data/stockUniverse.json";
+import { shouldRunVisibilityRefresh } from "./utils/refreshPolicy";
 import {
   ResponsiveContainer,
   LineChart,
@@ -1032,6 +1033,34 @@ function isIndianMarketRefreshWindow(now = new Date()) {
 
 const MARKET_REFRESH_MS = 5 * 60 * 1000;
 
+function installVisibilityAwareRefresh(refresh, {
+  intervalMs = MARKET_REFRESH_MS,
+  shouldRefresh = () => true,
+} = {}) {
+  let lastAttemptAt = Date.now();
+  const attempt = () => {
+    const now = Date.now();
+    if (!shouldRunVisibilityRefresh({
+      visibilityState: document.visibilityState,
+      now,
+      lastAttemptAt,
+      intervalMs,
+      eligible: shouldRefresh(),
+    })) return;
+    lastAttemptAt = now;
+    refresh();
+  };
+  const timer = window.setInterval(attempt, Math.min(intervalMs, 60 * 1000));
+  const onVisibilityChange = () => {
+    if (document.visibilityState === "visible") attempt();
+  };
+  document.addEventListener("visibilitychange", onVisibilityChange);
+  return () => {
+    window.clearInterval(timer);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+  };
+}
+
 function isCurrencyMarketOpen(now = new Date()) {
   const parts = Object.fromEntries(
     new Intl.DateTimeFormat("en-GB", {
@@ -1094,14 +1123,14 @@ function hasFreshCurrencyQuote(currency, now = new Date()) {
 function LiveTag({ live, approx, small, statusLabel }) {
   if (live) {
     const label = statusLabel || (approx ? "Live · approx" : isIndianMarketOpen() ? "Live" : "EOD");
-    const caution = label === "Delayed" || label === "Stale";
+    const caution = label === "Delayed" || label === "Last updated" || label === "Stale";
     const tagColor = caution ? THEME.gold : THEME.up;
     return (
       <span title={statusLabel === "Live" ? "Market is currently open" : statusLabel === "EOD" ? "Latest end-of-day value" : approx ? "Live-anchored (approximate reference level)" : "Live-anchored EOD snapshot"}
         style={{
-          fontSize: small ? 9 : 10, letterSpacing: 0.5, textTransform: "uppercase", fontWeight: 700,
+          fontSize: small ? 8.5 : 10, letterSpacing: small ? 0.3 : 0.5, textTransform: "uppercase", fontWeight: 700,
           color: tagColor, border: `1px solid ${tagColor}55`, borderRadius: 3, padding: small ? "1px 5px" : "2px 6px",
-          background: caution ? "rgba(201,162,75,0.08)" : "rgba(63,167,114,0.08)", whiteSpace: "nowrap", flexShrink: 0,
+          background: caution ? "rgba(201,162,75,0.08)" : "rgba(63,167,114,0.08)", whiteSpace: "nowrap", flexShrink: 0, maxWidth: "100%",
         }}>
         {label}
       </span>
@@ -1122,6 +1151,7 @@ function quoteStatusLabel(quote, marketOpen = isIndianMarketOpen()) {
   const status = String(quote?.dataStatus || "").toLowerCase();
   if (status === "live") return "Live";
   if (status === "delayed") return "Delayed";
+  if (status === "last_updated") return "Last updated";
   if (status === "stale") return "Stale";
   if (status === "eod") return "EOD";
   if (status === "unavailable") return "Unavailable";
@@ -1462,9 +1492,9 @@ function IndexCard({ idx, onOpen, matchCurrencyCard = false }) {
       height: compactGlobal ? 148 : 136,
       display: "flex", flexDirection: "column", justifyContent: "space-between", flexShrink: 0,
     }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-        <div>
-          <div style={{ fontSize: compactGlobal ? 13 : 12.5, fontWeight: 700, color: THEME.creamDim, lineHeight: 1.3, maxWidth: compactGlobal ? 144 : 124, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{idx.name}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 6, minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: compactGlobal ? 13 : 12.5, fontWeight: 700, color: THEME.creamDim, lineHeight: 1.3, maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{idx.name}</div>
           <div className="sd-mono" style={{ fontSize: compactGlobal ? 19 : 17, marginTop: compactGlobal ? 9 : 12 }}>
             {Number.isFinite(idx.value) ? (idx.isGsec ? `${fmtNum(idx.value, 2)}%` : idx.isVix ? fmtNum(idx.value) : fmtInt(Math.round(idx.value))) : "—"}
           </div>
@@ -1608,10 +1638,10 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
 
   useEffect(() => {
     let cancelled = false;
+    let hasLoaded = false;
 
-    async function loadIndex() {
-      setLoading(true);
-      setError("");
+    async function loadIndex({ force = false } = {}) {
+      if (!hasLoaded) setLoading(true);
 
       if (isDemo) {
         setIndexData(buildDemoIndexDetail(indexKey, range));
@@ -1620,11 +1650,14 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
       }
 
       try {
-        const data = await getIndexDetail(indexKey, range);
-        if (!cancelled) setIndexData(data);
-      } catch (requestError) {
+        const data = await getIndexDetail(indexKey, range, { force });
         if (!cancelled) {
-          setIndexData(null);
+          setIndexData(data);
+          setError("");
+          hasLoaded = true;
+        }
+      } catch (requestError) {
+        if (!cancelled && !hasLoaded) {
           setError("Unable to load live index data.");
         }
       } finally {
@@ -1633,9 +1666,14 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
     }
 
     loadIndex();
+    const stopRefresh = installVisibilityAwareRefresh(
+      () => loadIndex({ force: true }),
+      { shouldRefresh: isIndianMarketRefreshWindow }
+    );
 
     return () => {
       cancelled = true;
+      stopRefresh();
     };
   }, [indexKey, range, isDemo]);
 
@@ -2245,18 +2283,20 @@ const mostActive = [...performerStocks]
 
 useEffect(() => {
   let cancelled = false;
+  let hasLoadedIndices = false;
 
-  async function loadIndices() {
-    setIndicesLoading(true);
-    setIndicesError("");
+  async function loadIndices({ force = false } = {}) {
+    if (!hasLoadedIndices) setIndicesLoading(true);
 
     try {
-      const data = await getIndices();
+      const data = await getIndices({ force });
 
       if (!cancelled) {
         setLiveIndices(
           Array.isArray(data) ? data : []
         );
+        setIndicesError("");
+        hasLoadedIndices = true;
       }
     } catch (error) {
       console.error(
@@ -2264,8 +2304,7 @@ useEffect(() => {
         error
       );
 
-      if (!cancelled) {
-        setLiveIndices([]);
+      if (!cancelled && !hasLoadedIndices) {
         setIndicesError(
           "Unable to load live index data."
         );
@@ -2278,13 +2317,14 @@ useEffect(() => {
   }
 
   loadIndices();
-  const refreshTimer = window.setInterval(() => {
-    if (isIndianMarketRefreshWindow()) loadIndices();
-  }, MARKET_REFRESH_MS);
+  const stopRefresh = installVisibilityAwareRefresh(
+    () => loadIndices({ force: true }),
+    { shouldRefresh: isIndianMarketRefreshWindow }
+  );
 
   return () => {
     cancelled = true;
-    window.clearInterval(refreshTimer);
+    stopRefresh();
   };
 }, []);
 
@@ -2301,15 +2341,16 @@ useEffect(() => {
 
 useEffect(() => {
   let cancelled = false;
+  let hasLoadedMarketContext = false;
 
-  async function loadMarketContext() {
-    setMarketEventsLoading(true);
+  async function loadMarketContext({ force = false } = {}) {
+    if (!hasLoadedMarketContext) setMarketEventsLoading(true);
     setMarketEventsError("");
 
     try {
       const [detailResult, eventsResult] =
         await Promise.allSettled([
-          getIndexDetail("NIFTY50", "1M"),
+          getIndexDetail("NIFTY50", "1M", { force }),
           getNiftyMarketEvents(),
         ]);
 
@@ -2317,11 +2358,10 @@ useEffect(() => {
         return;
       }
 
-      setNiftyDetail(
-        detailResult.status === "fulfilled"
-          ? detailResult.value
-          : null
-      );
+      if (detailResult.status === "fulfilled") {
+        setNiftyDetail(detailResult.value);
+        hasLoadedMarketContext = true;
+      }
 
       const articles =
         eventsResult.status === "fulfilled"
@@ -2406,8 +2446,7 @@ date: formatNewsDate(
         error
       );
 
-      if (!cancelled) {
-        setNiftyDetail(null);
+      if (!cancelled && !hasLoadedMarketContext) {
         setMarketEvents([]);
         setMarketEventsError("Unable to load current market events. Please try again shortly.");
       }
@@ -2419,13 +2458,14 @@ date: formatNewsDate(
   }
 
   loadMarketContext();
-  const refreshTimer = window.setInterval(() => {
-    if (isIndianMarketRefreshWindow()) loadMarketContext();
-  }, MARKET_REFRESH_MS);
+  const stopRefresh = installVisibilityAwareRefresh(
+    () => loadMarketContext({ force: true }),
+    { shouldRefresh: isIndianMarketRefreshWindow }
+  );
 
   return () => {
     cancelled = true;
-    window.clearInterval(refreshTimer);
+    stopRefresh();
   };
 }, []);
 
@@ -3332,13 +3372,13 @@ function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compar
 
   useEffect(() => {
     let cancelled = false;
+    let hasLoaded = false;
 
-    async function loadStocks() {
-      setStocksLoading(true);
-      setStocksError("");
+    async function loadStocks({ force = false } = {}) {
+      if (!hasLoaded) setStocksLoading(true);
 
       try {
-        const data = await getStockUniverse(stockSymbols);
+        const data = await getStockUniverse(stockSymbols, { force });
 
         if (!cancelled) {
           setLiveStocks(
@@ -3353,10 +3393,11 @@ function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compar
               };
             })
           );
+          setStocksError("");
+          hasLoaded = true;
         }
       } catch (requestError) {
-        if (!cancelled) {
-          setLiveStocks([]);
+        if (!cancelled && !hasLoaded) {
           setStocksError("Unable to load live stock data.");
         }
       } finally {
@@ -3367,9 +3408,14 @@ function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compar
     }
 
     loadStocks();
+    const stopRefresh = installVisibilityAwareRefresh(
+      () => loadStocks({ force: true }),
+      { shouldRefresh: isIndianMarketRefreshWindow }
+    );
 
     return () => {
       cancelled = true;
+      stopRefresh();
     };
   }, [stockDefinitions, stockSymbols]);
 
@@ -3577,17 +3623,20 @@ function SectorsPage({ mode, openCompany, openSector, activeSector }) {
 
   useEffect(() => {
     let cancelled = false;
+    let hasLoaded = false;
 
-    async function loadSectors() {
-      setLoading(true);
-      setError("");
+    async function loadSectors({ force = false } = {}) {
+      if (!hasLoaded) setLoading(true);
 
       try {
-        const data = await getSectors();
-        if (!cancelled) setSectorData(data);
-      } catch (requestError) {
+        const data = await getSectors({ force });
         if (!cancelled) {
-          setSectorData([]);
+          setSectorData(data);
+          setError("");
+          hasLoaded = true;
+        }
+      } catch (requestError) {
+        if (!cancelled && !hasLoaded) {
           setError("Unable to load live sector data.");
         }
       } finally {
@@ -3596,9 +3645,14 @@ function SectorsPage({ mode, openCompany, openSector, activeSector }) {
     }
 
     loadSectors();
+    const stopRefresh = installVisibilityAwareRefresh(
+      () => loadSectors({ force: true }),
+      { shouldRefresh: isIndianMarketRefreshWindow }
+    );
 
     return () => {
       cancelled = true;
+      stopRefresh();
     };
   }, []);
 
@@ -4479,13 +4533,13 @@ useEffect(() => {
   }
 
   fetchCompanyData();
-  const refreshTimer = window.setInterval(() => {
-    if (isIndianMarketOpen()) fetchCompanyData();
-  }, MARKET_REFRESH_MS);
+  const stopRefresh = installVisibilityAwareRefresh(fetchCompanyData, {
+    shouldRefresh: isIndianMarketOpen,
+  });
 
   return () => {
     isMounted = false;
-    window.clearInterval(refreshTimer);
+    stopRefresh();
   };
 }, [ticker]);
 
@@ -6508,13 +6562,29 @@ function GlobalIndexDetailPage({ indexKey, back }) {
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    setError("");
-    getGlobalIndexDetail(indexKey, range)
-      .then((result) => { if (!cancelled) setData(result); })
-      .catch(() => { if (!cancelled) { setData(null); setError("This index is currently unavailable from the market-data providers."); } })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    let hasLoaded = false;
+    async function loadIndex({ force = false } = {}) {
+      if (!hasLoaded) setLoading(true);
+      try {
+        const result = await getGlobalIndexDetail(indexKey, range, { force });
+        if (!cancelled) {
+          setData(result);
+          setError("");
+          hasLoaded = true;
+        }
+      } catch {
+        if (!cancelled && !hasLoaded) {
+          setError("This index is currently unavailable from the market-data providers.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadIndex();
+    const stopRefresh = installVisibilityAwareRefresh(
+      () => loadIndex({ force: true })
+    );
+    return () => { cancelled = true; stopRefresh(); };
   }, [indexKey, range]);
 
   useEffect(() => {
@@ -6610,9 +6680,9 @@ function CurrenciesPage() {
     let cancelled = false;
     let hasLoadedGlobalIndices = false;
 
-    async function loadGlobalIndices() {
+    async function loadGlobalIndices({ force = false } = {}) {
       try {
-        const result = await getGlobalIndices();
+        const result = await getGlobalIndices({ force });
         if (!cancelled) {
           setGlobalIndices(result);
           setGlobalIndicesError("");
@@ -6628,29 +6698,32 @@ function CurrenciesPage() {
     }
 
     loadGlobalIndices();
-    const refreshTimer = window.setInterval(loadGlobalIndices, MARKET_REFRESH_MS);
+    const stopRefresh = installVisibilityAwareRefresh(
+      () => loadGlobalIndices({ force: true })
+    );
     return () => {
       cancelled = true;
-      window.clearInterval(refreshTimer);
+      stopRefresh();
     };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    let hasLoadedCurrencies = false;
 
     async function loadCurrencies() {
-      setCurrenciesLoading(true);
-      setCurrenciesError("");
+      if (!hasLoadedCurrencies) setCurrenciesLoading(true);
 
       try {
         const data = await getCurrencies();
 
         if (!cancelled) {
           setCurrencyData(data);
+          setCurrenciesError("");
+          hasLoadedCurrencies = true;
         }
       } catch (error) {
-        if (!cancelled) {
-          setCurrencyData([]);
+        if (!cancelled && !hasLoadedCurrencies) {
           setCurrenciesError("Unable to load live currency data.");
         }
       } finally {
@@ -6661,11 +6734,14 @@ function CurrenciesPage() {
     }
 
     loadCurrencies();
-    const refreshTimer = window.setInterval(loadCurrencies, 2 * 60 * 1000);
+    const stopRefresh = installVisibilityAwareRefresh(loadCurrencies, {
+      intervalMs: 2 * 60 * 1000,
+      shouldRefresh: isCurrencyMarketOpen,
+    });
 
     return () => {
       cancelled = true;
-      window.clearInterval(refreshTimer);
+      stopRefresh();
     };
   }, []);
 

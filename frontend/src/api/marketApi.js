@@ -1,10 +1,10 @@
-import { cachedGet } from "./apiClient";
+import { cachedGet, indianMarketDataTtlMs } from "./apiClient";
 import { getYahooCompanySupplement, getYahooQuoteSupplements } from "./yahooSupplementApi";
 
-export async function getStockQuote(symbol) {
+export async function getStockQuote(symbol, { force = false } = {}) {
   try {
     const [response, supplement] = await Promise.all([
-      cachedGet(`/market/${symbol}`),
+      cachedGet(`/market/${symbol}`, {}, indianMarketDataTtlMs(), { force }),
       getYahooCompanySupplement(symbol),
     ]);
     const quote = response.data;
@@ -55,7 +55,7 @@ export async function getPeerComparison(symbols) {
   }
 }
 
-export async function getStockUniverse(symbols) {
+export async function getStockUniverse(symbols, { force = false } = {}) {
   try {
     const chunks = [];
     for (let index = 0; index < symbols.length; index += 40) {
@@ -66,7 +66,7 @@ export async function getStockUniverse(symbols) {
         chunks.map((chunk) =>
           cachedGet("/market/stocks", {
             params: { symbols: chunk.join(",") },
-          })
+          }, indianMarketDataTtlMs(), { force })
         )
       ),
       getYahooQuoteSupplements(symbols),

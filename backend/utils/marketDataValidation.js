@@ -1,5 +1,9 @@
-const MAX_FUTURE_SKEW_MS = 5 * 60 * 1000;
+const MAX_FUTURE_SKEW_MS = 60 * 1000;
 const MAX_DISPLAY_AGE_MS = 5 * 24 * 60 * 60 * 1000;
+const INDIAN_INDEX_FRESHNESS_POLICY = Object.freeze({
+  liveThroughMs: 15 * 60 * 1000,
+  lastUpdatedThroughMs: 30 * 60 * 1000,
+});
 
 function finitePositive(value) {
   const number = Number(value);
@@ -39,14 +43,16 @@ function isIndianMarketOpen(now = new Date()) {
   return minutes >= 9 * 60 + 15 && minutes < 15 * 60 + 30;
 }
 
-function classifyFreshness(timestamp, now = new Date()) {
+function classifyFreshness(timestamp, now = new Date(), policy = INDIAN_INDEX_FRESHNESS_POLICY) {
   const observedAt = new Date(timestamp);
   const ageMs = now.getTime() - observedAt.getTime();
   if (!Number.isFinite(ageMs) || ageMs < -MAX_FUTURE_SKEW_MS) return "invalid";
   if (ageMs > MAX_DISPLAY_AGE_MS) return "expired";
   if (isIndianMarketOpen(now)) {
     if (sessionKey(observedAt) !== sessionKey(now)) return "stale";
-    return ageMs <= 15 * 60 * 1000 ? "live" : "delayed";
+    if (ageMs <= policy.liveThroughMs) return "live";
+    if (ageMs <= policy.lastUpdatedThroughMs) return "last_updated";
+    return "stale";
   }
   return "eod";
 }
@@ -86,4 +92,11 @@ function validateQuote(quote, { requestedSymbol, allowStale = false } = {}) {
   };
 }
 
-module.exports = { validateQuote, classifyFreshness, sessionKey, MAX_DISPLAY_AGE_MS };
+module.exports = {
+  validateQuote,
+  classifyFreshness,
+  sessionKey,
+  isIndianMarketOpen,
+  INDIAN_INDEX_FRESHNESS_POLICY,
+  MAX_DISPLAY_AGE_MS,
+};

@@ -58,32 +58,46 @@ function exchangeClock(definition, now = new Date()) {
   };
 }
 
-function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked = false) {
-  const clock = exchangeClock(definition);
+function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked = false, now = new Date(), completedDailyConfirmed = false) {
+  const clock = exchangeClock(definition, now);
   const weekday = !["Sat", "Sun"].includes(clock.weekday);
   const scheduledOpen = weekday && definition.sessions.some(([open, close]) => clock.minutes >= open && clock.minutes < close);
-  const observation = exchangeClock(definition, new Date(quote?.regularMarketTime || 0));
+  const observationValue = quote?.regularMarketTime || quote?.marketTime || quote?.asOf;
+  const observation = exchangeClock(definition, new Date(observationValue || 0));
   const observationDate = observation.date;
   const finalClose = Math.max(...definition.sessions.map((session) => session[1]));
-  const currentSessionComplete = observationDate === clock.date && observation.minutes >= finalClose - 2;
+  const reconciliationMinute = finalClose + Number(definition.settlementBufferMinutes || 30);
   const marketState = String(quote?.marketState || "").toUpperCase();
-  const providerIsDelayed = /delayed/i.test(String(quote?.quoteSourceName || ""));
-  const observationIsFresh = observationAgeMs(quote?.regularMarketTime) <= 12 * 60 * 1000;
+  const providerIsDelayed = /delayed/i.test(String(quote?.quoteSourceName || quote?.dataProvider || ""));
+  const age = observationAgeMs(observationValue, now);
+  const knownDelayed = providerIsDelayed || definition.delayMinutes > 0;
 
-  if (scheduledOpen && (providerIsDelayed || definition.delayMinutes > 0) && observationDate === clock.date) return "delayed";
-  if (!historyBacked && marketState === "REGULAR" && scheduledOpen && observationDate === clock.date) return "live";
-  if (!historyBacked && scheduledOpen && observationDate === clock.date && observationIsFresh) return "live";
-  if (scheduledOpen && observationDate === clock.date) return "delayed";
-  if (observationDate === clock.date && !currentSessionComplete) return "delayed";
-  if (historyBacked && latestSessionDate === clock.date && !currentSessionComplete) return "delayed";
-  return "eod";
+  if (completedDailyConfirmed) return "eod";
+  if (age < -60 * 1000) return "unavailable";
+  if (!weekday || clock.minutes < Math.min(...definition.sessions.map((session) => session[0]))) {
+    return latestSessionDate && latestSessionDate !== clock.date ? "eod" : "last_updated";
+  }
+  if (observationDate !== clock.date) return scheduledOpen ? "stale" : "last_updated";
+  if (scheduledOpen && knownDelayed && age <= 45 * 60 * 1000) return "delayed";
+  if (scheduledOpen && age <= 15 * 60 * 1000) return "live";
+  if (scheduledOpen && age <= 30 * 60 * 1000) return "last_updated";
+  if (scheduledOpen) return "stale";
+  if (clock.minutes < reconciliationMinute) return knownDelayed ? "delayed" : "last_updated";
+  if (!historyBacked && marketState === "REGULAR" && age <= 30 * 60 * 1000) return knownDelayed ? "delayed" : "last_updated";
+  return "stale";
+}
+
+function reconciliationEligible(definition, now = new Date()) {
+  const clock = exchangeClock(definition, now);
+  if (["Sat", "Sun"].includes(clock.weekday)) return true;
+  const finalClose = Math.max(...definition.sessions.map((session) => session[1]));
+  return clock.minutes >= finalClose + Number(definition.settlementBufferMinutes || 30);
 }
 
 function exchangeSessionCloseTimestamp(dateKey, definition) {
   if (!dateKey || !definition?.timeZone || !definition?.sessions?.length) return null;
   const [year, month, day] = dateKey.split("-").map(Number);
-  const closeMinutes = Math.max(...definition.sessions.map((session) => session[1])) +
-    Number(definition.settlementBufferMinutes || 0);
+  const closeMinutes = Math.max(...definition.sessions.map((session) => session[1]));
   const targetHour = Math.floor(closeMinutes / 60);
   const targetMinute = closeMinutes % 60;
   let instant = new Date(Date.UTC(year, month - 1, day, targetHour, targetMinute));
@@ -109,9 +123,40 @@ function exchangeObservationDate(value, definition) {
   return Number.isNaN(date.getTime()) ? null : exchangeClock(definition, date).date;
 }
 
-function observationAgeMs(value) {
+function observationAgeMs(value, now = new Date()) {
   const timestamp = new Date(value).getTime();
-  return Number.isFinite(timestamp) ? Date.now() - timestamp : Number.POSITIVE_INFINITY;
+  return Number.isFinite(timestamp) ? now.getTime() - timestamp : Number.POSITIVE_INFINITY;
+}
+
+function canReuseCompletedCard(card, definition, now = new Date()) {
+  if (!card || card.dataStatus !== "eod") return false;
+  if (observationAgeMs(card.marketTime, now) < -60 * 1000) return false;
+  const cardSession = exchangeObservationDate(card.marketTime, definition);
+  if (!cardSession) return false;
+  const clock = exchangeClock(definition, now);
+  const weekday = !["Sat", "Sun"].includes(clock.weekday);
+  const firstOpen = Math.min(...definition.sessions.map((session) => session[0]));
+  const marketOpen = weekday && definition.sessions.some(
+    ([open, close]) => clock.minutes >= open && clock.minutes < close
+  );
+  if (marketOpen) return false;
+  if (!weekday || clock.minutes < firstOpen) return true;
+  return cardSession === clock.date;
+}
+
+function retainedCardWithCurrentStatus(card, definition, now = new Date()) {
+  if (observationAgeMs(card?.marketTime, now) < -60 * 1000) return null;
+  if (canReuseCompletedCard(card, definition, now)) return card;
+  const status = globalQuoteStatus(
+    card,
+    definition,
+    exchangeObservationDate(card?.marketTime, definition),
+    /historical/i.test(String(card?.dataProvider || "")),
+    now,
+    false
+  );
+  const safeStatus = status === "unavailable" ? "stale" : status;
+  return { ...card, dataStatus: safeStatus, isStale: safeStatus === "stale" };
 }
 
 async function getIntradayObservation(definition) {
@@ -161,6 +206,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     const reason = historyResult.status === "rejected" ? historyResult.reason?.message : "Insufficient global-index history";
     throw new Error(reason || "Insufficient global-index history");
   }
+  const now = new Date();
   const latestHistoricalPoint = points.at(-1);
   let quote = quoteResult.status === "fulfilled" ? quoteResult.value : {
     symbol: definition.symbol,
@@ -177,7 +223,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     try {
       const directQuote = await yahooProvider.quote(definition.symbol);
       const directTime = new Date(directQuote?.regularMarketTime).getTime();
-      const baseTime = new Date(baseQuote?.regularMarketTime).getTime();
+      const baseTime = new Date(quote?.regularMarketTime).getTime();
       if (Number.isFinite(directTime) && (!Number.isFinite(baseTime) || directTime >= baseTime)) {
         quote = directQuote;
       }
@@ -185,15 +231,17 @@ async function getGlobalIndexDetail(key, range = "1Y") {
       console.warn(`Direct global quote unavailable for ${definition.key}: ${error.message}`);
     }
   }
-  const preflightClock = exchangeClock(definition);
+  const preflightClock = exchangeClock(definition, now);
   const preflightOpen = !["Sat", "Sun"].includes(preflightClock.weekday) &&
     definition.sessions.some(([open, close]) => preflightClock.minutes >= open && preflightClock.minutes < close);
   const quoteSessionDate = exchangeObservationDate(quote?.regularMarketTime, definition);
   const preflightHistoryBacked = /historical/i.test(String(quote?.quoteSourceName || ""));
   const preflightWeekday = !["Sat", "Sun"].includes(preflightClock.weekday);
   const marketHasOpenedToday = preflightWeekday && preflightClock.minutes >= Math.min(...definition.sessions.map((session) => session[0]));
-  const quoteIsTooOldWhileOpen = preflightOpen && observationAgeMs(quote?.regularMarketTime) > 12 * 60 * 1000;
-  if (marketHasOpenedToday && (quoteSessionDate !== preflightClock.date || preflightHistoryBacked || quoteIsTooOldWhileOpen)) {
+  const quoteIsFuture = observationAgeMs(quote?.regularMarketTime, now) < -60 * 1000;
+  const quoteIsTooOldWhileOpen = preflightOpen && observationAgeMs(quote?.regularMarketTime, now) > 15 * 60 * 1000;
+  let intradayObservationApplied = false;
+  if (marketHasOpenedToday && (definition.preferIntradayChart || quoteIsFuture || quoteSessionDate !== preflightClock.date || preflightHistoryBacked || quoteIsTooOldWhileOpen)) {
     try {
       const intraday = await getIntradayObservation(definition);
       if (exchangeObservationDate(intraday.marketTime, definition) === preflightClock.date) {
@@ -204,20 +252,21 @@ async function getGlobalIndexDetail(key, range = "1Y") {
           quoteSourceName: "Yahoo Finance intraday",
           marketState: preflightOpen ? "REGULAR" : "CLOSED",
         };
+        intradayObservationApplied = true;
       }
     } catch (error) {
       console.warn(`Intraday global quote unavailable for ${definition.key}: ${error.message}`);
     }
   }
   const historyBacked = /historical/i.test(String(quote.quoteSourceName || ""));
-  const currentClock = exchangeClock(definition);
+  const currentClock = exchangeClock(definition, now);
   const latestRawSessionDate = exchangeObservationDate(
     points.at(-1)?.date,
     definition
   );
   const exchangeIsOpen = !["Sat", "Sun"].includes(currentClock.weekday) &&
     definition.sessions.some(([open, close]) => currentClock.minutes >= open && currentClock.minutes < close);
-  if (historyBacked && exchangeIsOpen && latestRawSessionDate === currentClock.date && points.length > 2) {
+  if (exchangeIsOpen && latestRawSessionDate === currentClock.date && points.length > 2) {
     points = points.slice(0, -1);
   }
   const closes = points.map((point) => point.adjustedClose);
@@ -226,46 +275,49 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     definition
   );
 
-  if (preflightOpen && !historyBacked) {
-    const age = observationAgeMs(quote?.regularMarketTime);
-    if (age < -2 * 60 * 1000 || age > 20 * 60 * 1000) {
-      throw new Error(`No fresh live observation for ${definition.key}`);
-    }
-  }
-
   const servingPriorSession = marketHasOpenedToday &&
     exchangeObservationDate(quote?.regularMarketTime, definition) !== preflightClock.date &&
     latestSessionDate !== preflightClock.date;
   const previousClose = closes.at(-2);
   const latestClose = closes.at(-1);
   const historyChange = latestClose - previousClose;
-  const status = servingPriorSession || usedFallbackHistory ? "stale" : globalQuoteStatus(
+  const beforeOpen = preflightWeekday && preflightClock.minutes < Math.min(...definition.sessions.map((session) => session[0]));
+  const nonTradingDay = !preflightWeekday;
+  const preferredHistoryEligible = !definition.requirePreferredHistoryForEod || !usedFallbackHistory;
+  const hasCompletedDailyClose = preferredHistoryEligible &&
+    Number.isFinite(latestClose) &&
+    Number.isFinite(previousClose) &&
+    (
+      ((beforeOpen || nonTradingDay) && latestSessionDate !== preflightClock.date) ||
+      (reconciliationEligible(definition, now) && latestRawSessionDate === preflightClock.date)
+    );
+  if (definition.preferIntradayChart && marketHasOpenedToday && !intradayObservationApplied && !hasCompletedDailyClose) {
+    throw new Error(`No trustworthy timestamped intraday observation for ${definition.key}`);
+  }
+  let status = globalQuoteStatus(
     quote,
     definition,
     latestSessionDate,
-    historyBacked
+    historyBacked,
+    now,
+    hasCompletedDailyClose
   );
-  const completedQuoteSessionDate = exchangeObservationDate(
-    quote?.regularMarketTime,
-    definition
-  );
-  const hasCompletedDailyClose =
-    status === "eod" &&
-    latestSessionDate === completedQuoteSessionDate &&
-    Number.isFinite(latestClose) &&
-    Number.isFinite(previousClose);
-  const observationTime = hasCompletedDailyClose || historyBacked
+  if (servingPriorSession && !hasCompletedDailyClose) status = "stale";
+  if (usedFallbackHistory && definition.requirePreferredHistoryForEod && status === "eod") status = "stale";
+  const rawObservationTime = quote.regularMarketTime || null;
+  const observationTime = hasCompletedDailyClose
     ? exchangeSessionCloseTimestamp(latestSessionDate, definition)
-    : (quote.regularMarketTime || latestSessionDate || null);
+    : (observationAgeMs(rawObservationTime, now) >= -60 * 1000 ? rawObservationTime : null);
+  if (!observationTime) throw new Error(`No trustworthy observation timestamp for ${definition.key}`);
   return {
     ...definition,
-    value: hasCompletedDailyClose || historyBacked
+    value: hasCompletedDailyClose
       ? latestClose
       : (finite(quote.regularMarketPrice) ?? latestClose),
-    change: hasCompletedDailyClose || historyBacked
+    change: hasCompletedDailyClose
       ? historyChange
       : finite(quote.regularMarketChange),
-    changePercent: hasCompletedDailyClose || historyBacked
+    changePercent: hasCompletedDailyClose
       ? (previousClose ? (historyChange / previousClose) * 100 : null)
       : finite(quote.regularMarketChangePercent),
     marketTime: observationTime,
@@ -273,8 +325,10 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     sessionDateOnly: false,
     isGlobalIndex: true,
     dataStatus: status,
-    isStale: servingPriorSession || usedFallbackHistory || Boolean(quote.isStale),
-    dataProvider: quote.quoteSourceName || "market provider",
+    isStale: status === "stale" || Boolean(quote.isStale),
+    dataProvider: hasCompletedDailyClose
+      ? (usedFallbackHistory ? "Fallback historical market data" : definition.historySymbol ? "Yahoo Japan official cash-index history" : "Completed daily market data")
+      : (quote.quoteSourceName || "market provider"),
     periodReturn: returnPercent(points),
     periodHigh: Math.max(...closes),
     periodLow: Math.min(...closes),
@@ -284,7 +338,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
 }
 
 async function getGlobalIndexOverview() {
-  const cacheKey = "global-index-overview:v7";
+  const cacheKey = "global-index-overview:v8";
   const cached = await getCachedValue(cacheKey, 5 * 60 * 1000);
   if (cached) return cached;
   if (overviewInFlight) return overviewInFlight;
@@ -292,6 +346,7 @@ async function getGlobalIndexOverview() {
   overviewInFlight = (async () => {
     const retainedSnapshots = await Promise.all([
       getCachedValue(cacheKey, GLOBAL_CARD_RETENTION_MS),
+      getCachedValue("global-index-overview:v7", GLOBAL_CARD_RETENTION_MS),
       getCachedValue("global-index-overview:v6", GLOBAL_CARD_RETENTION_MS),
       getCachedValue("global-index-overview:v5", GLOBAL_CARD_RETENTION_MS),
       getCachedValue("global-index-overview:v4", GLOBAL_CARD_RETENTION_MS),
@@ -316,6 +371,8 @@ async function getGlobalIndexOverview() {
       const definitions = GLOBAL_INDICES.slice(offset, offset + 5);
     const results = await Promise.allSettled(
       definitions.map(async (definition) => {
+      const retained = retainedByKey.get(definition.key);
+      if (canReuseCompletedCard(retained, definition)) return retained;
       const detail = await getGlobalIndexDetail(definition.key, "1M");
       return {
         key: detail.key, name: detail.name, symbol: detail.symbol, region: detail.region,
@@ -337,14 +394,19 @@ async function getGlobalIndexOverview() {
       const fresh = freshByKey.get(definition.key);
       const previous = retainedByKey.get(definition.key);
       if (!fresh) {
-        return previous ? { ...previous, dataStatus: "stale", isStale: true } : null;
+        if (!previous) return null;
+        return retainedCardWithCurrentStatus(previous, definition);
       }
       if (!previous) return fresh;
 
       const freshSession = exchangeObservationDate(fresh.marketTime, definition);
       const previousSession = exchangeObservationDate(previous.marketTime, definition);
       if (freshSession === previousSession) {
-        if (previous.dataStatus === "eod" && fresh.dataStatus !== "eod") return previous;
+        if (
+          previous.dataStatus === "eod" &&
+          fresh.dataStatus !== "eod" &&
+          canReuseCompletedCard(previous, definition)
+        ) return previous;
         if (new Date(previous.marketTime).getTime() > new Date(fresh.marketTime).getTime()) {
           return previous;
         }
@@ -362,4 +424,16 @@ async function getGlobalIndexOverview() {
   return overviewInFlight;
 }
 
-module.exports = { getGlobalIndexOverview, getGlobalIndexDetail };
+module.exports = {
+  getGlobalIndexOverview,
+  getGlobalIndexDetail,
+  _test: {
+    exchangeClock,
+    exchangeObservationDate,
+    exchangeSessionCloseTimestamp,
+    reconciliationEligible,
+    globalQuoteStatus,
+    canReuseCompletedCard,
+    retainedCardWithCurrentStatus,
+  },
+};
