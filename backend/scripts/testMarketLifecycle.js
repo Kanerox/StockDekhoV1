@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { classifyFreshness } = require("../utils/marketDataValidation");
+const { classifyFreshness, indianMarketPhase } = require("../utils/marketDataValidation");
 const { getGlobalIndexDefinition } = require("../config/globalIndexConfig");
 const { _test } = require("../services/globalIndexService");
 
@@ -97,6 +97,22 @@ assert.strictEqual(
 assert.strictEqual(
   classifyFreshness("2026-08-28T06:55:00.000Z", new Date("2026-08-28T07:30:00.000Z")),
   "stale"
+);
+
+assert.strictEqual(
+  indianMarketPhase(new Date("2026-08-28T10:05:00.000Z")),
+  "live",
+  "NSE Closing Auction Session observations remain active through 15:40 IST"
+);
+assert.strictEqual(
+  indianMarketPhase(new Date("2026-08-28T10:20:00.000Z")),
+  "reconciling",
+  "Post-auction processing is not prematurely labelled EOD"
+);
+assert.strictEqual(
+  indianMarketPhase(new Date("2026-08-28T10:36:00.000Z")),
+  "closed",
+  "Completed daily candles become eligible only after reconciliation"
 );
 
 console.log("Market lifecycle checks passed.");

@@ -40,7 +40,20 @@ function isIndianMarketOpen(now = new Date()) {
   const parts = istParts(now);
   if (!parts || parts.weekday === "Sat" || parts.weekday === "Sun") return false;
   const minutes = Number(parts.hour) * 60 + Number(parts.minute);
-  return minutes >= 9 * 60 + 15 && minutes < 15 * 60 + 30;
+  // Closing Auction Session activity can continue beyond the old 15:30
+  // continuous-session boundary. Treat exchange observations through 15:40
+  // as active; the period after that is reconciliation, not confirmed EOD.
+  return minutes >= 9 * 60 + 15 && minutes < 15 * 60 + 40;
+}
+
+function indianMarketPhase(now = new Date()) {
+  const parts = istParts(now);
+  if (!parts || parts.weekday === "Sat" || parts.weekday === "Sun") return "closed";
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  if (minutes < 9 * 60 + 15) return "pre_market";
+  if (minutes < 15 * 60 + 40) return "live";
+  if (minutes < 16 * 60 + 5) return "reconciling";
+  return "closed";
 }
 
 function classifyFreshness(timestamp, now = new Date(), policy = INDIAN_INDEX_FRESHNESS_POLICY) {
@@ -70,7 +83,20 @@ function validateQuote(quote, { requestedSymbol, allowStale = false } = {}) {
   if (Number.isNaN(timestamp.getTime())) throw new Error(`Invalid market timestamp for ${requestedSymbol || quote.symbol || "instrument"}`);
   if (timestamp.getTime() > Date.now() + MAX_FUTURE_SKEW_MS) throw new Error(`Future market timestamp for ${requestedSymbol || quote.symbol || "instrument"}`);
 
-  const freshness = classifyFreshness(timestamp);
+  let freshness = classifyFreshness(timestamp);
+  if (quote.observationKind === "session_close") {
+    const observationSession = quote.observationDate || sessionKey(timestamp);
+    const currentSession = sessionKey(new Date());
+    freshness = observationSession === currentSession || indianMarketPhase() !== "live"
+      ? "eod"
+      : "stale";
+  } else if (indianMarketPhase() === "reconciling" && sessionKey(timestamp) === sessionKey(new Date())) {
+    freshness = "last_updated";
+  } else if (indianMarketPhase() === "closed" && sessionKey(timestamp) === sessionKey(new Date())) {
+    // A same-day LTP after trading is only a provisional observation until a
+    // completed daily candle confirms the exchange close.
+    freshness = "last_updated";
+  }
   if (freshness === "invalid" || freshness === "expired" || (freshness === "stale" && !allowStale)) {
     throw new Error(`Quote is beyond the accepted freshness window for ${requestedSymbol || quote.symbol || "instrument"}`);
   }
@@ -97,6 +123,7 @@ module.exports = {
   classifyFreshness,
   sessionKey,
   isIndianMarketOpen,
+  indianMarketPhase,
   INDIAN_INDEX_FRESHNESS_POLICY,
   MAX_DISPLAY_AGE_MS,
 };

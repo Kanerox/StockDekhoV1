@@ -10,6 +10,17 @@ const STALE_HISTORY_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
 const requestsInFlight = new Map();
 
+function indianHistoryFreshTtl(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  const weekday = ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(parts.weekday);
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  return weekday && minutes >= 9 * 60 + 15 && minutes < 16 * 60 + 5
+    ? UPSTOX_FRESH_HISTORY_TTL_MS
+    : 6 * 60 * 60 * 1000;
+}
+
 function normalizeSymbol(symbol) {
   const normalized = String(symbol || "").trim().toUpperCase();
   if (!normalized) throw new Error("A stock symbol is required");
@@ -148,7 +159,7 @@ async function fetchHistoricalPrices(
     appendLatestQuote
   );
   const freshTtl = getMarketDataProviderName() === "upstox"
-    ? UPSTOX_FRESH_HISTORY_TTL_MS
+    ? indianHistoryFreshTtl()
     : YAHOO_FRESH_HISTORY_TTL_MS;
   const freshPrices = await getCachedValue(key, freshTtl);
   if (freshPrices) return freshPrices;
@@ -174,6 +185,10 @@ async function fetchHistoricalPrices(
         period1,
         period2,
         interval: "1d",
+        // A completed-session reconciliation must prefer the primary
+        // provider's daily candle. Yahoo remains the provider fallback when
+        // Upstox itself is unavailable.
+        supplement: appendLatestQuote,
       });
 
       const historicalPrices = (result.quotes || [])

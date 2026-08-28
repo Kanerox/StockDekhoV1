@@ -4,15 +4,15 @@ const {
 } = require("../providers/marketData");
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 const { fetchHistoricalPrices } = require("./historyClient");
-const { validateQuote } = require("../utils/marketDataValidation");
+const { validateQuote, indianMarketPhase, sessionKey } = require("../utils/marketDataValidation");
 
 const FRESH_QUOTE_TTL_MS = 5 * 60 * 1000;
 const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
-const QUOTE_CACHE_VERSION = "v10";
-const PREVIOUS_QUOTE_CACHE_VERSION = "v9";
+const QUOTE_CACHE_VERSION = "v11";
+const PREVIOUS_QUOTE_CACHE_VERSION = "v10";
 const SUPPLEMENTAL_QUOTE_FIELDS = [
   "marketCap",
   "trailingPE",
@@ -171,25 +171,26 @@ function chooseNewerQuote(candidate, cached, requestedSymbol) {
   }
 }
 
-function endOfDayTimestamp(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  const sessionDate = date.toLocaleDateString("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  // The daily candle represents the NSE cash-session close (15:30 IST).
-  // A later StockDekho reconciliation time must never be presented as though
-  // the instrument traded then.
-  return `${sessionDate}T10:00:00.000Z`;
-}
-
 function historyObservationTimestamp(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return endOfDayTimestamp(date);
+  // A daily candle timestamp identifies its trading session; it is not a
+  // fabricated 15:30 or 16:00 trade. The UI uses observationDate for this
+  // session-close observation and therefore does not present this as an LTP.
+  return date.toISOString();
+}
+
+function observationDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString("en-CA", {
+    timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit",
+  });
+}
+
+function needsCompletedSessionReconciliation(quote, now = new Date()) {
+  return indianMarketPhase(now) === "closed" &&
+    quote?.observationKind !== "session_close";
 }
 
 async function preserveLegacyQuoteFields(quote) {
@@ -231,7 +232,8 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
   const prices = await fetchHistoricalPrices(
     normalizedSymbol,
     period1,
-    period2
+    period2,
+    { appendLatestQuote: false }
   );
   const validPrices = prices.filter((point) =>
     Number.isFinite(point?.close)
@@ -271,13 +273,16 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
         ? null
         : ((adjustedLatest / adjustedFirst) - 1) * 100,
     regularMarketTime: historyObservationTimestamp(latest.date),
+    observationDate: observationDate(latest.date),
+    observationKind: "session_close",
     currency: "INR",
-    quoteSourceName: "Yahoo Finance historical EOD",
+    quoteSourceName: "Completed daily market data",
   };
 
-  const quote = quoteTimestamp(historyQuote) > quoteTimestamp(baseQuote)
+  const sameSession = historyQuote.observationDate === sessionKey(baseQuote?.regularMarketTime);
+  const quote = !baseQuote || sameSession || quoteTimestamp(historyQuote) > quoteTimestamp(baseQuote)
     ? { ...(baseQuote || {}), ...historyQuote }
-    : baseQuote || historyQuote;
+    : baseQuote;
   const validatedQuote = validateQuote(quote, { requestedSymbol: normalizedSymbol });
 
   await setCacheEntry(
@@ -298,7 +303,27 @@ async function getFallbackQuotes(symbols) {
     (symbol) => !staleBySymbol.has(normalizeSymbol(symbol))
   );
 
-  if (missingSymbols.length === 0) return staleQuotes;
+  if (missingSymbols.length === 0 && indianMarketPhase() !== "closed") return staleQuotes;
+
+  if (indianMarketPhase() === "closed") {
+    const completed = [];
+    let cursor = 0;
+    async function worker() {
+      while (cursor < symbols.length) {
+        const symbol = symbols[cursor++];
+        try {
+          completed.push(await fetchHistoryBackedQuote(
+            symbol,
+            staleBySymbol.get(normalizeSymbol(symbol))
+          ));
+        } catch (error) {
+          console.warn(`Cached completed-session reconciliation unavailable for ${symbol}: ${error.message}`);
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(12, symbols.length) }, worker));
+    if (completed.length) return completed;
+  }
 
   const results = await Promise.allSettled(
     missingSymbols.map((symbol) =>
@@ -319,7 +344,10 @@ async function fetchMarketData(symbol, options = {}) {
   const key = quoteCacheKey(normalizedSymbol);
   const freshQuote = await getCachedValue(key, FRESH_QUOTE_TTL_MS);
   if (freshQuote) {
-    try { return validateQuote(freshQuote, { requestedSymbol: normalizedSymbol }); }
+    try {
+      const validated = validateQuote(freshQuote, { requestedSymbol: normalizedSymbol });
+      if (!needsCompletedSessionReconciliation(validated)) return validated;
+    }
     catch (error) { console.warn(`Ignoring invalid or stale fresh-cache quote: ${error.message}`); }
   }
 
@@ -344,11 +372,14 @@ async function fetchMarketData(symbol, options = {}) {
         { label: `Market quote ${normalizedSymbol}` }
       );
       const cachedQuote = await getCachedValue(key, STALE_QUOTE_TTL_MS);
-      const quote = chooseNewerQuote(
+      let quote = chooseNewerQuote(
         await preserveLegacyQuoteFields(providerQuote),
         cachedQuote,
         normalizedSymbol
       );
+      if (needsCompletedSessionReconciliation(quote)) {
+        quote = await fetchHistoryBackedQuote(normalizedSymbol, quote);
+      }
 
       if (quote?.symbol) {
         await setCacheEntry(
@@ -388,7 +419,10 @@ async function collectCachedQuotes(symbols, maxAgeMs) {
   );
   const validatedValues = values.map((quote, index) => {
     if (!quote) return null;
-    try { return validateQuote(quote, { requestedSymbol: symbols[index] }); }
+    try {
+      const validated = validateQuote(quote, { requestedSymbol: symbols[index] });
+      return needsCompletedSessionReconciliation(validated) ? null : validated;
+    }
     catch (error) { console.warn(`Ignoring invalid or stale cached quote: ${error.message}`); return null; }
   });
   const cachedQuotes = validatedValues.filter(Boolean);
@@ -442,7 +476,7 @@ async function fetchMarketDataBatch(symbols, options = {}) {
       () => fetchProviderQuotes(missingSymbols, options),
       { label: "Market batch quote request" }
     );
-    const fetchedQuotes = await Promise.all(
+    let fetchedQuotes = await Promise.all(
       (Array.isArray(result) ? result : [result])
         .filter(Boolean)
     .map(async (quote) => {
@@ -454,6 +488,29 @@ async function fetchMarketDataBatch(symbols, options = {}) {
       );
     })
     );
+
+    if (indianMarketPhase() === "closed") {
+      const reconciled = new Array(fetchedQuotes.length);
+      let cursor = 0;
+      async function worker() {
+        while (cursor < fetchedQuotes.length) {
+          const index = cursor++;
+          const quote = fetchedQuotes[index];
+          if (!needsCompletedSessionReconciliation(quote)) {
+            reconciled[index] = quote;
+            continue;
+          }
+          try {
+            reconciled[index] = await fetchHistoryBackedQuote(quote.symbol, quote);
+          } catch (error) {
+            console.warn(`Completed-session reconciliation unavailable for ${quote.symbol}: ${error.message}`);
+            reconciled[index] = validateQuote(quote, { requestedSymbol: quote.symbol, allowStale: true });
+          }
+        }
+      }
+      await Promise.all(Array.from({ length: Math.min(12, fetchedQuotes.length) }, worker));
+      fetchedQuotes = reconciled;
+    }
 
     await Promise.all(
       fetchedQuotes

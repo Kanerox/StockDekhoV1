@@ -45,7 +45,7 @@ function indexOverviewFreshMs(now = new Date()) {
 }
 
 function indexSummaryCacheKey(key) {
-  return `index-summary:${key}:v1`;
+  return `index-summary:${key}:v2`;
 }
 
 function withCurrentFreshness(observation) {
@@ -171,6 +171,8 @@ function mapConstituent(quote, fallbackTicker) {
     price: valueOrNull(quote?.regularMarketPrice),
     chgPct: valueOrNull(quote?.regularMarketChangePercent),
     marketTime: quote?.regularMarketTime || null,
+    observationDate: quote?.observationDate || null,
+    observationKind: quote?.observationKind || null,
     dataStatus: quote?.dataStatus || null,
     isStale: Boolean(quote?.isStale),
     mcap: marketCap === null ? null : marketCap / 10000000,
@@ -214,6 +216,8 @@ function mapQuote(definition, quote) {
     high52: valueOrNull(quote.fiftyTwoWeekHigh),
     marketTime: quote.regularMarketTime || null,
     asOf: quote.regularMarketTime || null,
+    observationDate: quote.observationDate || null,
+    observationKind: quote.observationKind || null,
     dataProvider: getMarketDataProviderName(),
     quoteSource: quote.quoteSourceName || getMarketDataProviderName(),
     dataStatus: quote.dataStatus || null,
@@ -222,7 +226,7 @@ function mapQuote(definition, quote) {
 }
 
 function leadershipSnapshotCacheKey(range) {
-  return `index-detail-consistent:NIFTY50:${range}:v1`;
+  return `index-detail-consistent:NIFTY50:${range}:v2`;
 }
 
 function isConsistentLeadershipDetail(detail) {
@@ -267,7 +271,7 @@ async function getIndexSummary(definition) {
 }
 
 async function getIndexOverview() {
-  const cacheKey = "index-overview:v2";
+  const cacheKey = "index-overview:v4";
   const cached = await getCachedValue(cacheKey, indexOverviewFreshMs());
   if (cached) return cached;
   if (overviewInFlight) return overviewInFlight;

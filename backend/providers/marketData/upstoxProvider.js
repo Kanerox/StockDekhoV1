@@ -421,7 +421,9 @@ module.exports = {
 
   chart(symbol, options) {
     return withYahooFallback(
-      () => chartWithYahooSupplement(symbol, options),
+      () => options?.supplement === false
+        ? upstoxChart(symbol, options)
+        : chartWithYahooSupplement(symbol, options),
       () => yahooProvider.chart(symbol, options),
       `Upstox history ${symbol}`
     );

@@ -59,6 +59,8 @@ const getStockDataFromService = async (symbol) => {
     exchange: quote.fullExchangeName,
     currency: quote.currency,
     asOf: quote.regularMarketTime || null,
+    observationDate: quote.observationDate || null,
+    observationKind: quote.observationKind || null,
     dataProvider: getMarketDataProviderName(),
     quoteSource: quote.quoteSourceName || getMarketDataProviderName(),
     dataStatus: quote.dataStatus || null,
@@ -120,6 +122,8 @@ const getPeerComparisonFromService = async (symbols) => {
         dividendYield: valueOrNull(quote.dividendYield),
         oneYearReturn: valueOrNull(quote.fiftyTwoWeekChangePercent),
         asOf: quote.regularMarketTime || null,
+        observationDate: quote.observationDate || null,
+        observationKind: quote.observationKind || null,
         dataProvider: getMarketDataProviderName(),
       };
     })
@@ -195,6 +199,8 @@ divYield: valueOrNull(quote?.dividendYield),
 de: null,
       ret1y: valueOrNull(quote?.fiftyTwoWeekChangePercent),
       asOf: quote?.regularMarketTime || null,
+      observationDate: quote?.observationDate || null,
+      observationKind: quote?.observationKind || null,
       dataProvider: getMarketDataProviderName(),
       quoteSource: quote?.quoteSourceName || getMarketDataProviderName(),
       dataStatus: quote?.dataStatus || null,
@@ -315,7 +321,7 @@ const getMarketPerformersFromService = async (
     );
   }
 
-  const performerCacheKey = `market-performers:v2:${normalizedRange}:${uniqueSymbols.join(",")}`;
+  const performerCacheKey = `market-performers:v3:${normalizedRange}:${uniqueSymbols.join(",")}`;
   const cachedPerformers = await getCachedValue(performerCacheKey, 15 * 60 * 1000);
   if (cachedPerformers) return cachedPerformers;
 
@@ -427,6 +433,8 @@ const getMarketPerformersFromService = async (
 
         returnPercent,
         asOf: quote?.regularMarketTime || null,
+        observationDate: quote?.observationDate || null,
+        observationKind: quote?.observationKind || null,
         dataProvider: getMarketDataProviderName(),
       };
     })

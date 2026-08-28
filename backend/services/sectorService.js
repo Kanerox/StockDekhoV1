@@ -121,6 +121,8 @@ function mapQuote(quote, fallbackTicker) {
     ret1y: valueOrNull(quote?.fiftyTwoWeekChangePercent),
     mcap: marketCap === null ? null : marketCap / 10000000,
     asOf: quote?.regularMarketTime || null,
+    observationDate: quote?.observationDate || null,
+    observationKind: quote?.observationKind || null,
   };
 }
 
@@ -183,10 +185,10 @@ async function getSectorSummary(definition) {
 }
 
 async function getSectorOverview() {
-  const cached = await getCachedValue("sector-overview:v2", 15 * 60 * 1000);
+  const cached = await getCachedValue("sector-overview:v3", 15 * 60 * 1000);
   if (cached) return cached;
   const overview = await Promise.all(SECTORS.map(getSectorSummary));
-  await setCacheEntry("sector-overview:v2", overview, 24 * 60 * 60 * 1000);
+  await setCacheEntry("sector-overview:v3", overview, 24 * 60 * 60 * 1000);
   return overview;
 }
 

@@ -884,6 +884,16 @@ const formatMarketAsOf = (value) => {
   });
 };
 
+const formatMarketObservation = (data, prefix = "As of") => {
+  if (data?.observationKind === "session_close" && data?.observationDate) {
+    const date = new Date(`${data.observationDate}T00:00:00+05:30`);
+    return `Session close ${date.toLocaleDateString("en-IN", {
+      day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata",
+    })}`;
+  }
+  return `${prefix} ${formatMarketAsOf(data?.asOf || data?.marketTime)}`;
+};
+
 const formatChartDate = (value, includeYear = false) => {
   if (!value) return "Date unavailable";
   const date = new Date(value);
@@ -1522,7 +1532,7 @@ function IndexCard({ idx, onOpen, matchCurrencyCard = false }) {
             ? "Illustrative 1M series · Demo"
             : idx.isGsec
               ? `${idx.dataProvider || "FBIL"} · ${idx.asOf?.includes("T") ? formatMarketAsOf(idx.asOf) : new Date(`${idx.observationDate}T00:00:00`).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" })}`
-              : `As of ${formatMarketAsOf(idx.asOf || idx.marketTime)}`}
+              : formatMarketObservation(idx)}
         </div>
       </div>
     </div>
@@ -2227,7 +2237,9 @@ const mostActive = [...performerStocks]
     marketSessionDate(sensex.marketTime || sensex.asOf) === leadershipSession
   );
   const hasClosingLeadershipSnapshot = hasLeadershipSnapshot &&
-    isClosingLeadershipObservation(newestLeadershipTime);
+    (niftyDetail?.observationKind === "session_close" ||
+      trackedNiftyStocks.every((stock) => stock.observationKind === "session_close") ||
+      isClosingLeadershipObservation(newestLeadershipTime));
   const leadershipDate = niftyDetail?.marketTime
     ? new Date(niftyDetail.marketTime).toLocaleDateString("en-IN", {
         day: "2-digit",
@@ -2241,9 +2253,12 @@ const mostActive = [...performerStocks]
         .filter(Number.isFinite)
         .sort((a, b) => b - a)[0]
     : null;
-  const leadershipAsOf = Number.isFinite(leadershipObservationTime)
-    ? formatMarketAsOf(new Date(leadershipObservationTime).toISOString())
-    : leadershipDate;
+  const leadershipAsOf = hasClosingLeadershipSnapshot &&
+    (niftyDetail?.observationKind === "session_close" || trackedNiftyStocks.every((stock) => stock.observationKind === "session_close"))
+    ? `Session close ${leadershipDate}`
+    : Number.isFinite(leadershipObservationTime)
+      ? formatMarketAsOf(new Date(leadershipObservationTime).toISOString())
+      : leadershipDate;
   const describeIndexMove = (label, value) => {
     const absoluteMove = Math.abs(value);
     if (absoluteMove < 0.005) return `${label} was flat at 0.00%`;
@@ -3519,7 +3534,9 @@ function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compar
         >
           Sector Classification
         </button>.
-        {stocksAsOf && <> Data as of {formatMarketAsOf(stocksAsOf)}.</>}
+        {stocksAsOf && <> Data {liveStocks.every((stock) => stock.observationKind === "session_close")
+          ? formatMarketObservation(liveStocks[0]).toLowerCase()
+          : `as of ${formatMarketAsOf(stocksAsOf)}`}.</>}
       </p>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
@@ -4817,7 +4834,7 @@ useEffect(() => {
     paddingTop: 10,
   }}
 >
-  Market data sourced from {quote.quoteSource || marketProviderLabel(quote.dataProvider)}{quote.supplementalDataProvider ? ` + ${quote.supplementalDataProvider}` : ""} · {quote.isStale ? "Stale snapshot" : quote.dataStatus === "delayed" ? "Delayed snapshot" : "As of"} {formatMarketAsOf(quote.asOf)}. For research purposes only. Not investment advice.
+  Market data sourced from {quote.quoteSource || marketProviderLabel(quote.dataProvider)}{quote.supplementalDataProvider ? ` + ${quote.supplementalDataProvider}` : ""} · {quote.observationKind === "session_close" ? formatMarketObservation(quote) : `${quote.isStale ? "Stale snapshot" : quote.dataStatus === "delayed" ? "Delayed snapshot" : "As of"} ${formatMarketAsOf(quote.asOf)}`}. For research purposes only. Not investment advice.
 </div>
       </Panel>
 
