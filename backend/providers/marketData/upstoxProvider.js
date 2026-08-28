@@ -124,23 +124,24 @@ function finite(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function marketTime(quote) {
+function marketObservation(quote) {
   const lastTrade = Number(quote?.last_trade_time);
   if (Number.isFinite(lastTrade) && lastTrade > 0) {
     const milliseconds = lastTrade < 1e12 ? lastTrade * 1000 : lastTrade;
     const lastTradeDate = new Date(milliseconds);
     if (!Number.isNaN(lastTradeDate.getTime())) {
-      return lastTradeDate.toISOString();
+      return { time: lastTradeDate.toISOString(), source: "last_trade" };
     }
   }
   const timestamp = new Date(quote?.timestamp);
   if (!Number.isNaN(timestamp.getTime())) {
-    return timestamp.toISOString();
+    return { time: timestamp.toISOString(), source: "feed_update" };
   }
-  return null;
+  return { time: null, source: null };
 }
 
 function mapQuote(requestedSymbol, instrument, quote) {
+  const observation = marketObservation(quote);
   const price = finite(quote?.last_price);
   const quotedPreviousClose = finite(quote?.ohlc?.close);
   const quotedChange = finite(quote?.net_change);
@@ -168,7 +169,8 @@ function mapQuote(requestedSymbol, instrument, quote) {
     regularMarketDayHigh: finite(quote?.ohlc?.high),
     regularMarketDayLow: finite(quote?.ohlc?.low),
     regularMarketVolume: finite(quote?.volume),
-    regularMarketTime: marketTime(quote),
+    regularMarketTime: observation.time,
+    marketTimeSource: observation.source,
     currency: "INR",
     fullExchangeName: String(instrument?.exchange || "NSE"),
     quoteSourceName: "Upstox",

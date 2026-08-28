@@ -90,7 +90,7 @@ function validateQuote(quote, { requestedSymbol, allowStale = false } = {}) {
     freshness = observationSession === currentSession || indianMarketPhase() !== "live"
       ? "eod"
       : "stale";
-  } else if (quote.observationKind === "provisional_close") {
+  } else if (["provisional_close", "provisional_session"].includes(quote.observationKind)) {
     const phase = indianMarketPhase();
     const ageMs = Date.now() - timestamp.getTime();
     freshness = phase !== "live" && ageMs <= 3 * 24 * 60 * 60 * 1000

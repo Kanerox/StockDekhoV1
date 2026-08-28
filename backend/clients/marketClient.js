@@ -11,8 +11,8 @@ const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const RATE_LIMIT_COOLDOWN_MS = 15 * 60 * 1000;
-const QUOTE_CACHE_VERSION = "v14";
-const PREVIOUS_QUOTE_CACHE_VERSION = "v13";
+const QUOTE_CACHE_VERSION = "v15";
+const PREVIOUS_QUOTE_CACHE_VERSION = "v14";
 const SUPPLEMENTAL_QUOTE_FIELDS = [
   "marketCap",
   "trailingPE",
@@ -267,8 +267,12 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
       regularMarketChangePercent: previousClose === 0 ? null : ((price - previousClose) / previousClose) * 100,
       regularMarketTime: new Date(latestObservation.date).toISOString(),
       observationDate: observationDate(latestObservation.date),
-      observationKind: "provisional_close",
+      observationKind: latestObservation.observationTimeSource === "last_trade"
+        ? "provisional_close"
+        : "provisional_session",
       quoteSourceName: "Latest market observation",
+      fiftyTwoWeekLow: Math.min(...validPrices.map((point) => point.close)),
+      fiftyTwoWeekHigh: Math.max(...validPrices.map((point) => point.close)),
     };
     const validatedProvisional = validateQuote(provisional, {
       requestedSymbol: normalizedSymbol,

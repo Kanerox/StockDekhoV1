@@ -119,6 +119,7 @@ async function appendLatestUpstoxQuote(symbol, prices, period1, period2) {
       date,
       close: price,
       adjustedClose: price,
+      observationTimeSource: quote?.marketTimeSource || null,
     }]);
   } catch (error) {
     console.warn(`Unable to append current Upstox quote for ${symbol}: ${error.message}`);

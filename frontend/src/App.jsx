@@ -891,6 +891,12 @@ const formatMarketObservation = (data, prefix = "As of") => {
       day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata",
     })}`;
   }
+  if (data?.observationKind === "provisional_session" && data?.observationDate) {
+    const date = new Date(`${data.observationDate}T00:00:00+05:30`);
+    return `Latest session ${date.toLocaleDateString("en-IN", {
+      day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata",
+    })}`;
+  }
   return `${prefix} ${formatMarketAsOf(data?.asOf || data?.marketTime)}`;
 };
 
@@ -2241,6 +2247,8 @@ const mostActive = [...performerStocks]
   const leadershipAsOf = hasClosingLeadershipSnapshot &&
     (niftyDetail?.observationKind === "session_close" || trackedNiftyStocks.every((stock) => stock.observationKind === "session_close"))
     ? `Session close ${leadershipDate}`
+    : trackedNiftyStocks.length === 50 && trackedNiftyStocks.every((stock) => stock.observationKind === "provisional_session")
+      ? `Latest session ${leadershipDate}`
     : Number.isFinite(leadershipObservationTime)
       ? formatMarketAsOf(new Date(leadershipObservationTime).toISOString())
       : leadershipDate;
@@ -3519,7 +3527,7 @@ function StocksPage({ mode, setPage, openCompany, watchlist, toggleWatch, compar
         >
           Sector Classification
         </button>.
-        {stocksAsOf && <> Data {liveStocks.every((stock) => stock.observationKind === "session_close")
+        {stocksAsOf && <> Data {liveStocks.every((stock) => ["session_close", "provisional_session"].includes(stock.observationKind))
           ? formatMarketObservation(liveStocks[0]).toLowerCase()
           : `as of ${formatMarketAsOf(stocksAsOf)}`}.</>}
       </p>
@@ -4819,7 +4827,7 @@ useEffect(() => {
     paddingTop: 10,
   }}
 >
-  Market data sourced from {quote.quoteSource || marketProviderLabel(quote.dataProvider)}{quote.supplementalDataProvider ? ` + ${quote.supplementalDataProvider}` : ""} · {quote.observationKind === "session_close" ? formatMarketObservation(quote) : `${quote.isStale ? "Stale snapshot" : quote.dataStatus === "delayed" ? "Delayed snapshot" : "As of"} ${formatMarketAsOf(quote.asOf)}`}. For research purposes only. Not investment advice.
+  Market data sourced from {quote.quoteSource || marketProviderLabel(quote.dataProvider)}{quote.supplementalDataProvider ? ` + ${quote.supplementalDataProvider}` : ""} · {["session_close", "provisional_session"].includes(quote.observationKind) ? formatMarketObservation(quote) : `${quote.isStale ? "Stale snapshot" : quote.dataStatus === "delayed" ? "Delayed snapshot" : "As of"} ${formatMarketAsOf(quote.asOf)}`}. For research purposes only. Not investment advice.
 </div>
       </Panel>
 

@@ -271,7 +271,7 @@ async function getIndexSummary(definition) {
 }
 
 async function getIndexOverview() {
-  const cacheKey = "index-overview:v7";
+  const cacheKey = "index-overview:v8";
   const cached = await getCachedValue(cacheKey, indexOverviewFreshMs());
   if (cached) return cached;
   if (overviewInFlight) return overviewInFlight;
