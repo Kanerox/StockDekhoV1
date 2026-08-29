@@ -199,6 +199,7 @@ async function historySupplement(symbol, query) {
 }
 
 export default async function handler(request, response) {
+  response.setHeader("Cache-Control", "public, s-maxage=21600, stale-while-revalidate=604800");
   try {
     const action = String(request.query?.action || "quotes");
     response.setHeader(

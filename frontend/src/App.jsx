@@ -1350,6 +1350,7 @@ function Header({
   onSearchTopic,
 }) {
   const headerRef = useRef(null);
+  const navRef = useRef(null);
   const [searchOpen, setSearchOpen] =
     useState(false);
 
@@ -1363,6 +1364,11 @@ function Header({
     window.addEventListener("resize", updateHeight);
     return () => { observer.disconnect(); window.removeEventListener("resize", updateHeight); };
   }, []);
+
+  useEffect(() => {
+    const active = navRef.current?.querySelector('[aria-current="page"]');
+    active?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [page]);
 
   const results = useMemo(() => {
     if (!query.trim()) {
@@ -1404,9 +1410,9 @@ function Header({
           <span style={{ color: THEME.gold, fontSize: 42, lineHeight: 0, position: "relative", top: 1, marginLeft: 1 }}>.</span>
         </div>
 
-        <nav className="sd-header-nav" style={{ display: "flex", gap: 4 }}>
+        <nav ref={navRef} className="sd-header-nav sd-scroll" style={{ display: "flex", gap: 4 }}>
           {navItems.map((n) => (
-            <button key={n.key} onClick={() => setPage(n.key)} className="sd-focusable" style={{
+            <button key={n.key} aria-current={page === n.key ? "page" : undefined} onClick={() => setPage(n.key)} className="sd-focusable" style={{
               background: "none", border: "none", cursor: "pointer", fontSize: 13.5, fontWeight: 600,
               padding: "8px 10px", borderRadius: 4,
               color: page === n.key ? THEME.cream : THEME.inkDim,
@@ -1747,6 +1753,20 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
 
       if (!cancelled) {
         const seen = new Set();
+        const sectorTerms = {
+          Financials: ["bank", "banking", "credit", "lending", "financial sector"],
+          "Information Technology": ["technology", "it sector", "software", "digital services"],
+          Energy: ["energy", "oil", "gas", "crude"],
+          "Consumer Staples": ["fmcg", "consumer staples", "rural demand"],
+          "Consumer Discretionary": ["auto sector", "automobile", "consumer demand"],
+          "Health Care": ["pharma sector", "healthcare", "drug pricing"],
+          Industrials: ["industrial sector", "infrastructure", "capital goods"],
+          Materials: ["metals", "materials", "steel", "cement"],
+          Utilities: ["power sector", "electricity", "utilities"],
+          "Communication Services": ["telecom sector", "communications", "spectrum"],
+          "Real Estate": ["real estate sector", "realty", "property market"],
+        }[sector] || [String(sector).toLowerCase()];
+        const macroTerms = ["rbi", "government", "regulation", "policy", "tariff", "budget", "inflation", "interest rate"];
         const articles = results
           .filter((result) => result.status === "fulfilled")
           .flatMap((result) =>
@@ -1755,10 +1775,14 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
               companies: [result.value.ticker],
             }))
           )
-          .sort(
-            (a, b) =>
-              newsDateTimestamp(b.publishedAt) - newsDateTimestamp(a.publishedAt)
-          )
+          .sort((a, b) => {
+            const score = (article) => {
+              const text = [article.title, article.summary, article.snippet].filter(Boolean).join(" ").toLowerCase();
+              return sectorTerms.some((term) => text.includes(term)) * 20 +
+                macroTerms.some((term) => text.includes(term)) * 8;
+            };
+            return score(b) - score(a) || newsDateTimestamp(b.publishedAt) - newsDateTimestamp(a.publishedAt);
+          })
           .filter((article) => {
             const key = article.link || article.title;
             if (!key || seen.has(key)) return false;
@@ -1798,10 +1822,8 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
       year: series.length > 400 ? "2-digit" : undefined,
     })
   );
-  const upcomingVixEvents = VIX_SCHEDULED_EVENTS_2026.filter(
-    (event) =>
-      event.date >= new Date().toISOString().slice(0, 10) &&
-      event.date.startsWith("2026-")
+  const upcomingVixEvents = VIX_SCHEDULED_EVENTS_2026.filter((event) =>
+    (event.endDate || event.date) >= new Date().toISOString().slice(0, 10)
   );
 
   return (
@@ -2130,6 +2152,7 @@ function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, tog
   const [eventOpen, setEventOpen] = useState(null);
   const [capFilter, setCapFilter] = useState("All caps");
   const [performerStocks, setPerformerStocks] = useState([]);
+  const [activityStocks, setActivityStocks] = useState([]);
   const [performersLoading, setPerformersLoading] = useState(true);
   const [performersError, setPerformersError] = useState("");
 
@@ -2182,7 +2205,7 @@ const sortedByRet = [...universe].sort(
     stockA.periodReturn
 );
 
-const mostActive = [...performerStocks]
+const mostActive = [...activityStocks]
   .filter(
     (stock) =>
       Number.isFinite(stock.tradedVal) &&
@@ -2597,6 +2620,16 @@ useEffect(() => {
   performerSymbols,
   performerDefinitions,
 ]);
+
+useEffect(() => {
+  let cancelled = false;
+  getStockUniverse(performerSymbols)
+    .then((stocks) => {
+      if (!cancelled) setActivityStocks(Array.isArray(stocks) ? stocks : []);
+    })
+    .catch((error) => console.error("Unable to load most-active quotes:", error));
+  return () => { cancelled = true; };
+}, [performerSymbols]);
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto" }}>
       <PageLoadingOverlay active={indicesLoading} message="Loading Market Data..." />
@@ -6238,7 +6271,23 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
       setHistoryError("");
 
       try {
-        const universe = await getStockUniverse(compareList);
+        const [universe, fundamentals] = await Promise.all([
+          getStockUniverse(compareList),
+          getPeerComparison(compareList).catch(() => []),
+        ]);
+        const fundamentalsByTicker = new Map(
+          fundamentals.map((item) => [item.ticker, item])
+        );
+        const enrichedUniverse = universe.map((stock) => {
+          const detail = fundamentalsByTicker.get(stock.ticker);
+          return {
+            ...stock,
+            roe: detail?.returnOnEquity ?? stock.roe,
+            de: detail?.debtToEquity ?? stock.de,
+            divYield: detail?.dividendYield ?? stock.divYield,
+            ret1y: detail?.oneYearReturn ?? stock.ret1y,
+          };
+        });
         const historyResults = await Promise.allSettled(
           compareList.map(async (ticker) => {
             const history = await getPerformanceHistory(ticker, range);
@@ -6251,7 +6300,7 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
           .map((result) => result.value);
 
         if (!cancelled) {
-          setLiveStocks(universe);
+          setLiveStocks(enrichedUniverse);
           setHistories(Object.fromEntries(availableHistories));
           if (availableHistories.length < compareList.length) {
             setHistoryError(
@@ -7001,7 +7050,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
    SEARCH RESULTS PAGE
    ========================================================================================= */
 const SEARCH_TOPIC_TICKERS = {
-  "global markets": [], "united states": [], china: [], "hong kong": [], japan: [], "south korea": [], taiwan: [], europe: [], "united kingdom": [], germany: [],
+  "indian markets": [], "global markets": [], "united states": [], china: [], "hong kong": [], japan: [], "south korea": [], taiwan: [], europe: [], "united kingdom": [], germany: [],
   "artificial intelligence": ["TCS", "INFY", "HCLTECH", "TECHM", "PERSISTENT", "TATAELXSI", "DIXON"],
   semiconductors: ["DIXON", "CGPOWER", "TATAELXSI", "BEL"],
   defence: ["HAL", "BEL", "BDL", "MAZDOCK", "COCHINSHIP", "SOLARINDS"],
@@ -7033,6 +7082,7 @@ const SEARCH_TOPIC_TICKERS = {
 };
 
 const SEARCH_TOPIC_ALIASES = {
+  india: "indian markets", indian: "indian markets", "india markets": "indian markets", nse: "indian markets", nifty: "indian markets", sensex: "indian markets", volatility: "indian markets", vix: "indian markets", bonds: "indian markets", yields: "indian markets", "g-sec": "indian markets", gsec: "indian markets",
   global: "global markets", "world markets": "global markets",
   us: "united states", usa: "united states", "us markets": "united states", "american stocks": "united states", "s&p 500": "united states", sp500: "united states", nasdaq: "united states", dow: "united states", "dow jones": "united states",
   chinese: "china", "chinese stocks": "china", "csi 300": "china", "shanghai composite": "china",
@@ -7049,8 +7099,9 @@ const SEARCH_TOPIC_ALIASES = {
   utilities: "power", renewable: "renewable energy", renewables: "renewable energy", "clean energy": "renewable energy",
   oil: "oil and gas", gas: "oil and gas", metal: "metals", steel: "metals",
   chemical: "chemicals", pharma: "pharmaceuticals", pharmaceutical: "pharmaceuticals",
-  healthcare: "hospitals", hospital: "hospitals", "consumer staples": "fmcg",
+  health: "pharmaceuticals", healthcare: "pharmaceuticals", "health care": "pharmaceuticals", medicines: "pharmaceuticals", hospital: "hospitals", "consumer staples": "fmcg", staples: "fmcg",
   property: "real estate", electronics: "consumer electronics", jewelry: "jewellery",
+  airtel: "telecom", jio: "telecom", infosys: "it services", tcs: "it services", hdfc: "banking", sbi: "banking", "state bank": "banking", realty: "real estate", housing: "real estate", crude: "oil and gas", petroleum: "oil and gas", mining: "metals",
 };
 
 const SEARCH_TOPIC_INDEX_KEYS = {
@@ -7311,7 +7362,7 @@ function WatchlistPage({ watchlist, toggleWatch, openCompany, setPage }) {
           {loadError}
         </Panel>
       ) : (
-        <Panel style={{ overflowX: "auto" }}>
+        <Panel className="sd-watchlist-scroll" style={{ overflowX: "auto" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 1080 }}>
             <thead><tr style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
               <th style={thStyle}></th><th style={thStyle}>Company</th><th style={thStyle}>Price</th><th style={thStyle}>Chg%</th><th style={thStyle}>1Y Return</th><th style={thStyle}>Market Cap</th><th style={thStyle}>P/E</th><th style={thStyle}>ROE%</th><th style={thStyle}>D/E</th><th style={thStyle}>Div Yield%</th>
@@ -7351,7 +7402,7 @@ function Footer() {
     "Metric definitions": "Hover or tap a visible (i) icon for a concise definition, why investors use the metric and how to interpret it.",
     "Risk disclosures": "Equity investments carry risk of loss. Past performance is not indicative of future results. This Artifact is for information and research purposes only.",
     "Corporate-action treatment": "Historical performance uses adjusted closing prices where the provider supplies them. Corporate-action records are shown only when returned by the configured provider.",
-    "End-of-day data timing": "NSE/BSE trading runs 09:15–15:30 IST. EOD values refer to the latest completed session available from the data provider; timestamps are shown in IST where available.",
+    "End-of-day data timing": "Live observations use their underlying market timestamp. EOD is shown only after StockDekho receives a legitimate completed-session record from its provider, including applicable exchange closing processing; later reconciliation time is not presented as trading time.",
   };
   return (
     <div style={{ borderTop: `1px solid ${THEME.hairline}`, background: THEME.navyDeep, padding: "22px 20px 40px" }}>
@@ -7366,7 +7417,7 @@ function Footer() {
           ))}
         </div>
         <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 14 }}>
-          Eventual live deployment would require appropriately licensed market-data sources. StockDekho does not claim direct exchange integration or regulatory registration.
+          StockDekho is a free, non-commercial personal research project. It is not a trading platform and does not provide recommendations to buy, sell or hold securities. Market data is displayed through configured read-only providers; StockDekho does not claim direct exchange integration, exchange endorsement or regulatory registration.
           {" "}© 2026 StockDekho (prototype) <span style={{ color: THEME.hairline }}>·</span> <span style={{ color: THEME.gold }}>A product by Kane Basu</span>
         </div>
       </div>
@@ -7410,7 +7461,17 @@ const [notes, setNotes] = useState({});
   const openCompany = (t) => { setActiveTicker(t); setPage("company"); };
   const openBenchmark = (key) => { setActiveBenchmark(key); setPage("benchmark"); };
   const openGlobalIndex = (key) => { setActiveGlobalIndex(key); setPage("global-index"); };
-  const openSearch = (term) => { setSearchTerm(term); setQuery(term); setPage("search"); };
+  const openSearch = (term) => {
+    const normalized = String(term || "").trim().toLowerCase();
+    if ((SEARCH_TOPIC_ALIASES[normalized] || normalized) === "indian markets") {
+      setQuery("");
+      setPage("markets");
+      return;
+    }
+    setSearchTerm(term);
+    setQuery(term);
+    setPage("search");
+  };
   const setNote = (ticker, arr) => setNotes((n) => ({ ...n, [ticker]: arr }));
 
   return (

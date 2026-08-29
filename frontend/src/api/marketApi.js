@@ -43,12 +43,33 @@ export async function getStockQuote(symbol, { force = false } = {}) {
 
 export async function getPeerComparison(symbols) {
   try {
-    const response = await cachedGet("/market/peers", {
-        params: {
-          symbols: symbols.join(","),
-        },
-      });
-    return response.data.peers || [];
+    const [response, quoteSupplements] = await Promise.all([
+      cachedGet("/market/peers", {
+        params: { symbols: symbols.join(",") },
+      }),
+      getYahooQuoteSupplements(symbols),
+    ]);
+    const peers = response.data.peers || [];
+    const quotesByTicker = new Map(quoteSupplements.map((item) => [item.ticker, item]));
+    const needsCompanyDetail = peers.filter((peer) =>
+      !Number.isFinite(peer.returnOnEquity) || !Number.isFinite(peer.debtToEquity)
+    );
+    const details = await Promise.all(
+      needsCompanyDetail.map((peer) => getYahooCompanySupplement(peer.ticker))
+    );
+    const detailsByTicker = new Map(details.filter(Boolean).map((item) => [item.ticker, item]));
+    return peers.map((peer) => {
+      const quote = quotesByTicker.get(peer.ticker) || {};
+      const detail = detailsByTicker.get(peer.ticker) || {};
+      return {
+        ...peer,
+        trailingPE: peer.trailingPE ?? quote.trailingPE ?? detail.trailingPE,
+        returnOnEquity: peer.returnOnEquity ?? detail.returnOnEquity,
+        debtToEquity: peer.debtToEquity ?? detail.debtToEquity,
+        dividendYield: peer.dividendYield ?? quote.dividendYield ?? detail.dividendYield,
+        oneYearReturn: peer.oneYearReturn ?? quote.fiftyTwoWeekChangePercent ?? detail.fiftyTwoWeekChangePercent,
+      };
+    });
   } catch (error) {
     console.error("Failed to fetch peer comparison:", error);
     throw error;

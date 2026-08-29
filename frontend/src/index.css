@@ -29,6 +29,8 @@ body {
     width: 100%;
     overflow-x: auto;
     scrollbar-width: none;
+    scroll-padding-inline: 12px;
+    overscroll-behavior-inline: contain;
   }
 
   .sd-header-nav::-webkit-scrollbar {
@@ -37,6 +39,12 @@ body {
 
   .sd-header-nav button {
     flex: 0 0 auto;
+  }
+
+  .sd-watchlist-scroll {
+    background-image: linear-gradient(to left, rgba(14, 20, 32, 0.92), transparent 22px);
+    background-repeat: no-repeat;
+    background-position: right;
   }
 
   .sd-header-search {

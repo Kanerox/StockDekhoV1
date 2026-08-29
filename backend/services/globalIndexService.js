@@ -128,6 +128,17 @@ function observationAgeMs(value, now = new Date()) {
   return Number.isFinite(timestamp) ? now.getTime() - timestamp : Number.POSITIVE_INFINITY;
 }
 
+function expectedLatestWeekdaySession(definition, now = new Date()) {
+  const clock = exchangeClock(definition, now);
+  const firstOpen = Math.min(...definition.sessions.map((session) => session[0]));
+  if (!["Sat", "Sun"].includes(clock.weekday) && clock.minutes >= firstOpen) return clock.date;
+  const candidate = new Date(now);
+  do {
+    candidate.setUTCDate(candidate.getUTCDate() - 1);
+  } while (["Sat", "Sun"].includes(exchangeClock(definition, candidate).weekday));
+  return exchangeClock(definition, candidate).date;
+}
+
 function canReuseCompletedCard(card, definition, now = new Date()) {
   if (!card || card.dataStatus !== "eod") return false;
   if (observationAgeMs(card.marketTime, now) < -60 * 1000) return false;
@@ -145,7 +156,9 @@ function canReuseCompletedCard(card, definition, now = new Date()) {
     ([open, close]) => clock.minutes >= open && clock.minutes < close
   );
   if (marketOpen) return false;
-  if (!weekday || clock.minutes < firstOpen) return true;
+  if (!weekday || clock.minutes < firstOpen) {
+    return cardSession === expectedLatestWeekdaySession(definition, now);
+  }
   return cardSession === clock.date;
 }
 
@@ -440,5 +453,6 @@ module.exports = {
     globalQuoteStatus,
     canReuseCompletedCard,
     retainedCardWithCurrentStatus,
+    expectedLatestWeekdaySession,
   },
 };

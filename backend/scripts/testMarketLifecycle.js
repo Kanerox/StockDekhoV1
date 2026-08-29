@@ -63,6 +63,20 @@ assert.strictEqual(
   "Pre-market reuses the last completed session"
 );
 assert.strictEqual(
+  _test.canReuseCompletedCard(retained, hsi, new Date("2026-08-29T02:00:00.000Z")),
+  false,
+  "A Thursday close cannot prevent Friday reconciliation on Saturday"
+);
+assert.strictEqual(
+  _test.canReuseCompletedCard(
+    { dataStatus: "eod", marketTime: "2026-08-28T08:00:00.000Z" },
+    hsi,
+    new Date("2026-08-29T02:00:00.000Z")
+  ),
+  true,
+  "The latest Friday close remains reusable on Saturday"
+);
+assert.strictEqual(
   _test.canReuseCompletedCard(
     { dataStatus: "eod", marketTime: "2026-08-27T08:30:00.000Z" },
     hsi,
