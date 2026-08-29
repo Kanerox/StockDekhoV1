@@ -61,10 +61,19 @@ export async function getPeerComparison(symbols) {
     return peers.map((peer) => {
       const quote = quotesByTicker.get(peer.ticker) || {};
       const detail = detailsByTicker.get(peer.ticker) || {};
+      const calculatedReturnOnEquity =
+        Number.isFinite(detail.trailingEps) &&
+        Number.isFinite(detail.bookValue) &&
+        detail.bookValue !== 0
+          ? (detail.trailingEps / detail.bookValue) * 100
+          : null;
       return {
         ...peer,
         trailingPE: peer.trailingPE ?? quote.trailingPE ?? detail.trailingPE,
-        returnOnEquity: peer.returnOnEquity ?? detail.returnOnEquity,
+        returnOnEquity:
+          peer.returnOnEquity ??
+          detail.returnOnEquity ??
+          calculatedReturnOnEquity,
         debtToEquity: peer.debtToEquity ?? detail.debtToEquity,
         dividendYield: peer.dividendYield ?? quote.dividendYield ?? detail.dividendYield,
         oneYearReturn: peer.oneYearReturn ?? quote.fiftyTwoWeekChangePercent ?? detail.fiftyTwoWeekChangePercent,
