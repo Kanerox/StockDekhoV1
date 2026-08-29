@@ -23,6 +23,9 @@ export async function getStockQuote(symbol, { force = false } = {}) {
       trailingPE: supplement.trailingPE ?? quote.trailingPE,
       priceToBook: supplement.priceToBook ?? quote.priceToBook,
       bookValue: supplement.bookValue ?? quote.bookValue,
+      trailingEps: supplement.trailingEps ?? quote.trailingEps,
+      returnOnEquity: supplement.returnOnEquity ?? quote.returnOnEquity,
+      debtToEquity: supplement.debtToEquity ?? quote.debtToEquity,
       dividendYield: supplement.dividendYield ?? quote.dividendYield,
       averageDailyVolume3Month:
         supplement.averageVolume ?? quote.averageDailyVolume3Month,
