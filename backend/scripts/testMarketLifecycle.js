@@ -5,12 +5,29 @@ const { _test } = require("../services/globalIndexService");
 
 const hsi = getGlobalIndexDefinition("HANGSENG");
 const euro = getGlobalIndexDefinition("EUROSTOXX50");
+const sp500 = getGlobalIndexDefinition("SP500");
+const ftse = getGlobalIndexDefinition("FTSE100");
+const dax = getGlobalIndexDefinition("DAX");
+const nikkei = getGlobalIndexDefinition("NIKKEI225");
 
 assert.strictEqual(
   _test.exchangeSessionCloseTimestamp("2026-08-28", hsi),
   "2026-08-28T08:00:00.000Z",
   "Hang Seng displays its 16:00 HKT close, not its 16:30 reconciliation time"
 );
+
+// IANA timezone conversion must follow exchange-local daylight-saving rules.
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-03-06", sp500), "2026-03-06T21:00:00.000Z");
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-03-09", sp500), "2026-03-09T20:00:00.000Z");
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-03-20", ftse), "2026-03-20T16:30:00.000Z");
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-03-30", ftse), "2026-03-30T15:30:00.000Z");
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-03-20", dax), "2026-03-20T16:30:00.000Z");
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-03-30", dax), "2026-03-30T15:30:00.000Z");
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-10-30", sp500), "2026-10-30T20:00:00.000Z");
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-10-30", ftse), "2026-10-30T16:30:00.000Z");
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-10-30", dax), "2026-10-30T16:30:00.000Z");
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-03-09", nikkei), "2026-03-09T06:30:00.000Z");
+assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-10-30", nikkei), "2026-10-30T06:30:00.000Z");
 assert.strictEqual(
   _test.reconciliationEligible(hsi, new Date("2026-08-28T08:20:00.000Z")),
   false
