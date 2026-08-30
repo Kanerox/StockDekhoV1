@@ -29,3 +29,8 @@ export async function getGlobalIndexNews(key) {
   const response = await cachedGet(`/news/global-index/${encodeURIComponent(key)}`, {}, 10 * 60 * 1000);
   return response.data;
 }
+
+export async function getSectorNews(key) {
+  const response = await cachedGet(`/news/sector/${encodeURIComponent(key)}`, {}, 30 * 60 * 1000);
+  return response.data;
+}

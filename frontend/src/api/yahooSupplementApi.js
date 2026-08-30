@@ -24,13 +24,12 @@ export async function getYahooQuoteSupplements(symbols) {
     for (let index = 0; index < symbols.length; index += 40) {
       chunks.push(symbols.slice(index, index + 40));
     }
-    const responses = [];
-    for (const chunk of chunks) {
-      responses.push(await supplementalRequest({
+    const responses = await Promise.all(
+      chunks.map((chunk) => supplementalRequest({
         action: "quotes",
         symbols: chunk.map(ticker).join(","),
-      }));
-    }
+      }))
+    );
     return responses.flatMap((data) =>
       Array.isArray(data?.quotes) ? data.quotes : []
     );

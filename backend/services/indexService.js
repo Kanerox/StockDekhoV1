@@ -20,6 +20,7 @@ const {
 } = require("../utils/marketDataValidation");
 
 const LEADERSHIP_SNAPSHOT_FRESH_MS = 5 * 60 * 1000;
+const CLOSED_LEADERSHIP_SNAPSHOT_FRESH_MS = 6 * 60 * 60 * 1000;
 const LEADERSHIP_SNAPSHOT_RETENTION_MS = 48 * 60 * 60 * 1000;
 const INDEX_OVERVIEW_RETENTION_MS = 48 * 60 * 60 * 1000;
 const lastConsistentLeadershipByRange = new Map();
@@ -42,6 +43,15 @@ function indexOverviewFreshMs(now = new Date()) {
   return isIndianMarketOpen(now) || reconciling
     ? 5 * 60 * 1000
     : 6 * 60 * 60 * 1000;
+}
+
+function leadershipSnapshotFreshMs(now = new Date()) {
+  const clock = indianClockMinutes(now);
+  const weekday = ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(clock.weekday);
+  const reconciling = weekday && clock.minutes >= 15 * 60 + 30 && clock.minutes < 16 * 60 + 5;
+  return isIndianMarketOpen(now) || reconciling
+    ? LEADERSHIP_SNAPSHOT_FRESH_MS
+    : CLOSED_LEADERSHIP_SNAPSHOT_FRESH_MS;
 }
 
 function indexSummaryCacheKey(key) {
@@ -315,7 +325,7 @@ async function getIndexDetail(key, range = "1Y") {
   if (leadershipCacheKey) {
     const cached = await getCachedValue(
       leadershipCacheKey,
-      LEADERSHIP_SNAPSHOT_FRESH_MS
+      leadershipSnapshotFreshMs()
     );
     if (cached) return cached;
   }

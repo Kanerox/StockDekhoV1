@@ -5,7 +5,13 @@ const {
   getNiftyMarketEventsFromService,
   getIndiaGsecNewsFromService,
   getGlobalIndexNewsFromService,
+  getSectorNewsFromService,
 } = require("../services/newsService");
+
+async function getSectorNews(req, res) {
+  try { return res.status(200).json(await getSectorNewsFromService(req.params.key)); }
+  catch (error) { return res.status(error.message === "Unknown sector" ? 404 : 500).json({ error: "Unable to fetch sector news." }); }
+}
 
 async function getGlobalIndexNews(req, res) {
   try { return res.status(200).json(await getGlobalIndexNewsFromService(req.params.key)); }
@@ -95,4 +101,5 @@ module.exports = {
   getNiftyMarketEvents,
   getIndiaGsecNews,
   getGlobalIndexNews,
+  getSectorNews,
 };

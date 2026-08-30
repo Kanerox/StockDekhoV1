@@ -43,6 +43,22 @@ function futureDate(values) {
     .sort()[0] || null;
 }
 
+function indianMarketPhase(now = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  if (!["Mon", "Tue", "Wed", "Thu", "Fri"].includes(parts.weekday)) return "closed";
+  const minutes = Number(parts.hour) * 60 + Number(parts.minute);
+  if (minutes < 9 * 60 + 15) return "pre_market";
+  if (minutes < 15 * 60 + 40) return "live";
+  if (minutes < 16 * 60 + 5) return "reconciling";
+  return "closed";
+}
+
 function quoteSupplement(quote) {
   return {
     ticker: ticker(quote.symbol),
@@ -208,7 +224,9 @@ export default async function handler(request, response) {
         ? "public, s-maxage=600, stale-while-revalidate=3600"
         : action === "company"
           ? "public, s-maxage=86400, stale-while-revalidate=604800"
-        : "public, s-maxage=120, stale-while-revalidate=600"
+        : indianMarketPhase() === "closed"
+          ? "public, s-maxage=21600, stale-while-revalidate=604800"
+          : "public, s-maxage=120, stale-while-revalidate=600"
     );
     const symbols = String(request.query?.symbols || request.query?.symbol || "")
       .split(",")

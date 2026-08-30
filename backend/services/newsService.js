@@ -6,6 +6,11 @@ const {
 const {
   fetchMarketData,
 } = require("../clients/marketClient");
+const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
+const {
+  publicationIntegrity,
+  isGoogleNewsWrapper,
+} = require("../news/utils/publicationDate");
 
 const BLOCKED_NEWS_TERMS = [
   "class action",
@@ -41,6 +46,9 @@ const BLOCKED_SOURCES = [
   "quora",
   "snapchat",
   "pinterest",
+  "espncricinfo",
+  "espn cricinfo",
+  "cricinfo",
 ];
 
 const BLOCKED_TITLE_TERMS = [
@@ -119,18 +127,18 @@ const GLOBAL_MARKET_TOPICS = [
 ];
 
 const GLOBAL_INDEX_NEWS = {
-  SP500: { topic: "S&P 500", query: '"S&P 500" index stocks', terms: ["s&p 500", "s&p500"] },
-  NASDAQ: { topic: "NASDAQ", query: '"Nasdaq Composite" index', terms: ["nasdaq composite", "nasdaq"] },
-  DOW: { topic: "Dow Jones", query: '"Dow Jones Industrial Average" index', terms: ["dow jones industrial average", "dow jones", "the dow"] },
-  HANGSENG: { topic: "Hang Seng", query: '"Hang Seng" index', terms: ["hang seng"] },
+  SP500: { topic: "S&P 500", query: '"S&P 500" index stocks', terms: ["s&p 500", "s&p500"], marketTerms: ["wall street", "us stocks", "u.s. stocks", "federal reserve", "fed"] },
+  NASDAQ: { topic: "NASDAQ", query: '"Nasdaq Composite" index', terms: ["nasdaq composite", "nasdaq"], marketTerms: ["us tech stocks", "technology stocks", "wall street", "federal reserve", "fed"] },
+  DOW: { topic: "Dow Jones", query: '"Dow Jones Industrial Average" index', terms: ["dow jones industrial average", "dow jones", "the dow"], marketTerms: ["wall street", "us stocks", "u.s. stocks", "federal reserve", "fed"] },
+  HANGSENG: { topic: "Hang Seng", query: '"Hang Seng" index', terms: ["hang seng"], marketTerms: ["hong kong stocks", "hong kong market", "china stocks", "chinese stocks"] },
   SHANGHAI: { topic: "Shanghai Composite", query: '"Shanghai Composite" index', terms: ["shanghai composite"] },
   CSI300: { topic: "CSI 300", query: '"CSI 300" index', terms: ["csi 300", "csi300"] },
-  NIKKEI225: { topic: "Nikkei 225", query: '"Nikkei 225" index', terms: ["nikkei 225", "nikkei"] },
-  FTSE100: { topic: "FTSE 100", query: '"FTSE 100" index', terms: ["ftse 100", "ftse"] },
-  DAX: { topic: "DAX", query: '"DAX index" Germany stocks', terms: ["dax index", "germany's dax", "german dax"] },
-  EUROSTOXX50: { topic: "EURO STOXX 50", query: '"EURO STOXX 50" index', terms: ["euro stoxx 50", "stoxx 50"] },
-  KOSPI: { topic: "KOSPI", query: 'KOSPI index Korean stocks', terms: ["kospi"] },
-  TAIWAN: { topic: "Taiwan Weighted", query: '("Taiwan Weighted" OR "Taiwan stocks" OR TAIEX) index', terms: ["taiwan weighted", "taiex", "taiwan stocks"] },
+  NIKKEI225: { topic: "Nikkei 225", query: '"Nikkei 225" index', terms: ["nikkei 225", "nikkei"], marketTerms: ["japan stocks", "japanese stocks", "tokyo stocks", "bank of japan"] },
+  FTSE100: { topic: "FTSE 100", query: '"FTSE 100" index', terms: ["ftse 100", "ftse"], marketTerms: ["uk stocks", "british stocks", "london stocks", "bank of england"] },
+  DAX: { topic: "DAX", query: '"DAX index" Germany stocks', terms: ["dax index", "germany's dax", "german dax"], marketTerms: ["german stocks", "germany stocks", "frankfurt stocks", "ecb"] },
+  EUROSTOXX50: { topic: "EURO STOXX 50", query: '"EURO STOXX 50" index', terms: ["euro stoxx 50", "stoxx 50"], marketTerms: ["euro zone stocks", "eurozone stocks", "european stocks", "ecb"] },
+  KOSPI: { topic: "KOSPI", query: 'KOSPI index Korean stocks', terms: ["kospi"], marketTerms: ["south korea stocks", "korean stocks", "seoul stocks", "bank of korea"] },
+  TAIWAN: { topic: "Taiwan Weighted", query: '("Taiwan Weighted" OR "Taiwan stocks" OR TAIEX) index', terms: ["taiwan weighted", "taiex", "taiwan stocks"], marketTerms: ["taiwan market", "taiwanese stocks", "taiwan semiconductor", "tsmc"] },
 };
 
 const VIX_MARKET_TOPICS = [
@@ -236,6 +244,20 @@ const GSEC_NEWS_TOPICS = [
   { topic: "Inflation & Borrowing", query: '(India inflation OR CPI OR "government borrowing" OR "fiscal deficit") (G-sec OR "government bond yield")' },
   { topic: "Debt Flows", query: '(FPI OR "foreign flows" OR "bond index") ("Indian government bonds" OR G-sec)' },
 ];
+
+const SECTOR_NEWS_CONFIG = {
+  Financials: { query: '("Indian banking sector" OR "Nifty Bank" OR RBI OR "banking stocks")', terms: ["bank", "banking", "rbi", "credit", "lending", "deposit"] },
+  "Information Technology": { query: '("Indian IT sector" OR "IT stocks" OR TCS OR Infosys OR Wipro) India', terms: ["information technology", "it sector", "it stocks", "software", "technology services"] },
+  Energy: { query: '("Indian energy sector" OR "energy stocks" OR crude OR refinery OR Reliance OR ONGC) India', terms: ["energy", "crude", "oil", "gas", "refinery", "opec"] },
+  "Consumer Staples": { query: '("Indian FMCG sector" OR "FMCG stocks" OR rural demand OR consumption) India', terms: ["fmcg", "consumer staples", "rural demand", "consumption"] },
+  "Consumer Discretionary": { query: '("Indian auto sector" OR "auto stocks" OR vehicle sales OR consumer demand) India', terms: ["auto", "automobile", "vehicle", "consumer discretionary"] },
+  "Health Care": { query: '("Indian pharma sector" OR "pharma stocks" OR drug approval OR healthcare) India', terms: ["pharma", "pharmaceutical", "healthcare", "drug", "hospital"] },
+  Industrials: { query: '("Indian infrastructure" OR "capital goods" OR industrial stocks OR capex) India', terms: ["industrial", "infrastructure", "capital goods", "capex", "construction"] },
+  Materials: { query: '("Indian metal sector" OR "metal stocks" OR steel OR aluminium OR mining) India', terms: ["metal", "steel", "aluminium", "aluminum", "mining", "materials"] },
+  Utilities: { query: '("Indian power sector" OR "power stocks" OR electricity OR renewable energy) India', terms: ["power", "utility", "electricity", "renewable", "energy"] },
+  "Communication Services": { query: '("Indian telecom sector" OR "telecom stocks" OR spectrum OR Bharti Airtel OR Jio) India', terms: ["telecom", "communications", "spectrum", "airtel", "jio"] },
+  "Real Estate": { query: '("Indian real estate sector" OR "realty stocks" OR housing demand OR property market) India', terms: ["real estate", "realty", "property", "housing", "developer"] },
+};
 
 const TRUSTED_GLOBAL_SOURCES = [
   "reuters",
@@ -771,6 +793,76 @@ function areSimilarStories(titleA, titleB) {
   return sharedWords.length / smallerTitleSize >= 0.55;
 }
 
+function storyEventCategory(title = "") {
+  const value = String(title).toLowerCase();
+  const categories = [
+    ["leadership-change", /(ceo|chief executive|chairman|boss|jagdishan).*(leave|leaving|retire|retirement|resign|resignation|reappoint|successor|succession|steps? down|opts? out|departure|final chapter|era|years|way out)|(?:leave|retire|resign|reappoint|successor|succession|steps? down|opts? out|departure|final chapter|way out).*(ceo|chief executive|chairman|boss|jagdishan)/],
+    ["earnings", /(earnings|quarterly results|profit|revenue|guidance)/],
+    ["corporate-action", /(merger|acquisition|buyback|dividend|stake sale)/],
+    ["policy-rates", /(interest rate|repo rate|monetary policy|rate cut|rate hike)/],
+    ["market-close", /(closing bell|market close|ends?|settles?).*(nifty|sensex|stocks?|shares?)/],
+  ];
+  return categories.find(([, pattern]) => pattern.test(value))?.[0] || null;
+}
+
+function areSameEvent(titleA, titleB) {
+  if (areSimilarStories(titleA, titleB)) return true;
+  const categoryA = storyEventCategory(titleA);
+  const categoryB = storyEventCategory(titleB);
+  if (!categoryA || categoryA !== categoryB) return false;
+  const wordsA = getStoryWordSet(titleA);
+  const wordsB = getStoryWordSet(titleB);
+  const shared = [...wordsA].filter((word) => wordsB.has(word));
+  return shared.length >= 2;
+}
+
+function normalizePublicationCandidate(article) {
+  const integrity = publicationIntegrity(article);
+  if (!integrity.valid) return null;
+  if (isGoogleNewsWrapper(article)) {
+    return {
+      ...article,
+      pubDate: null,
+      recencyAt: integrity.publishedAt,
+      publicationDateSource: "unverified_google_news_listing",
+    };
+  }
+  return {
+    ...article,
+    pubDate: integrity.publishedAt,
+    publicationDateSource: integrity.reason,
+  };
+}
+
+function articleRecencyValue(article) {
+  return article?.pubDate || article?.recencyAt || null;
+}
+
+function sourceIdentity(article, cleanedArticle) {
+  return normalizeSourceForMatching(
+    cleanedArticle?.source || article?.source || article?.creator || "unknown"
+  );
+}
+
+function retainPublicationReliableCandidates(candidates = []) {
+  const normalized = candidates
+    .map((item) => {
+      const article = normalizePublicationCandidate(item.article);
+      return article ? { ...item, article } : null;
+    })
+    .filter(Boolean);
+
+  return normalized.filter((item) => {
+    if (!isGoogleNewsWrapper(item.article)) return true;
+    const source = sourceIdentity(item.article, item.cleanedArticle);
+    return normalized.some((other) =>
+      other !== item &&
+      sourceIdentity(other.article, other.cleanedArticle) !== source &&
+      areSameEvent(item.cleanedArticle?.title, other.cleanedArticle?.title)
+    );
+  });
+}
+
 function deduplicateAndLimit(
   candidates,
   limit
@@ -781,8 +873,8 @@ function deduplicateAndLimit(
   const articles = candidates
     .sort(
       (itemA, itemB) =>
-        new Date(itemB.article.pubDate) -
-        new Date(itemA.article.pubDate)
+        (Number(itemB.relevanceScore || 0) - Number(itemA.relevanceScore || 0)) ||
+        (new Date(itemB.article.pubDate) - new Date(itemA.article.pubDate))
     )
     .filter(({ article, cleanedArticle }) => {
       const link = String(article.link || "").trim();
@@ -794,7 +886,7 @@ function deduplicateAndLimit(
 
       const similarStoryAlreadyAccepted =
         acceptedTitles.some((acceptedTitle) =>
-          areSimilarStories(acceptedTitle, title)
+          areSameEvent(acceptedTitle, title)
         );
 
       if (similarStoryAlreadyAccepted) {
@@ -1163,7 +1255,7 @@ async function getGlobalMarketNewsFromService() {
   );
 
   const articles = deduplicateAndLimit(
-    candidates,
+    retainPublicationReliableCandidates(candidates),
     32
   ).map(
     (
@@ -1346,7 +1438,7 @@ async function getVixMarketNewsFromService() {
   );
 
   const articles = deduplicateAndLimit(
-    candidates,
+    retainPublicationReliableCandidates(candidates),
     25
   ).map(
     (
@@ -1433,15 +1525,26 @@ function indiaDateKey(value) {
   }).format(date);
 }
 
-function recentMarketNewsDay(value) {
+function recentMarketNewsDay(value, now = new Date()) {
   const publicationDate = new Date(value);
-  if (Number.isNaN(publicationDate.getTime()) || publicationDate > new Date()) {
+  if (Number.isNaN(publicationDate.getTime()) || publicationDate > now) {
     return null;
   }
-  const today = indiaDateKey(new Date());
-  const yesterday = indiaDateKey(Date.now() - 24 * 60 * 60 * 1000);
+  const today = indiaDateKey(now);
+  const yesterday = indiaDateKey(now.getTime() - 24 * 60 * 60 * 1000);
   const articleDay = indiaDateKey(publicationDate);
-  return articleDay === today ? "today" : articleDay === yesterday ? "yesterday" : null;
+  if (articleDay === today) return "today";
+  if (articleDay === yesterday) return "yesterday";
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+  }).format(now);
+  const weekendBridgeDays = weekday === "Sun" ? 2 : weekday === "Mon" ? 3 : 0;
+  if (weekendBridgeDays > 0) {
+    const earliest = indiaDateKey(now.getTime() - weekendBridgeDays * 24 * 60 * 60 * 1000);
+    if (articleDay >= earliest && articleDay < yesterday) return "previous_session";
+  }
+  return null;
 }
 
 function isPlausibleMarketPublication(article, cleanedArticle) {
@@ -1701,7 +1804,7 @@ function selectTopMarketArticles(candidates, limit = 15) {
     const topic = item.topic || "Market";
 
     const isDuplicate = acceptedTitles.some((existingTitle) =>
-      areSimilarStories(existingTitle, title)
+      areSameEvent(existingTitle, title)
     );
 
     if (isDuplicate) {
@@ -1754,7 +1857,7 @@ function selectTopMarketArticles(candidates, limit = 15) {
       ).trim();
 
       const isDuplicate = acceptedTitles.some((existingTitle) =>
-        areSimilarStories(existingTitle, title)
+        areSameEvent(existingTitle, title)
       );
 
       if (isDuplicate) {
@@ -1783,7 +1886,7 @@ if (accepted.length < limit) {
 
     const duplicate = accepted.some(
       (acceptedItem) =>
-        areSimilarStories(
+        areSameEvent(
           acceptedItem.cleanedArticle.title,
           title
         )
@@ -1910,7 +2013,7 @@ function selectCompanyArticles(candidates, limit = 8) {
 
     if (
       selectedTitles.some((acceptedTitle) =>
-        areSimilarStories(acceptedTitle, title)
+        areSameEvent(acceptedTitle, title)
       )
     ) {
       return false;
@@ -1952,7 +2055,53 @@ function selectCompanyArticles(candidates, limit = 8) {
   return selected;
 }
 
+const MARKET_EVENTS_RESULT_CACHE_KEY = "news-editorial:market-events:v6";
+const LEGACY_MARKET_EVENTS_RESULT_CACHE_KEYS = [
+  "news-editorial:market-events:v5",
+  "news-editorial:market-events:v4",
+  "news-editorial:market-events:v3",
+];
+const EDITORIAL_RESULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
+function mergeEditorialResults(nextResult, previousResult) {
+  const merged = [];
+  for (const article of [
+    ...(nextResult?.articles || []),
+    ...(previousResult?.articles || []),
+  ]) {
+    const duplicate = merged.some((accepted) =>
+      (article.link && accepted.link === article.link) ||
+      areSameEvent(accepted.title, article.title)
+    );
+    if (!duplicate) merged.push(article);
+    if (merged.length >= 30) break;
+  }
+  return {
+    ...nextResult,
+    articles: merged,
+    articleCount: merged.length,
+  };
+}
+
+async function retainStableEditorialResult(cacheKey, nextResult, fallbackCacheKeys = []) {
+  const retainedResults = await Promise.all([
+    getCachedValue(cacheKey, EDITORIAL_RESULT_RETENTION_MS),
+    ...fallbackCacheKeys.map((key) => getCachedValue(key, EDITORIAL_RESULT_RETENTION_MS)),
+  ]);
+  const previous = retainedResults
+    .filter((result) => Array.isArray(result?.articles))
+    .sort((a, b) => b.articles.length - a.articles.length)[0] || null;
+  const previousCount = previous?.articles?.length || 0;
+  const nextCount = nextResult?.articles?.length || 0;
+  const collapsed = previousCount >= 5 && nextCount < Math.ceil(previousCount * 0.6);
+  const selected = collapsed ? mergeEditorialResults(nextResult, previous) : nextResult;
+  await setCacheEntry(cacheKey, selected, EDITORIAL_RESULT_RETENTION_MS);
+  return selected;
+}
+
 async function getNiftyMarketEventsFromService() {
+  const cachedResult = await getCachedValue(MARKET_EVENTS_RESULT_CACHE_KEY, 30 * 60 * 1000);
+  if (cachedResult) return cachedResult;
   const topicResults =
     await Promise.allSettled(
       
@@ -1970,7 +2119,6 @@ async function getNiftyMarketEventsFromService() {
         return [];
       }
       return result.value.articles
-        .filter((article) => recentMarketNewsDay(article.pubDate))
         .map((article) => ({
           article,
           cleanedArticle:
@@ -2011,25 +2159,27 @@ async function getNiftyMarketEventsFromService() {
         .slice(0, 25);
     }
   );
-  const todayCandidates = candidates.filter(
-    ({ article }) => recentMarketNewsDay(article.pubDate) === "today"
+  const reliableCandidates = retainPublicationReliableCandidates(candidates)
+    .filter(({ article }) => recentMarketNewsDay(articleRecencyValue(article)));
+  const todayCandidates = reliableCandidates.filter(
+    ({ article }) => recentMarketNewsDay(articleRecencyValue(article)) === "today"
   );
-  const yesterdayCandidates = candidates.filter(
-    ({ article }) => recentMarketNewsDay(article.pubDate) === "yesterday"
+  const yesterdayCandidates = reliableCandidates.filter(
+    ({ article }) => recentMarketNewsDay(articleRecencyValue(article)) === "yesterday"
   );
-  const selectedToday = selectTopMarketArticles(todayCandidates, 30);
-  const selectedArticles = [
-    ...selectedToday,
-    ...selectTopMarketArticles(
-      yesterdayCandidates,
-      Math.max(0, 30 - selectedToday.length)
-    ),
-  ];
+  const previousSessionCandidates = reliableCandidates.filter(
+    ({ article }) => recentMarketNewsDay(articleRecencyValue(article)) === "previous_session"
+  );
+  const selectedArticles = selectTopMarketArticles([
+    ...todayCandidates,
+    ...yesterdayCandidates,
+    ...previousSessionCandidates,
+  ], 30);
 
 selectedArticles.sort(
   (itemA, itemB) =>
-    new Date(itemB.article.pubDate) -
-    new Date(itemA.article.pubDate)
+    new Date(articleRecencyValue(itemB.article) || 0) -
+    new Date(articleRecencyValue(itemA.article) || 0)
 );
 
 const articles = selectedArticles.map(
@@ -2043,6 +2193,8 @@ const articles = selectedArticles.map(
       title: cleanedArticle.title,
       source: cleanedArticle.source,
       publishedAt: article.pubDate,
+      recencyAt: articleRecencyValue(article),
+      publicationDateStatus: article.publicationDateSource,
       link: article.link,
 
       summary: isMeaningfulSummary(
@@ -2054,11 +2206,11 @@ const articles = selectedArticles.map(
     })
   );
 
-  return {
-    range: "Today and yesterday",
+  return retainStableEditorialResult(MARKET_EVENTS_RESULT_CACHE_KEY, {
+    range: "Recent market sessions",
     articleCount: articles.length,
     articles,
-  };
+  }, LEGACY_MARKET_EVENTS_RESULT_CACHE_KEYS);
 }
 
 function analyseArticle(title, snippet) {
@@ -2315,7 +2467,7 @@ const companyName =
     }));
 
   const currentArticles = selectCompanyArticles(
-    candidates,
+    retainPublicationReliableCandidates(candidates),
     8
   ).map(({ article, cleanedArticle }, index) => {
 
@@ -2382,7 +2534,7 @@ async function getIndiaGsecNewsFromService() {
         isRelevantToIndiaGsec(article, cleanedArticle)
       );
   });
-  const articles = deduplicateAndLimit(candidates, 15).map(({ article, cleanedArticle, topic }, index) => ({
+  const articles = deduplicateAndLimit(retainPublicationReliableCandidates(candidates), 15).map(({ article, cleanedArticle, topic }, index) => ({
     id: article.guid || article.link || `india-gsec-${index}`,
     topic,
     title: cleanedArticle.title,
@@ -2394,25 +2546,38 @@ async function getIndiaGsecNewsFromService() {
   return { range: "Last 15 days", articleCount: articles.length, articles };
 }
 
+function rankGlobalIndexCandidates(fetched, config) {
+  return fetched
+    .filter((article) => isWithinLastDays(article.pubDate, 15))
+    .map((article) => ({ article, cleanedArticle: cleanGoogleNewsArticle(article), topic: config.topic }))
+    .filter(({ article, cleanedArticle }) =>
+      !isBlockedGlobalArticle(article, cleanedArticle) &&
+      isTrustedGlobalSource(cleanedArticle.source) &&
+      isAccessibleNewsSource(cleanedArticle.source)
+    )
+    .map((item) => {
+      const title = String(item.cleanedArticle.title || "").toLowerCase();
+      const text = [title, item.cleanedArticle.snippet, item.article.contentSnippet]
+        .filter(Boolean).join(" ").toLowerCase();
+      const directTitle = config.terms.some((term) => title.includes(term));
+      const directContext = config.terms.some((term) => text.includes(term));
+      const marketContext = (config.marketTerms || []).some((term) => text.includes(term));
+      const movementContext = /(rise|gain|advance|fall|drop|decline|rally|slide|selloff|record|close|open|futures|session|market|index|fed|inflation|tariff|rate|yield|earnings|central bank)/.test(text);
+      return {
+        ...item,
+        relevanceScore: directTitle ? 100 : directContext ? 80 : marketContext && movementContext ? 55 : 0,
+      };
+    })
+    .filter((item) => item.relevanceScore > 0)
+    .sort((a, b) => b.relevanceScore - a.relevanceScore || new Date(b.article.pubDate) - new Date(a.article.pubDate));
+}
+
 async function getGlobalIndexNewsFromService(key) {
   const config = GLOBAL_INDEX_NEWS[String(key || "").toUpperCase()];
   if (!config) throw new Error("Unknown global index");
   const fetched = await fetchGlobalMarketNews(config.query);
-  const baseCandidates = fetched
-    .filter((article) => isWithinLastDays(article.pubDate, 15))
-    .map((article) => ({ article, cleanedArticle: cleanGoogleNewsArticle(article), topic: config.topic }))
-    .filter(({ article, cleanedArticle }) => {
-      const title = String(cleanedArticle.title || "").toLowerCase();
-      return config.terms.some((term) => title.includes(term)) &&
-        !isBlockedGlobalArticle(article, cleanedArticle) &&
-        isTrustedGlobalSource(cleanedArticle.source) &&
-        isAccessibleNewsSource(cleanedArticle.source);
-    });
-  const contextualCandidates = baseCandidates.filter(({ cleanedArticle }) =>
-    /(rise|rises|rose|gain|gains|gained|advance|advances|advanced|fall|falls|fell|drop|drops|dropped|decline|declines|declined|rally|rallies|rallied|slide|slides|slid|selloff|record|close|closes|closed|open|opens|opened|futures|session|market|index|rebalance|rebalancing|inclusion|removal|fed|inflation|tariff|rate|yield|earnings)/.test(String(cleanedArticle.title || "").toLowerCase())
-  );
-  const candidates = contextualCandidates.length ? contextualCandidates : baseCandidates;
-  const articles = deduplicateAndLimit(candidates, 15).map(({ article, cleanedArticle, topic }, index) => ({
+  const candidates = rankGlobalIndexCandidates(fetched, config);
+  const articles = deduplicateAndLimit(retainPublicationReliableCandidates(candidates), 15).map(({ article, cleanedArticle, topic }, index) => ({
     id: article.guid || article.link || `global-index-${key}-${index}`,
     topic,
     title: cleanedArticle.title,
@@ -2424,6 +2589,45 @@ async function getGlobalIndexNewsFromService(key) {
   return { key: String(key).toUpperCase(), range: "Last 15 days", articleCount: articles.length, articles };
 }
 
+async function getSectorNewsFromService(key) {
+  const sectorKey = Object.keys(SECTOR_NEWS_CONFIG).find(
+    (name) => name.toLowerCase() === String(key || "").toLowerCase()
+  );
+  const config = sectorKey ? SECTOR_NEWS_CONFIG[sectorKey] : null;
+  if (!config) throw new Error("Unknown sector");
+  const fetched = await fetchGlobalMarketNews(config.query);
+  const macroTerms = ["rbi", "sebi", "policy", "regulation", "budget", "tariff", "inflation", "interest rate", "government"];
+  const candidates = fetched
+    .filter((article) => isWithinLastDays(article.pubDate, 15))
+    .map((article) => ({ article, cleanedArticle: cleanGoogleNewsArticle(article), topic: sectorKey }))
+    .filter(({ article, cleanedArticle }) =>
+      !isBlockedGlobalArticle(article, cleanedArticle) &&
+      isAccessibleNewsSource(cleanedArticle.source)
+    )
+    .map((item) => {
+      const title = String(item.cleanedArticle.title || "").toLowerCase();
+      const text = [title, item.cleanedArticle.snippet, item.article.contentSnippet]
+        .filter(Boolean).join(" ").toLowerCase();
+      const sectorMatches = config.terms.filter((term) => text.includes(term)).length;
+      const industryWide = /(sector|industry|stocks|companies|demand|sales|output|capacity)/.test(title) && sectorMatches > 0;
+      const macroRelevant = macroTerms.some((term) => title.includes(term)) && sectorMatches > 0;
+      const relevanceScore = industryWide ? 100 : macroRelevant ? 85 : sectorMatches >= 2 ? 70 : sectorMatches === 1 ? 45 : 0;
+      return { ...item, relevanceScore };
+    })
+    .filter((item) => item.relevanceScore > 0);
+  const articles = deduplicateAndLimit(retainPublicationReliableCandidates(candidates), 10)
+    .map(({ article, cleanedArticle, topic }, index) => ({
+      id: article.guid || article.link || `sector-${sectorKey}-${index}`,
+      topic,
+      title: cleanedArticle.title,
+      source: cleanedArticle.source,
+      publishedAt: article.pubDate,
+      link: article.link,
+      summary: isMeaningfulSummary(cleanedArticle.title, cleanedArticle.snippet) ? cleanedArticle.snippet : "",
+    }));
+  return { sector: sectorKey, range: "Last 15 days", articleCount: articles.length, articles };
+}
+
 module.exports = {
   getCompanyNewsFromService,
   getGlobalMarketNewsFromService,
@@ -2431,4 +2635,16 @@ module.exports = {
   getNiftyMarketEventsFromService,
   getIndiaGsecNewsFromService,
   getGlobalIndexNewsFromService,
+  getSectorNewsFromService,
+  _test: {
+    areSameEvent,
+    deduplicateAndLimit,
+    isBlockedGlobalArticle,
+    rankGlobalIndexCandidates,
+    recentMarketNewsDay,
+    selectTopMarketArticles,
+    mergeEditorialResults,
+    retainPublicationReliableCandidates,
+    retainStableEditorialResult,
+  },
 };

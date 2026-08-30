@@ -14,6 +14,10 @@ function globalCardCacheKey(key) {
   return `global-index-card:${key}:v1`;
 }
 
+async function getRetainedGlobalCard(key) {
+  return getCachedValue(globalCardCacheKey(key), GLOBAL_CARD_RETENTION_MS);
+}
+
 function finite(value) {
   return Number.isFinite(Number(value)) ? Number(value) : null;
 }
@@ -177,6 +181,35 @@ function retainedCardWithCurrentStatus(card, definition, now = new Date()) {
   return { ...card, dataStatus: safeStatus, isStale: safeStatus === "stale" };
 }
 
+function shouldUseRetainedHeadline(detail, retained, definition) {
+  if (!retained?.marketTime || !Number.isFinite(Number(retained?.value))) return false;
+  if (!detail?.marketTime || !Number.isFinite(Number(detail?.value))) return true;
+  const retainedSession = exchangeObservationDate(retained.marketTime, definition);
+  const detailSession = exchangeObservationDate(detail.marketTime, definition);
+  if (!retainedSession) return false;
+  if (!detailSession || retainedSession > detailSession) return true;
+  if (retainedSession < detailSession) return false;
+  if (retained.dataStatus === "eod" && detail.dataStatus !== "eod") return true;
+  return new Date(retained.marketTime).getTime() > new Date(detail.marketTime).getTime();
+}
+
+function mergeRetainedHeadline(detail, retained, definition) {
+  if (!shouldUseRetainedHeadline(detail, retained, definition)) return detail;
+  return {
+    ...detail,
+    value: retained.value,
+    change: retained.change,
+    changePercent: retained.changePercent,
+    marketTime: retained.marketTime,
+    asOf: retained.asOf || retained.marketTime,
+    dataStatus: retained.dataStatus,
+    isStale: Boolean(retained.isStale),
+    dataProvider: retained.dataProvider,
+    sessionDateOnly: retained.sessionDateOnly,
+    headlineFromRetainedObservation: true,
+  };
+}
+
 async function getIntradayObservation(definition) {
   const cached = intradayCache.get(definition.key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
@@ -200,6 +233,7 @@ async function getIntradayObservation(definition) {
 async function getGlobalIndexDetail(key, range = "1Y") {
   const definition = getGlobalIndexDefinition(key);
   if (!definition) throw new Error("Unknown global index");
+  const retainedHeadline = await getRetainedGlobalCard(definition.key);
   const { period1, period2 } = resolvePeriod(range);
   const [quoteResult, historyResult] = await Promise.allSettled([
     fetchMarketData(definition.symbol),
@@ -222,7 +256,28 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   let points = validPoints(rawPoints);
   if (points.length < 2) {
     const reason = historyResult.status === "rejected" ? historyResult.reason?.message : "Insufficient global-index history";
-    throw new Error(reason || "Insufficient global-index history");
+    if (!retainedHeadline) throw new Error(reason || "Insufficient global-index history");
+    return {
+      ...definition,
+      value: retainedHeadline.value,
+      change: retainedHeadline.change,
+      changePercent: retainedHeadline.changePercent,
+      marketTime: retainedHeadline.marketTime,
+      asOf: retainedHeadline.asOf || retainedHeadline.marketTime,
+      sessionDateOnly: retainedHeadline.sessionDateOnly,
+      isGlobalIndex: true,
+      dataStatus: retainedHeadline.dataStatus,
+      isStale: Boolean(retainedHeadline.isStale),
+      dataProvider: retainedHeadline.dataProvider,
+      periodReturn: null,
+      periodHigh: null,
+      periodLow: null,
+      points: [],
+      range,
+      historyUnavailable: true,
+      historyError: reason || "Insufficient global-index history",
+      headlineFromRetainedObservation: true,
+    };
   }
   const now = new Date();
   const latestHistoricalPoint = points.at(-1);
@@ -327,7 +382,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     ? exchangeSessionCloseTimestamp(latestSessionDate, definition)
     : (observationAgeMs(rawObservationTime, now) >= -60 * 1000 ? rawObservationTime : null);
   if (!observationTime) throw new Error(`No trustworthy observation timestamp for ${definition.key}`);
-  return {
+  const detail = {
     ...definition,
     value: hasCompletedDailyClose
       ? latestClose
@@ -353,6 +408,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     points,
     range,
   };
+  return mergeRetainedHeadline(detail, retainedHeadline, definition);
 }
 
 async function getGlobalIndexOverview() {
@@ -392,6 +448,9 @@ async function getGlobalIndexOverview() {
       const retained = retainedByKey.get(definition.key);
       if (canReuseCompletedCard(retained, definition)) return retained;
       const detail = await getGlobalIndexDetail(definition.key, "1M");
+      if (detail.historyUnavailable && retained) {
+        return retainedCardWithCurrentStatus(retained, definition);
+      }
       return {
         key: detail.key, name: detail.name, symbol: detail.symbol, region: detail.region,
         description: detail.description, value: detail.value, change: detail.change,
@@ -453,6 +512,8 @@ module.exports = {
     globalQuoteStatus,
     canReuseCompletedCard,
     retainedCardWithCurrentStatus,
+    shouldUseRetainedHeadline,
+    mergeRetainedHeadline,
     expectedLatestWeekdaySession,
   },
 };

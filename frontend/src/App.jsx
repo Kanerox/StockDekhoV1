@@ -8,7 +8,7 @@ import { getCompanyFinancials } from "./api/financialsApi";
 import { getIndexDetail, getIndices } from "./api/indexApi";
 import { getGlobalIndexDetail, getGlobalIndices } from "./api/globalIndexApi";
 import { getIndiaTenYearYield } from "./api/gsecApi";
-import { getCompanyNews, getGlobalIndexNews, getGlobalMarketNews, getIndiaGsecNews, getNiftyMarketEvents, getVixMarketNews } from "./api/newsApi";
+import { getCompanyNews, getGlobalIndexNews, getGlobalMarketNews, getIndiaGsecNews, getNiftyMarketEvents, getSectorNews, getVixMarketNews } from "./api/newsApi";
 import { getPerformanceHistory } from "./api/performanceApi";
 import { getSectorDetail, getSectors } from "./api/sectorApi";
 import stockUniverse from "./data/stockUniverse.json";
@@ -175,17 +175,6 @@ function parseNewsDate(value) {
   )
     ? null
     : parsedDate;
-}
-
-function isTodayOrYesterdayNews(value) {
-  const date = parseNewsDate(value);
-  if (!date || date.getTime() > Date.now()) return false;
-  const dateKey = (item) => item.toLocaleDateString("en-CA", {
-    timeZone: "Asia/Kolkata",
-  });
-  const today = dateKey(new Date());
-  const yesterday = dateKey(new Date(Date.now() - 24 * 60 * 60 * 1000));
-  return dateKey(date) === today || dateKey(date) === yesterday;
 }
 
 function formatNewsDate(value) {
@@ -1007,7 +996,7 @@ function BrandIntro({ onComplete }) {
       transition: "opacity 280ms ease", overflow: "hidden",
     }}>
       <video autoPlay muted playsInline preload="auto" onEnded={finish} onError={finish}
-        style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}>
+        style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", transform: "scale(1.34)", transformOrigin: "center" }}>
         <source src="/StockDekho_Final_Loading.mp4" type="video/mp4" />
       </video>
     </div>,
@@ -2421,9 +2410,7 @@ useEffect(() => {
             article.title || ""
           ).toLowerCase();
 
-          return isTodayOrYesterdayNews(article.publishedAt) && !blockedMarketEventTerms.some(
-            (term) => title.includes(term)
-          );
+          return !blockedMarketEventTerms.some((term) => title.includes(term));
         })
         .sort((articleA, articleB) => {
   const dateA =
@@ -3821,64 +3808,25 @@ function SectorDetail({ sector, mode, openCompany, back }) {
     };
   }, [sector, range]);
 
-  const newsSymbols = (sectorData?.constituents || [])
-    .slice(0, 8)
-    .map((stock) => stock.ticker)
-    .join(",");
-
   useEffect(() => {
     let cancelled = false;
 
     async function loadSectorNews() {
-      if (!newsSymbols) {
-        setSectorNews([]);
-        setNewsError("");
-        return;
-      }
-
       setNewsLoading(true);
       setNewsError("");
-
-      const symbols = newsSymbols.split(",");
-      const results = await Promise.allSettled(
-        symbols.map(async (ticker) => ({
-          ticker,
-          data: await getCompanyNews(ticker),
-        }))
-      );
-
-      if (!cancelled) {
-        const seen = new Set();
-        const articles = results
-          .filter((result) => result.status === "fulfilled")
-          .flatMap((result) =>
-            (result.value.data.articles || []).map((article) => ({
-              ...article,
-              companies: [result.value.ticker],
-            }))
-          )
-          .sort(
-            (a, b) =>
-              newsDateTimestamp(b.publishedAt) - newsDateTimestamp(a.publishedAt)
-          )
-          .filter((article) => {
-            const key = article.link || article.title;
-            if (!key || seen.has(key)) return false;
-            seen.add(key);
-            return true;
-          })
-          .slice(0, 5)
-          .map((article) => ({
+      try {
+        const result = await getSectorNews(sector);
+        if (!cancelled) {
+          setSectorNews((result.articles || []).map((article) => ({
             ...article,
             date: formatNewsDate(article.publishedAt),
             teaser: article.summary || article.snippet || "",
-          }));
-
-        setSectorNews(articles);
-        if (results.every((result) => result.status === "rejected")) {
-          setNewsError("Unable to load current sector news. Please try again shortly.");
+          })));
         }
-        setNewsLoading(false);
+      } catch {
+        if (!cancelled) setNewsError("Unable to load current sector news. Please try again shortly.");
+      } finally {
+        if (!cancelled) setNewsLoading(false);
       }
     }
 
@@ -3887,7 +3835,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
     return () => {
       cancelled = true;
     };
-  }, [newsSymbols]);
+  }, [sector]);
 
   const constituents = sectorData?.constituents || [];
   const chartSeries = (sectorData?.points || []).map(
@@ -3968,13 +3916,13 @@ function SectorDetail({ sector, mode, openCompany, back }) {
           </Panel>
         ))}
         {newsLoading && (
-          <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim, fontSize: 12.5 }}>Loading current constituent news...</Panel>
+          <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim, fontSize: 12.5 }}>Loading current sector news...</Panel>
         )}
         {!newsLoading && newsError && (
           <Panel style={{ padding: 20, textAlign: "center", color: THEME.down, fontSize: 12.5 }}>{newsError}</Panel>
         )}
         {!newsLoading && !newsError && sectorNews.length === 0 && (
-          <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim, fontSize: 12.5 }}>No current constituent news is available. Check again later.</Panel>
+          <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim, fontSize: 12.5 }}>No sufficiently relevant sector reporting is currently available. Check again later.</Panel>
         )}
       </div>
 
@@ -6685,6 +6633,8 @@ function GlobalIndexDetailPage({ indexKey, back }) {
       <Panel style={{ padding: 16 }}>
         {loading ? <div style={{ height: 320, display: "grid", placeItems: "center", color: THEME.inkDim }}>Loading historical index data...</div>
           : error ? <div style={{ height: 320, display: "grid", placeItems: "center", color: THEME.down }}>{error}</div>
+          : data?.historyUnavailable || series.length < 2
+            ? <div style={{ height: 320, display: "grid", placeItems: "center", color: THEME.inkDim, textAlign: "center", padding: 20 }}>The latest index observation is available, but historical chart data is temporarily unavailable.</div>
           : <PriceChart series={series} labels={labels} height={320} color={THEME.gold} />}
       </Panel>
       <div className="sd-grid-4" style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginTop: 14 }}>
@@ -7117,6 +7067,20 @@ const SEARCH_TOPIC_INDEX_KEYS = {
   germany: ["DAX"],
 };
 
+const SEARCH_TOPIC_SECTOR_KEYS = {
+  banking: "Financials",
+  "it services": "Information Technology",
+  "oil and gas": "Energy",
+  fmcg: "Consumer Staples",
+  automobiles: "Consumer Discretionary",
+  pharmaceuticals: "Health Care",
+  infrastructure: "Industrials",
+  metals: "Materials",
+  power: "Utilities",
+  telecom: "Communication Services",
+  "real estate": "Real Estate",
+};
+
 function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
   const [stocks, setStocks] = useState([]);
   const [indices, setIndices] = useState([]);
@@ -7175,6 +7139,9 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
       const indexNewsPromise = Promise.allSettled(
         matchingIndexKeys.map((key) => bounded(getGlobalIndexNews(key)))
       );
+      const sectorNewsPromise = SEARCH_TOPIC_SECTOR_KEYS[canonicalTopic]
+        ? bounded(getSectorNews(SEARCH_TOPIC_SECTOR_KEYS[canonicalTopic]))
+        : Promise.resolve({ articles: [] });
       const secondaryNewsPromise = Promise.allSettled([
         bounded(getGlobalMarketNews()),
         bounded(getNiftyMarketEvents()),
@@ -7196,9 +7163,13 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
       ));
       setLoading(false);
 
-      const [companyNewsResults, indexNewsResults, secondaryNewsResults] = await Promise.all([
+      const [companyNewsResults, indexNewsResults, sectorNewsResult, secondaryNewsResults] = await Promise.all([
         companyNewsPromise,
         indexNewsPromise,
+        Promise.resolve(sectorNewsPromise).then(
+          (value) => ({ status: "fulfilled", value }),
+          (reason) => ({ status: "rejected", reason })
+        ),
         secondaryNewsPromise,
       ]);
       if (cancelled) return;
@@ -7206,6 +7177,7 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
       const combined = [
         ...(globalResult.status === "fulfilled" ? globalResult.value?.articles || [] : []),
         ...(marketResult.status === "fulfilled" ? marketResult.value?.articles || [] : []),
+        ...(sectorNewsResult.status === "fulfilled" ? sectorNewsResult.value?.articles || [] : []),
         ...indexNewsResults.flatMap((result) => result.status === "fulfilled" ? result.value?.articles || [] : []),
         ...companyNewsResults.flatMap((result) => result.status === "fulfilled" ? result.value?.articles || [] : []),
       ];

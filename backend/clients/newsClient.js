@@ -27,7 +27,7 @@ const PROVIDER_TTLS = {
   currents: 30 * 60 * 1000,
   google: 15 * 60 * 1000,
 };
-const PROVIDER_RETENTION_MS = 48 * 60 * 60 * 1000;
+const PROVIDER_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const DAILY_PROVIDER_LIMITS = { marketaux: 85, currents: 225 };
 
 function diagnostic(message) {

@@ -56,7 +56,9 @@ async function run(level) {
   const realNow = Date.now;
   const failureSymbol = "FAILSAFE.NS";
   const cached = await fetchMarketData(failureSymbol);
-  Date.now = () => realNow() + 6 * 60 * 1000;
+  // Completed-session quotes are deliberately fresh for six hours outside
+  // the live session; move beyond that window to exercise stale-if-error.
+  Date.now = () => realNow() + 7 * 60 * 60 * 1000;
   provider.quote = async () => { throw new Error("deterministic provider outage"); };
   provider.chart = async () => { throw new Error("deterministic history outage"); };
   const retained = await fetchMarketData(failureSymbol);

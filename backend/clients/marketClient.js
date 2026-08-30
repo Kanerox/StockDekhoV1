@@ -7,6 +7,7 @@ const { fetchHistoricalPrices } = require("./historyClient");
 const { validateQuote, indianMarketPhase, sessionKey } = require("../utils/marketDataValidation");
 
 const FRESH_QUOTE_TTL_MS = 5 * 60 * 1000;
+const CLOSED_SESSION_QUOTE_TTL_MS = 6 * 60 * 60 * 1000;
 const STALE_QUOTE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 const FUNDAMENTALS_TTL_MS = 24 * 60 * 60 * 1000;
 const STALE_FUNDAMENTALS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -30,6 +31,12 @@ const SUPPLEMENTAL_QUOTE_FIELDS = [
 const quoteRequestsInFlight = new Map();
 const fundamentalsRequestsInFlight = new Map();
 let batchRequestInFlight = null;
+
+function quoteFreshTtlMs() {
+  return indianMarketPhase() === "closed"
+    ? CLOSED_SESSION_QUOTE_TTL_MS
+    : FRESH_QUOTE_TTL_MS;
+}
 
 function normalizeSymbol(symbol) {
   const normalized = String(symbol || "").trim().toUpperCase();
@@ -381,7 +388,7 @@ async function getFallbackQuotes(symbols) {
 async function fetchMarketData(symbol, options = {}) {
   const normalizedSymbol = normalizeSymbol(symbol);
   const key = quoteCacheKey(normalizedSymbol);
-  const freshQuote = await getCachedValue(key, FRESH_QUOTE_TTL_MS);
+  const freshQuote = await getCachedValue(key, quoteFreshTtlMs());
   if (freshQuote) {
     try {
       const validated = validateQuote(freshQuote, { requestedSymbol: normalizedSymbol });
@@ -473,7 +480,7 @@ async function fetchMarketDataBatch(symbols, options = {}) {
   const normalizedSymbols = [...new Set(symbols.map(normalizeSymbol))];
   let { cachedQuotes, missingSymbols } = await collectCachedQuotes(
     normalizedSymbols,
-    FRESH_QUOTE_TTL_MS
+    quoteFreshTtlMs()
   );
 
   if (missingSymbols.length === 0) return cachedQuotes;
@@ -495,7 +502,7 @@ async function fetchMarketDataBatch(symbols, options = {}) {
 
     ({ cachedQuotes, missingSymbols } = await collectCachedQuotes(
       normalizedSymbols,
-      FRESH_QUOTE_TTL_MS
+      quoteFreshTtlMs()
     ));
     if (missingSymbols.length === 0) return cachedQuotes;
 
