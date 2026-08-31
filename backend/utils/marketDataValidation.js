@@ -70,7 +70,7 @@ function classifyFreshness(timestamp, now = new Date(), policy = INDIAN_INDEX_FR
   return "eod";
 }
 
-function validateQuote(quote, { requestedSymbol, allowStale = false } = {}) {
+function validateQuote(quote, { requestedSymbol, allowStale = false, now = new Date() } = {}) {
   if (!quote || typeof quote !== "object") throw new Error("Market provider returned an empty quote");
   if (requestedSymbol && quote.symbol && comparableSymbol(requestedSymbol) !== comparableSymbol(quote.symbol)) {
     throw new Error(`Quote symbol mismatch: requested ${requestedSymbol}, received ${quote.symbol}`);
@@ -81,24 +81,31 @@ function validateQuote(quote, { requestedSymbol, allowStale = false } = {}) {
   if (price === null) throw new Error(`Invalid price for ${requestedSymbol || quote.symbol || "instrument"}`);
   if (previousClose === null) throw new Error(`Invalid previous close for ${requestedSymbol || quote.symbol || "instrument"}`);
   if (Number.isNaN(timestamp.getTime())) throw new Error(`Invalid market timestamp for ${requestedSymbol || quote.symbol || "instrument"}`);
-  if (timestamp.getTime() > Date.now() + MAX_FUTURE_SKEW_MS) throw new Error(`Future market timestamp for ${requestedSymbol || quote.symbol || "instrument"}`);
+  if (timestamp.getTime() > now.getTime() + MAX_FUTURE_SKEW_MS) throw new Error(`Future market timestamp for ${requestedSymbol || quote.symbol || "instrument"}`);
 
-  let freshness = classifyFreshness(timestamp);
+  let freshness = classifyFreshness(timestamp, now);
   if (quote.observationKind === "session_close") {
     const observationSession = quote.observationDate || sessionKey(timestamp);
-    const currentSession = sessionKey(new Date());
-    freshness = observationSession === currentSession || indianMarketPhase() !== "live"
+    const currentSession = sessionKey(now);
+    freshness = observationSession === currentSession || indianMarketPhase(now) !== "live"
       ? "eod"
       : "stale";
   } else if (["provisional_close", "provisional_session"].includes(quote.observationKind)) {
-    const phase = indianMarketPhase();
-    const ageMs = Date.now() - timestamp.getTime();
-    freshness = phase !== "live" && ageMs <= 3 * 24 * 60 * 60 * 1000
-      ? "last_updated"
-      : "stale";
-  } else if (indianMarketPhase() === "reconciling" && sessionKey(timestamp) === sessionKey(new Date())) {
+    const phase = indianMarketPhase(now);
+    const ageMs = now.getTime() - timestamp.getTime();
+    // History-backed quotes may append a genuine current LTP before the
+    // completed daily candle exists. During the live session its observation
+    // timestamp still determines freshness; "provisional" only means it must
+    // not be promoted to a completed EOD close. Outside the live session keep
+    // the honest interim status until reconciliation confirms the daily bar.
+    freshness = phase === "live"
+      ? classifyFreshness(timestamp, now)
+      : ageMs <= 3 * 24 * 60 * 60 * 1000
+        ? "last_updated"
+        : "stale";
+  } else if (indianMarketPhase(now) === "reconciling" && sessionKey(timestamp) === sessionKey(now)) {
     freshness = "last_updated";
-  } else if (indianMarketPhase() === "closed" && sessionKey(timestamp) === sessionKey(new Date())) {
+  } else if (indianMarketPhase(now) === "closed" && sessionKey(timestamp) === sessionKey(now)) {
     // A same-day LTP after trading is only a provisional observation until a
     // completed daily candle confirms the exchange close.
     freshness = "last_updated";

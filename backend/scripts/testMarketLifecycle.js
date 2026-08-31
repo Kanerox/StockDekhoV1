@@ -1,5 +1,5 @@
 const assert = require("assert");
-const { classifyFreshness, indianMarketPhase } = require("../utils/marketDataValidation");
+const { classifyFreshness, indianMarketPhase, validateQuote } = require("../utils/marketDataValidation");
 const { getGlobalIndexDefinition } = require("../config/globalIndexConfig");
 const { _test } = require("../services/globalIndexService");
 
@@ -128,6 +128,22 @@ assert.strictEqual(
 assert.strictEqual(
   classifyFreshness("2026-08-28T06:55:00.000Z", new Date("2026-08-28T07:30:00.000Z")),
   "stale"
+);
+
+assert.strictEqual(
+  validateQuote({
+    symbol: "^NSEI",
+    regularMarketPrice: 24500,
+    regularMarketPreviousClose: 24400,
+    regularMarketTime: "2026-08-28T07:25:00.000Z",
+    observationKind: "provisional_close",
+  }, {
+    requestedSymbol: "^NSEI",
+    allowStale: true,
+    now: new Date("2026-08-28T07:30:00.000Z"),
+  }).dataStatus,
+  "live",
+  "A fresh history-backed LTP remains LIVE during the NSE session"
 );
 
 assert.strictEqual(
