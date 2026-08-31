@@ -838,6 +838,14 @@ function articleRecencyValue(article) {
   return article?.pubDate || article?.recencyAt || null;
 }
 
+function publicationPresentation(article) {
+  return {
+    publishedAt: article?.pubDate || null,
+    recencyAt: articleRecencyValue(article),
+    publicationDateStatus: article?.publicationDateSource || null,
+  };
+}
+
 function sourceIdentity(article, cleanedArticle) {
   return normalizeSourceForMatching(
     cleanedArticle?.source || article?.source || article?.creator || "unknown"
@@ -1274,7 +1282,7 @@ async function getGlobalMarketNewsFromService() {
       topic,
       title: cleanedArticle.title,
       source: cleanedArticle.source,
-      publishedAt: article.pubDate,
+      ...publicationPresentation(article),
       link: article.link,
 
       summary: isMeaningfulSummary(
@@ -1286,11 +1294,11 @@ async function getGlobalMarketNewsFromService() {
     })
   );
 
-  return {
+  return retainStableEditorialResult("news-editorial:global-markets:v1", {
     range: "Last 14 days",
     articleCount: articles.length,
     articles,
-  };
+  });
 }
 
 function isRelevantToVixTopic(article, cleanedArticle, topic) {
@@ -1457,7 +1465,7 @@ async function getVixMarketNewsFromService() {
       topic,
       title: cleanedArticle.title,
       source: cleanedArticle.source,
-      publishedAt: article.pubDate,
+      ...publicationPresentation(article),
       link: article.link,
 
       summary: isMeaningfulSummary(
@@ -2484,7 +2492,7 @@ const companyName =
 
         title: cleanedArticle.title,
         source: cleanedArticle.source,
-        publishedAt: article.pubDate,
+        ...publicationPresentation(article),
         link: article.link,
         snippet: cleanedArticle.snippet,
 
@@ -2539,7 +2547,7 @@ async function getIndiaGsecNewsFromService() {
     topic,
     title: cleanedArticle.title,
     source: cleanedArticle.source,
-    publishedAt: article.pubDate,
+    ...publicationPresentation(article),
     link: article.link,
     summary: isMeaningfulSummary(cleanedArticle.title, cleanedArticle.snippet) ? cleanedArticle.snippet : "",
   }));
@@ -2582,11 +2590,13 @@ async function getGlobalIndexNewsFromService(key) {
     topic,
     title: cleanedArticle.title,
     source: cleanedArticle.source,
-    publishedAt: article.pubDate,
+    ...publicationPresentation(article),
     link: article.link,
     summary: isMeaningfulSummary(cleanedArticle.title, cleanedArticle.snippet) ? cleanedArticle.snippet : "",
   }));
-  return { key: String(key).toUpperCase(), range: "Last 15 days", articleCount: articles.length, articles };
+  return retainStableEditorialResult(`news-editorial:global-index:${String(key).toUpperCase()}:v1`, {
+    key: String(key).toUpperCase(), range: "Last 15 days", articleCount: articles.length, articles,
+  });
 }
 
 async function getSectorNewsFromService(key) {
@@ -2621,11 +2631,13 @@ async function getSectorNewsFromService(key) {
       topic,
       title: cleanedArticle.title,
       source: cleanedArticle.source,
-      publishedAt: article.pubDate,
+      ...publicationPresentation(article),
       link: article.link,
       summary: isMeaningfulSummary(cleanedArticle.title, cleanedArticle.snippet) ? cleanedArticle.snippet : "",
     }));
-  return { sector: sectorKey, range: "Last 15 days", articleCount: articles.length, articles };
+  return retainStableEditorialResult(`news-editorial:sector:${sectorKey}:v1`, {
+    sector: sectorKey, range: "Last 15 days", articleCount: articles.length, articles,
+  });
 }
 
 module.exports = {

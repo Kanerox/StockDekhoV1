@@ -199,6 +199,15 @@ function formatNewsDate(value) {
   );
 }
 
+function formatArticleNewsDate(article) {
+  const exactDate = formatNewsDate(article?.publishedAt);
+  if (exactDate !== "Date unavailable") return exactDate;
+  const recentCoverage = parseNewsDate(article?.recencyAt);
+  return recentCoverage && article?.publicationDateStatus === "unverified_google_news_listing"
+    ? "Recent coverage"
+    : "Date unavailable";
+}
+
 function newsDateTimestamp(value) {
   return parseNewsDate(value)?.getTime() || 0;
 }
@@ -1222,7 +1231,7 @@ function WideNewsTile({ article, onClick, href }) {
       </div>
       <div style={{ fontSize: 13, fontWeight: 600, color: THEME.ink, marginTop: 5 }}>{article.title}</div>
       <div style={{ fontSize: 10.5, color: THEME.inkDim, marginTop: 6 }}>
-        {article.source || "Source unavailable"} · {article.date || formatNewsDate(article.publishedAt)}
+        {article.source || "Source unavailable"} · {article.date || formatArticleNewsDate(article)}
       </div>
     </>
   );
@@ -1693,7 +1702,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
             setNews(
               (data.articles || []).map((article) => ({
                 ...article,
-                date: formatNewsDate(article.publishedAt),
+                date: formatArticleNewsDate(article),
                 teaser: article.summary || "",
               }))
             );
@@ -1781,7 +1790,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
           .slice(0, 5)
           .map((article) => ({
             ...article,
-            date: formatNewsDate(article.publishedAt),
+            date: formatArticleNewsDate(article),
             teaser: article.summary || article.snippet || "",
           }));
 
@@ -2447,9 +2456,7 @@ useEffect(() => {
           id: article.id,
           cat: article.category || "Market",
           title: article.title,
-date: formatNewsDate(
-  article.publishedAt
-),
+date: formatArticleNewsDate(article),
           desc:
             article.summary ||
             "Open the original report for full details.",
@@ -3819,7 +3826,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
         if (!cancelled) {
           setSectorNews((result.articles || []).map((article) => ({
             ...article,
-            date: formatNewsDate(article.publishedAt),
+            date: formatArticleNewsDate(article),
             teaser: article.summary || article.snippet || "",
           })));
         }
@@ -3956,7 +3963,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
                 href={newsOpen.link}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ display: "inline-flex", color: THEME.gold, fontSize: 12.5, marginBottom: 20 }}
+                style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "10px 14px", borderRadius: 4, background: THEME.gold, color: THEME.navyDeep, fontSize: 12.5, fontWeight: 700, textDecoration: "none", marginBottom: 20 }}
               >
                 Read original article →
               </a>
@@ -4013,7 +4020,7 @@ function CompanyOverviewTab({ ticker, liveNews, newsLoading, newsError }) {
   id: article.id,
   headline: article.title,
 
-  date: formatNewsDate(article.publishedAt),
+  date: formatArticleNewsDate(article),
 
   teaser: article.snippet || "",
   summary: article.summary || article.snippet || "",
@@ -5183,8 +5190,8 @@ useEffect(() => {
               <div style={{ marginTop: 26 }}>
                 <SectionHeading title="Recent earnings performance" />
               </div>
-              <Panel style={{ overflowX: "auto" }}>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
+              <Panel style={{ overflowX: "auto", maxWidth: 760 }}>
+                <table style={{ width: "100%", minWidth: 560, borderCollapse: "collapse", tableLayout: "fixed", fontSize: 12.5 }}>
                   <thead>
                     <tr style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
                       <th style={thStyle}>Quarter</th>
@@ -5615,7 +5622,15 @@ function PeerTab({ sector, ticker, openCompany }) {
     <div>
       <div style={{ fontSize: 11, color: THEME.inkDim, marginBottom: 12 }}>Latest available market data for StockDekho companies within {sector}. Higher or lower values are shown for context only — not a ranking of which company is "better".</div>
       <Panel style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5, minWidth: 720 }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontSize: 12.5, minWidth: 720 }}>
+          <colgroup>
+            <col style={{ width: "34%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "11%" }} />
+            <col style={{ width: "15%" }} />
+            <col style={{ width: "18%" }} />
+          </colgroup>
           <thead><tr style={{ borderBottom: `1px solid ${THEME.hairline}` }}>
             <th style={thStyle}>Company</th><th style={thStyle}>P/E</th><th style={thStyle}>ROE%</th><th style={thStyle}>D/E</th><th style={thStyle}>Div Yield%</th><th style={thStyle}>1Y Return</th>
           </tr></thead>
@@ -6811,9 +6826,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
   topic: article.topic,
   title: article.title,
 
-  date: formatNewsDate(
-    article.publishedAt
-  ),
+  date: formatArticleNewsDate(article),
 
   teaser: article.summary,
   body: article.summary,
@@ -7235,7 +7248,7 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
           <Panel key={article.link || article.url || `${article.title}-${index}`} style={{ padding: 16 }}>
             <div style={{ color: THEME.gold, fontSize: 10.5, textTransform: "uppercase", fontWeight: 700, marginBottom: 6 }}>{article.topic || "Market"}</div>
             <div style={{ fontSize: 13.5, fontWeight: 700, lineHeight: 1.35, marginBottom: 7 }}>{article.title}</div>
-            <div style={{ color: THEME.inkDim, fontSize: 11, marginBottom: 8 }}>{formatNewsDate(article.publishedAt || article.date)}</div>
+            <div style={{ color: THEME.inkDim, fontSize: 11, marginBottom: 8 }}>{article.date || formatArticleNewsDate(article)}</div>
             <div style={{ color: THEME.creamDim, fontSize: 12, lineHeight: 1.45 }}>{article.teaser || article.summary || "Open the original report for full details."}</div>
             {(article.link || article.url) && <a href={article.link || article.url} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", color: THEME.gold, fontSize: 11.5, marginTop: 10 }}>Read original article →</a>}
           </Panel>
@@ -7390,7 +7403,7 @@ function Footer() {
         </div>
         <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 14 }}>
           StockDekho is a free, non-commercial personal research project. It is not a trading platform and does not provide recommendations to buy, sell or hold securities. Market data is displayed through configured read-only providers; StockDekho does not claim direct exchange integration, exchange endorsement or regulatory registration.
-          {" "}© 2026 StockDekho (prototype) <span style={{ color: THEME.hairline }}>·</span> <span style={{ color: THEME.gold }}>A product by Kane Basu</span>
+          {" "}© 2026 StockDekho (prototype) <span style={{ color: THEME.hairline }}>·</span> <span style={{ color: THEME.gold }}>A product by <a href="https://www.linkedin.com/in/kane-basu-2862b7214" target="_blank" rel="noopener noreferrer" style={{ color: "inherit", textDecoration: "none" }}>Kane Basu</a></span>
         </div>
       </div>
       {drawer && (

@@ -160,7 +160,7 @@ async function fetchHistoricalPrices(
     appendLatestQuote
   );
   const freshTtl = getMarketDataProviderName() === "upstox"
-    ? indianHistoryFreshTtl()
+    ? (appendLatestQuote ? indianHistoryFreshTtl() : 6 * 60 * 60 * 1000)
     : YAHOO_FRESH_HISTORY_TTL_MS;
   const freshPrices = await getCachedValue(key, freshTtl);
   if (freshPrices) return freshPrices;

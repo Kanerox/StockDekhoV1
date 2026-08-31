@@ -9,16 +9,17 @@ let quoteCalls = 0;
 let batchCalls = 0;
 
 function testQuote(symbol) {
+  const now = new Date(Date.now());
   return {
     symbol,
     shortName: symbol,
     longName: symbol,
     regularMarketPrice: 101,
     regularMarketPreviousClose: 100,
-    regularMarketTime: "2026-08-28T10:00:00.000Z",
-    observationDate: "2026-08-28",
-    observationKind: "session_close",
-    dataStatus: "eod",
+    regularMarketTime: now.toISOString(),
+    observationDate: now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+    observationKind: "intraday",
+    dataStatus: "live",
     isStale: false,
   };
 }

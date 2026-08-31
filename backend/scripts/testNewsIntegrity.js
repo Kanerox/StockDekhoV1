@@ -9,6 +9,11 @@ assert.strictEqual(publicationIntegrity({ pubDate: "2026-08-30T09:00:00Z", link:
 assert.strictEqual(publicationIntegrity({ pubDate: "2026-01-08T09:00:00Z", link: "https://publisher.test/2026/01/08/story" }, now).publishedAt, "2026-01-08T09:00:00.000Z");
 assert.strictEqual(publicationIntegrity({ pubDate: null }, now).reason, "missing_or_malformed");
 assert.strictEqual(publicationIntegrity({ pubDate: "not-a-date" }, now).reason, "missing_or_malformed");
+assert.strictEqual(
+  publicationIntegrity({ fetchedAt: "2026-08-30T09:00:00Z", cachedAt: "2026-08-30T09:01:00Z" }, now).reason,
+  "missing_or_malformed",
+  "retrieval and cache timestamps must never become publication timestamps"
+);
 assert.strictEqual(publicationIntegrity({ pubDate: "2026-08-29T09:00:00Z", link: "https://publisher.test/2026/03/09/story" }, now).reason, "url_date_conflict");
 assert.strictEqual(publicationIntegrity({ pubDate: "2026-08-31T09:00:00Z" }, now).reason, "future");
 

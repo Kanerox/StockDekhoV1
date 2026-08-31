@@ -343,7 +343,8 @@ const getMarketPerformersFromService = async (
           value: await fetchHistoricalPrices(
             uniqueSymbols[index],
             period1,
-            period2
+            period2,
+            { appendLatestQuote: false }
           ),
         };
       } catch (error) {
@@ -391,14 +392,25 @@ const getMarketPerformersFromService = async (
           ? historyResults[index].value
           : [];
 
-      const returnPercent = calculateRangeReturn(prices, normalizedRange);
+      const currentPrice = valueOrNull(quote?.regularMarketPrice);
+      const returnSeries = currentPrice === null
+        ? prices
+        : [
+            ...prices,
+            {
+              date: quote?.regularMarketTime || new Date().toISOString(),
+              close: currentPrice,
+              adjustedClose: currentPrice,
+            },
+          ];
+      const returnPercent = calculateRangeReturn(returnSeries, normalizedRange);
       const latestHistoricalVolume = [...prices]
         .reverse()
         .map((point) => valueOrNull(point?.volume))
         .find((volume) => volume !== null) ?? null;
       const volume =
         valueOrNull(quote?.regularMarketVolume) ?? latestHistoricalVolume;
-      const price = valueOrNull(quote?.regularMarketPrice);
+      const price = currentPrice;
 
       return {
         ticker,
