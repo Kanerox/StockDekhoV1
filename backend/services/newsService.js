@@ -884,7 +884,8 @@ function deduplicateAndLimit(
     .sort(
       (itemA, itemB) =>
         (Number(itemB.relevanceScore || 0) - Number(itemA.relevanceScore || 0)) ||
-        (new Date(itemB.article.pubDate) - new Date(itemA.article.pubDate))
+        (new Date(articleRecencyValue(itemB.article) || 0) -
+          new Date(articleRecencyValue(itemA.article) || 0))
     )
     .filter(({ article, cleanedArticle }) => {
       const link = String(article.link || "").trim();
@@ -1240,9 +1241,7 @@ async function getGlobalMarketNewsFromService() {
       article,
       cleanedArticle
     ) &&
-    isTrustedGlobalSource(
-      cleanedArticle.source
-    ) &&
+    isAccessibleNewsSource(cleanedArticle.source) &&
     isRelevantToGlobalTopic(
       article,
       cleanedArticle,
@@ -2073,6 +2072,20 @@ const LEGACY_MARKET_EVENTS_RESULT_CACHE_KEYS = [
 ];
 const EDITORIAL_RESULT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 
+function presentStableMarketEvents(result) {
+  const accepted = [];
+  for (const article of result?.articles || []) {
+    if (!accepted.some((item) => areSameEvent(item.title, article.title))) {
+      accepted.push(article);
+    }
+  }
+  const educational = /^(?:list\s+of|top\s+\d+)\b.*\bstocks?\b/i;
+  accepted.sort((articleA, articleB) =>
+    Number(educational.test(articleA.title)) - Number(educational.test(articleB.title))
+  );
+  return { ...result, articles: accepted, articleCount: accepted.length };
+}
+
 function mergeEditorialResults(nextResult, previousResult) {
   const merged = [];
   for (const article of [
@@ -2111,7 +2124,7 @@ async function retainStableEditorialResult(cacheKey, nextResult, fallbackCacheKe
 
 async function getNiftyMarketEventsFromService() {
   const cachedResult = await getCachedValue(MARKET_EVENTS_RESULT_CACHE_KEY, 30 * 60 * 1000);
-  if (cachedResult) return cachedResult;
+  if (cachedResult) return presentStableMarketEvents(cachedResult);
   const topicResults =
     await Promise.allSettled(
       
@@ -2216,11 +2229,12 @@ const articles = selectedArticles.map(
     })
   );
 
-  return retainStableEditorialResult(MARKET_EVENTS_RESULT_CACHE_KEY, {
+  const retained = await retainStableEditorialResult(MARKET_EVENTS_RESULT_CACHE_KEY, {
     range: "Recent market sessions",
     articleCount: articles.length,
     articles,
   }, LEGACY_MARKET_EVENTS_RESULT_CACHE_KEYS);
+  return presentStableMarketEvents(retained);
 }
 
 function analyseArticle(title, snippet) {
