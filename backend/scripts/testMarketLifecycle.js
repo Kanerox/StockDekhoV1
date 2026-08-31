@@ -10,6 +10,22 @@ const ftse = getGlobalIndexDefinition("FTSE100");
 const dax = getGlobalIndexDefinition("DAX");
 const nikkei = getGlobalIndexDefinition("NIKKEI225");
 
+const ftseHolidaySeries = [
+  { date: "2026-08-27T15:30:00.000Z", adjustedClose: 10790 },
+  { date: "2026-08-28T15:30:00.000Z", adjustedClose: 10824 },
+  { date: "2026-08-31T15:10:00.000Z", adjustedClose: 10824 },
+];
+const ftseTradedSeries = _test.excludeClosureSessionPoints(
+  ftseHolidaySeries,
+  ftse,
+  new Date("2026-08-31T16:00:00.000Z")
+);
+assert.deepStrictEqual(
+  ftseTradedSeries.map((point) => point.date),
+  ["2026-08-27T15:30:00.000Z", "2026-08-28T15:30:00.000Z"],
+  "A provider reference row stamped on a full-day closure is not a traded observation"
+);
+
 assert.strictEqual(
   _test.exchangeSessionCloseTimestamp("2026-08-28", hsi),
   "2026-08-28T08:00:00.000Z",

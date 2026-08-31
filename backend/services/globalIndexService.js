@@ -68,6 +68,16 @@ function exchangeClosure(definition, now = new Date()) {
   return marketClosure(definition.calendar, clock.date, clock.weekday);
 }
 
+function excludeClosureSessionPoints(points, definition, now = new Date()) {
+  const closure = exchangeClosure(definition, now);
+  if (closure.type !== "holiday") return points;
+  const closureDate = exchangeClock(definition, now).date;
+  const tradedPoints = points.filter(
+    (point) => exchangeObservationDate(point.date, definition) !== closureDate
+  );
+  return tradedPoints.length >= 2 ? tradedPoints : points;
+}
+
 function exchangeIsOpen(definition, now = new Date()) {
   const clock = exchangeClock(definition, now);
   return !exchangeClosure(definition, now).closed && definition.sessions.some(
@@ -344,7 +354,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     };
   }
   const now = new Date();
-  const latestHistoricalPoint = points.at(-1);
+  let latestHistoricalPoint = points.at(-1);
   let quote = quoteResult.status === "fulfilled" ? quoteResult.value : {
     symbol: definition.symbol,
     regularMarketPrice: latestHistoricalPoint.adjustedClose,
@@ -371,6 +381,16 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const preflightClock = exchangeClock(definition, now);
   const closure = exchangeClosure(definition, now);
   const preflightOpen = exchangeIsOpen(definition, now);
+  if (closure.type === "holiday") {
+    // Some providers emit a synthetic daily/reference row dated on a full-day
+    // closure. It is not a traded session and must not become the observation
+    // date shown to users or qualify as a completed daily candle.
+    const tradedPoints = excludeClosureSessionPoints(points, definition, now);
+    if (tradedPoints !== points) {
+      points = tradedPoints;
+      latestHistoricalPoint = points.at(-1);
+    }
+  }
   let quoteSessionDate = exchangeObservationDate(quote?.regularMarketTime, definition);
   if (closure.type === "holiday" && quoteSessionDate === preflightClock.date) {
     // A provider can refresh an unchanged reference value on a full-day
@@ -607,6 +627,7 @@ module.exports = {
   _test: {
     exchangeClock,
     exchangeClosure,
+    excludeClosureSessionPoints,
     exchangeIsOpen,
     exchangeObservationDate,
     exchangeSessionCloseTimestamp,
