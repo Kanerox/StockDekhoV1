@@ -854,7 +854,7 @@ function sourceIdentity(article, cleanedArticle) {
   );
 }
 
-function retainPublicationReliableCandidates(candidates = []) {
+function retainPublicationReliableCandidates(candidates = [], { allowValidatedWrappers = false } = {}) {
   const normalized = candidates
     .map((item) => {
       const article = normalizePublicationCandidate(item.article);
@@ -862,6 +862,7 @@ function retainPublicationReliableCandidates(candidates = []) {
     })
     .filter(Boolean);
 
+  if (allowValidatedWrappers) return normalized;
   return normalized.filter((item) => {
     if (!isGoogleNewsWrapper(item.article)) return true;
     const source = sourceIdentity(item.article, item.cleanedArticle);
@@ -1264,8 +1265,8 @@ async function getGlobalMarketNewsFromService() {
   );
 
   const articles = deduplicateAndLimit(
-    retainPublicationReliableCandidates(candidates),
-    32
+    retainPublicationReliableCandidates(candidates, { allowValidatedWrappers: true }),
+    Math.max(candidates.length, 1)
   ).map(
     (
       {
@@ -2097,7 +2098,6 @@ function mergeEditorialResults(nextResult, previousResult) {
       areSameEvent(accepted.title, article.title)
     );
     if (!duplicate) merged.push(article);
-    if (merged.length >= 30) break;
   }
   return {
     ...nextResult,
@@ -2576,7 +2576,6 @@ function rankGlobalIndexCandidates(fetched, config) {
     .map((article) => ({ article, cleanedArticle: cleanGoogleNewsArticle(article), topic: config.topic }))
     .filter(({ article, cleanedArticle }) =>
       !isBlockedGlobalArticle(article, cleanedArticle) &&
-      isTrustedGlobalSource(cleanedArticle.source) &&
       isAccessibleNewsSource(cleanedArticle.source)
     )
     .map((item) => {
@@ -2601,7 +2600,10 @@ async function getGlobalIndexNewsFromService(key) {
   if (!config) throw new Error("Unknown global index");
   const fetched = await fetchGlobalMarketNews(config.query);
   const candidates = rankGlobalIndexCandidates(fetched, config);
-  const articles = deduplicateAndLimit(retainPublicationReliableCandidates(candidates), 15).map(({ article, cleanedArticle, topic }, index) => ({
+  const articles = deduplicateAndLimit(
+    retainPublicationReliableCandidates(candidates, { allowValidatedWrappers: true }),
+    Math.max(candidates.length, 1)
+  ).map(({ article, cleanedArticle, topic }, index) => ({
     id: article.guid || article.link || `global-index-${key}-${index}`,
     topic,
     title: cleanedArticle.title,
@@ -2641,7 +2643,10 @@ async function getSectorNewsFromService(key) {
       return { ...item, relevanceScore };
     })
     .filter((item) => item.relevanceScore > 0);
-  const articles = deduplicateAndLimit(retainPublicationReliableCandidates(candidates), 10)
+  const articles = deduplicateAndLimit(
+    retainPublicationReliableCandidates(candidates, { allowValidatedWrappers: true }),
+    Math.max(candidates.length, 1)
+  )
     .map(({ article, cleanedArticle, topic }, index) => ({
       id: article.guid || article.link || `sector-${sectorKey}-${index}`,
       topic,

@@ -258,6 +258,40 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   let points = validPoints(rawPoints);
   if (points.length < 2) {
     const reason = historyResult.status === "rejected" ? historyResult.reason?.message : "Insufficient global-index history";
+    const quoteOnly = quoteResult.status === "fulfilled" ? quoteResult.value : null;
+    const quoteOnlyTime = quoteOnly?.regularMarketTime;
+    const quoteOnlyValue = finite(quoteOnly?.regularMarketPrice);
+    if (!retainedHeadline && quoteOnlyValue !== null && quoteOnlyTime &&
+        observationAgeMs(quoteOnlyTime) >= -60 * 1000) {
+      const status = globalQuoteStatus(
+        quoteOnly,
+        definition,
+        exchangeObservationDate(quoteOnlyTime, definition),
+        false,
+        new Date(),
+        false
+      );
+      return {
+        ...definition,
+        value: quoteOnlyValue,
+        change: finite(quoteOnly.regularMarketChange),
+        changePercent: finite(quoteOnly.regularMarketChangePercent),
+        marketTime: new Date(quoteOnlyTime).toISOString(),
+        asOf: new Date(quoteOnlyTime).toISOString(),
+        sessionDateOnly: false,
+        isGlobalIndex: true,
+        dataStatus: status,
+        isStale: status === "stale",
+        dataProvider: quoteOnly.quoteSourceName || "market provider",
+        periodReturn: null,
+        periodHigh: null,
+        periodLow: null,
+        points: [],
+        range,
+        historyUnavailable: true,
+        historyError: reason || "Insufficient global-index history",
+      };
+    }
     if (!retainedHeadline) throw new Error(reason || "Insufficient global-index history");
     return {
       ...definition,
