@@ -80,7 +80,11 @@ function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked =
   if (age < -60 * 1000) return "unavailable";
   if (!weekday || clock.minutes < Math.min(...definition.sessions.map((session) => session[0]))) {
     const expectedSession = expectedLatestWeekdaySession(definition, now);
-    if (observationDate === expectedSession || latestSessionDate === expectedSession) return "eod";
+    const expectedClose = new Date(exchangeSessionCloseTimestamp(expectedSession, definition)).getTime();
+    const observationTime = new Date(observationValue || 0).getTime();
+    const closeAligned = Number.isFinite(expectedClose) && Number.isFinite(observationTime) &&
+      Math.abs(observationTime - expectedClose) <= 2 * 60 * 1000;
+    if (observationDate === expectedSession && closeAligned) return "eod";
     return observationDate && observationDate < expectedSession ? "stale" : "last_updated";
   }
   if (observationDate !== clock.date) return scheduledOpen ? "stale" : "last_updated";

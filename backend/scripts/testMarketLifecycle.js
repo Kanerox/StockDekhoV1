@@ -29,6 +29,22 @@ assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-10-30", dax), "2026
 assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-03-09", nikkei), "2026-03-09T06:30:00.000Z");
 assert.strictEqual(_test.exchangeSessionCloseTimestamp("2026-10-30", nikkei), "2026-10-30T06:30:00.000Z");
 assert.strictEqual(
+  _test.globalQuoteStatus(
+    {
+      regularMarketTime: "2026-08-28T18:29:00.000Z",
+      quoteSourceName: "Yahoo Finance intraday",
+      marketState: "CLOSED",
+    },
+    sp500,
+    "2026-08-28",
+    false,
+    new Date("2026-08-31T11:00:00.000Z"),
+    false
+  ),
+  "last_updated",
+  "A pre-close US observation must not be presented as the completed Friday EOD"
+);
+assert.strictEqual(
   _test.reconciliationEligible(hsi, new Date("2026-08-28T08:20:00.000Z")),
   false
 );
