@@ -1123,8 +1123,9 @@ function hasFreshCurrencyQuote(currency, now = new Date()) {
 function LiveTag({ live, approx, small, statusLabel }) {
   if (live) {
     const label = statusLabel || (approx ? "Live · approx" : isIndianMarketOpen() ? "Live" : "EOD");
+    const unavailable = label === "Unavailable";
     const caution = label === "Delayed" || label === "Last updated" || label === "Stale";
-    const tagColor = caution ? THEME.gold : THEME.up;
+    const tagColor = unavailable ? THEME.inkDim : caution ? THEME.gold : THEME.up;
     return (
       <span title={statusLabel === "Live" ? "Market is currently open" : statusLabel === "EOD" ? "Latest end-of-day value" : approx ? "Live-anchored (approximate reference level)" : "Live-anchored EOD snapshot"}
         style={{
@@ -6669,6 +6670,37 @@ function GlobalIndexDetailPage({ indexKey, back }) {
   );
 }
 
+const GLOBAL_INDEX_CARD_DEFINITIONS = [
+  ["SP500", "S&P 500", "Americas"],
+  ["NASDAQ", "NASDAQ Composite", "Americas"],
+  ["DOW", "Dow Jones Industrial Average", "Americas"],
+  ["HANGSENG", "Hang Seng", "APAC"],
+  ["NIKKEI225", "Nikkei 225", "APAC"],
+  ["FTSE100", "FTSE 100", "EMEA"],
+  ["DAX", "DAX", "EMEA"],
+  ["EUROSTOXX50", "EURO STOXX 50", "EMEA"],
+  ["KOSPI", "KOSPI", "APAC"],
+  ["TAIWAN", "Taiwan Stock Exchange (TAIEX)", "APAC"],
+].map(([key, name, region]) => ({ key, name, region }));
+
+function completeGlobalIndexCards(indices = []) {
+  const byKey = new Map(indices.map((index) => [index.key, index]));
+  return GLOBAL_INDEX_CARD_DEFINITIONS.map((definition) =>
+    byKey.get(definition.key) || {
+      ...definition,
+      value: null,
+      change: null,
+      changePercent: null,
+      oneMonthReturn: null,
+      sparkline: [],
+      marketTime: null,
+      dataStatus: "unavailable",
+      dataProvider: null,
+      isGlobalIndex: true,
+    }
+  );
+}
+
 let retainedGlobalIndices = [];
 let retainedCurrencyData = [];
 
@@ -6850,7 +6882,8 @@ const globalMarketNews = globalNewsData.map((article) => ({
     globalNewsPage * globalNewsPerPage
   );
   const active = currencies.find((currency) => currency.code === activeCode);
-  const visibleGlobalIndices = globalRegion === "All Regions" ? globalIndices : globalIndices.filter((index) => index.region === globalRegion);
+  const completeGlobalIndices = completeGlobalIndexCards(globalIndices);
+  const visibleGlobalIndices = globalRegion === "All Regions" ? completeGlobalIndices : completeGlobalIndices.filter((index) => index.region === globalRegion);
   const hasGlobalCriticalContent = globalIndices.length > 0 ||
     currencyData.some((currency) => Number.isFinite(currency?.rate));
   const globalOverlayActive = !hasGlobalCriticalContent &&
