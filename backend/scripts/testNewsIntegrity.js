@@ -28,6 +28,10 @@ assert.strictEqual(_test.areSameEvent(
   "The Sashidhar Jagdishan years at HDFC Bank: Crisis, merger, and scrutiny",
   "HDFC Bank boss on way out, won't seek reappointment"
 ), true);
+assert.strictEqual(_test.areSameEvent(
+  "Indian Banking Stocks Face Price Gaps After New Auction System Launch",
+  "Stocks of some Indian banks show widest exchange price gap in decades"
+), true);
 const eventCandidates = leadershipTitles.map((title, index) => ({
   article: { link: `https://source${index}.test/story`, pubDate: `2026-08-29T0${9 - index}:00:00Z` },
   cleanedArticle: { title, source: `Source ${index}` },
@@ -54,6 +58,7 @@ const cricinfo = _test.isBlockedGlobalArticle(
   { title: "Cricket Grounds | Ind v Pak DLF", source: "ESPN Cricinfo" }
 );
 assert.strictEqual(cricinfo, true, "Cricinfo must be excluded from financial-news candidates");
+assert.strictEqual(_test.isBlockedLiveHeadline("List of Oil & Gas Stocks in India (2026)"), true);
 
 const rankedIndexCandidates = _test.rankGlobalIndexCandidates([{
   provider: "marketaux",

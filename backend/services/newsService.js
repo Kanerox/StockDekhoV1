@@ -708,7 +708,7 @@ function isBlockedLiveHeadline(title) {
     title || ""
   ).toLowerCase();
 
-  return BLOCKED_LIVE_HEADLINE_TERMS.some(
+  return /^(list of|top\s+\d+)\b.*\bstocks?\b/.test(normalizedTitle) || BLOCKED_LIVE_HEADLINE_TERMS.some(
     (term) => normalizedTitle.includes(term)
   );
 }
@@ -800,6 +800,7 @@ function storyEventCategory(title = "") {
     ["earnings", /(earnings|quarterly results|profit|revenue|guidance)/],
     ["corporate-action", /(merger|acquisition|buyback|dividend|stake sale)/],
     ["policy-rates", /(interest rate|repo rate|monetary policy|rate cut|rate hike)/],
+    ["exchange-price-gap", /(bank|banking).*(auction|price gap)|(?:auction|price gap).*(bank|banking)/],
     ["market-close", /(closing bell|market close|ends?|settles?).*(nifty|sensex|stocks?|shares?)/],
   ];
   return categories.find(([, pattern]) => pattern.test(value))?.[0] || null;
@@ -810,6 +811,7 @@ function areSameEvent(titleA, titleB) {
   const categoryA = storyEventCategory(titleA);
   const categoryB = storyEventCategory(titleB);
   if (!categoryA || categoryA !== categoryB) return false;
+  if (categoryA === "exchange-price-gap") return true;
   const wordsA = getStoryWordSet(titleA);
   const wordsB = getStoryWordSet(titleB);
   const shared = [...wordsA].filter((word) => wordsB.has(word));
@@ -2652,6 +2654,7 @@ module.exports = {
     areSameEvent,
     deduplicateAndLimit,
     isBlockedGlobalArticle,
+    isBlockedLiveHeadline,
     rankGlobalIndexCandidates,
     recentMarketNewsDay,
     selectTopMarketArticles,
