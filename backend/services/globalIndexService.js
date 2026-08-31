@@ -79,7 +79,9 @@ function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked =
   if (completedDailyConfirmed) return "eod";
   if (age < -60 * 1000) return "unavailable";
   if (!weekday || clock.minutes < Math.min(...definition.sessions.map((session) => session[0]))) {
-    return latestSessionDate && latestSessionDate !== clock.date ? "eod" : "last_updated";
+    const expectedSession = expectedLatestWeekdaySession(definition, now);
+    if (observationDate === expectedSession || latestSessionDate === expectedSession) return "eod";
+    return observationDate && observationDate < expectedSession ? "stale" : "last_updated";
   }
   if (observationDate !== clock.date) return scheduledOpen ? "stale" : "last_updated";
   if (scheduledOpen && knownDelayed && age <= 45 * 60 * 1000) return "delayed";
@@ -361,12 +363,14 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     Number.isFinite(latestClose) &&
     Number.isFinite(previousClose) &&
     (
-      ((beforeOpen || nonTradingDay) && latestSessionDate !== preflightClock.date) ||
+      ((beforeOpen || nonTradingDay) &&
+        latestSessionDate === expectedLatestWeekdaySession(definition, now)) ||
       (reconciliationEligible(definition, now) && latestRawSessionDate === preflightClock.date)
     );
-  if (definition.preferIntradayChart && marketHasOpenedToday && !intradayObservationApplied && !hasCompletedDailyClose) {
-    throw new Error(`No trustworthy timestamped intraday observation for ${definition.key}`);
-  }
+  // A missing current-session intraday observation must not erase a defined
+  // benchmark when a legitimate completed historical observation exists.
+  // The prior session remains visible with an honest stale/last-updated state;
+  // it is never promoted to LIVE merely because it was fetched again.
   let status = globalQuoteStatus(
     quote,
     definition,
@@ -487,6 +491,9 @@ async function getGlobalIndexOverview() {
         if (new Date(previous.marketTime).getTime() > new Date(fresh.marketTime).getTime()) {
           return previous;
         }
+      }
+      if (previousSession && freshSession && previousSession > freshSession) {
+        return retainedCardWithCurrentStatus(previous, definition);
       }
       return fresh;
     }).filter(Boolean);

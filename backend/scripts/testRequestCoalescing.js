@@ -18,8 +18,8 @@ function testQuote(symbol) {
     regularMarketPreviousClose: 100,
     regularMarketTime: now.toISOString(),
     observationDate: now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
-    observationKind: "intraday",
-    dataStatus: "live",
+    observationKind: "session_close",
+    dataStatus: "eod",
     isStale: false,
   };
 }

@@ -2132,10 +2132,12 @@ function EventStrip({ mode, onOpen, events, loading, error }) {
   );
 }
 
+let retainedMarketIndices = [];
+
 function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, toggleWatch, compareList, toggleCompare }) {
   const readiness = useRef({ startedAt: performance.now(), reported: new Set(["shell"]) });
-  const [liveIndices, setLiveIndices] = useState([]);
-  const [indicesLoading, setIndicesLoading] = useState(true);
+  const [liveIndices, setLiveIndices] = useState(() => retainedMarketIndices);
+  const [indicesLoading, setIndicesLoading] = useState(() => retainedMarketIndices.length === 0);
   const [indicesError, setIndicesError] = useState("");
   const [gsec, setGsec] = useState(null);
   const [niftyDetail, setNiftyDetail] = useState(null);
@@ -2312,7 +2314,7 @@ const mostActive = [...activityStocks]
 
 useEffect(() => {
   let cancelled = false;
-  let hasLoadedIndices = false;
+    let hasLoadedIndices = retainedMarketIndices.length > 0;
 
   async function loadIndices({ force = false } = {}) {
     if (!hasLoadedIndices) setIndicesLoading(true);
@@ -2321,9 +2323,9 @@ useEffect(() => {
       const data = await getIndices({ force });
 
       if (!cancelled) {
-        setLiveIndices(
-          Array.isArray(data) ? data : []
-        );
+        const nextIndices = Array.isArray(data) ? data : [];
+        retainedMarketIndices = nextIndices;
+        setLiveIndices(nextIndices);
         setIndicesError("");
         hasLoadedIndices = true;
       }
@@ -6667,17 +6669,20 @@ function GlobalIndexDetailPage({ indexKey, back }) {
   );
 }
 
+let retainedGlobalIndices = [];
+let retainedCurrencyData = [];
+
 function CurrenciesPage() {
   const readiness = useRef({ startedAt: performance.now(), reported: new Set(["shell"]) });
   const [activeCode, setActiveCode] = useState(null);
   const [activeGlobalIndex, setActiveGlobalIndex] = useState(null);
-  const [globalIndices, setGlobalIndices] = useState([]);
-  const [globalIndicesLoading, setGlobalIndicesLoading] = useState(true);
+  const [globalIndices, setGlobalIndices] = useState(() => retainedGlobalIndices);
+  const [globalIndicesLoading, setGlobalIndicesLoading] = useState(() => retainedGlobalIndices.length === 0);
   const [globalIndicesError, setGlobalIndicesError] = useState("");
   const [globalRegion, setGlobalRegion] = useState("All Regions");
   const [newsOpen, setNewsOpen] = useState(null);
-  const [currencyData, setCurrencyData] = useState([]);
-  const [currenciesLoading, setCurrenciesLoading] = useState(true);
+  const [currencyData, setCurrencyData] = useState(() => retainedCurrencyData);
+  const [currenciesLoading, setCurrenciesLoading] = useState(() => retainedCurrencyData.length === 0);
   const [currenciesError, setCurrenciesError] = useState("");
   const [globalNewsData, setGlobalNewsData] = useState([]);
   const [globalNewsLoading, setGlobalNewsLoading] = useState(true);
@@ -6702,13 +6707,14 @@ function CurrenciesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    let hasLoadedGlobalIndices = false;
+    let hasLoadedGlobalIndices = retainedGlobalIndices.length > 0;
 
     async function loadGlobalIndices({ force = false } = {}) {
       try {
         const result = await getGlobalIndices({ force });
         if (!cancelled) {
-          setGlobalIndices(result);
+          retainedGlobalIndices = Array.isArray(result) ? result : [];
+          setGlobalIndices(retainedGlobalIndices);
           setGlobalIndicesError("");
           hasLoadedGlobalIndices = true;
         }
@@ -6733,7 +6739,7 @@ function CurrenciesPage() {
 
   useEffect(() => {
     let cancelled = false;
-    let hasLoadedCurrencies = false;
+    let hasLoadedCurrencies = retainedCurrencyData.length > 0;
 
     async function loadCurrencies() {
       if (!hasLoadedCurrencies) setCurrenciesLoading(true);
@@ -6742,7 +6748,8 @@ function CurrenciesPage() {
         const data = await getCurrencies();
 
         if (!cancelled) {
-          setCurrencyData(data);
+          retainedCurrencyData = Array.isArray(data) ? data : [];
+          setCurrencyData(retainedCurrencyData);
           setCurrenciesError("");
           hasLoadedCurrencies = true;
         }
