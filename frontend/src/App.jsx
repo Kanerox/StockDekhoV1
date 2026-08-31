@@ -7,6 +7,7 @@ import { getCompanyEvents } from "./api/eventsApi";
 import { getCompanyFinancials } from "./api/financialsApi";
 import { getIndexDetail, getIndices } from "./api/indexApi";
 import { getGlobalIndexDetail, getGlobalIndices } from "./api/globalIndexApi";
+import { articlePageCount, clampArticlePage, articlesForPage } from "./utils/pagination";
 import { getIndiaTenYearYield } from "./api/gsecApi";
 import { getCompanyNews, getGlobalIndexNews, getGlobalMarketNews, getIndiaGsecNews, getNiftyMarketEvents, getSectorNews, getVixMarketNews } from "./api/newsApi";
 import { getPerformanceHistory } from "./api/performanceApi";
@@ -883,6 +884,9 @@ const formatMarketAsOf = (value) => {
 };
 
 const formatMarketObservation = (data, prefix = "As of") => {
+  if (data?.marketClosure) {
+    return `Market closed today · ${data.marketClosure}`;
+  }
   if (data?.observationKind === "session_close" && data?.observationDate) {
     const date = new Date(`${data.observationDate}T00:00:00+05:30`);
     return `Session close ${date.toLocaleDateString("en-IN", {
@@ -1160,7 +1164,7 @@ function quoteStatusLabel(quote, marketOpen = isIndianMarketOpen()) {
 }
 
 function marketProviderLabel(value) {
-  return String(value || "").toLowerCase() === "upstox"
+  return String(value || "").toLowerCase().includes("upstox")
     ? "Upstox"
     : "Yahoo Finance";
 }
@@ -3653,6 +3657,18 @@ const thStyle = { textAlign: "left", padding: "9px 10px", fontSize: 10.5, textTr
 const tdStyle = { padding: "9px 10px" };
 const pagerBtn = (disabled) => ({ border: `1px solid ${THEME.hairline}`, background: "none", color: disabled ? THEME.hairline : THEME.ink, borderRadius: 4, padding: "5px 8px", cursor: disabled ? "not-allowed" : "pointer" });
 
+function NewsPager({ page, articles, onPageChange, label }) {
+  const totalPages = articlePageCount(articles);
+  if (!Array.isArray(articles) || articles.length === 0 || totalPages <= 1) return null;
+  return (
+    <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 12, marginBottom: 24, alignItems: "center" }}>
+      <button disabled={page === 1} onClick={() => onPageChange(Math.max(1, page - 1))} style={pagerBtn(page === 1)} aria-label={`Previous ${label} page`}><ChevronLeft size={14} /></button>
+      <span style={{ fontSize: 12, color: THEME.inkDim }}>Page {page} of {totalPages}</span>
+      <button disabled={page === totalPages} onClick={() => onPageChange(Math.min(totalPages, page + 1))} style={pagerBtn(page === totalPages)} aria-label={`Next ${label} page`}><ChevronRight size={14} /></button>
+    </div>
+  );
+}
+
 /* =========================================================================================
    SECTORS PAGE
    ========================================================================================= */
@@ -3790,6 +3806,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsError, setNewsError] = useState("");
   const [newsOpen, setNewsOpen] = useState(null);
+  const [sectorNewsPage, setSectorNewsPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -3827,11 +3844,13 @@ function SectorDetail({ sector, mode, openCompany, back }) {
       try {
         const result = await getSectorNews(sector);
         if (!cancelled) {
-          setSectorNews((result.articles || []).map((article) => ({
+          const articles = (result.articles || []).map((article) => ({
             ...article,
             date: formatArticleNewsDate(article),
             teaser: article.summary || article.snippet || "",
-          })));
+          }));
+          setSectorNews(articles);
+          setSectorNewsPage(1);
         }
       } catch {
         if (!cancelled) setNewsError("Unable to load current sector news. Please try again shortly.");
@@ -3846,6 +3865,9 @@ function SectorDetail({ sector, mode, openCompany, back }) {
       cancelled = true;
     };
   }, [sector]);
+
+  const safeSectorNewsPage = clampArticlePage(sectorNewsPage, sectorNews);
+  const visibleSectorNews = articlesForPage(sectorNews, safeSectorNewsPage);
 
   const constituents = sectorData?.constituents || [];
   const chartSeries = (sectorData?.points || []).map(
@@ -3916,7 +3938,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
         Recent developments affecting companies in this sector — neutral factual summaries, not investment advice. Click a story to read more.
       </p>
       <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 26 }}>
-        {sectorNews.map((n) => (
+        {visibleSectorNews.map((n) => (
           <Panel key={n.id || n.link || n.title} onClick={() => setNewsOpen(n)} className="sd-row-hover" style={{ padding: 14, cursor: "pointer" }}>
             <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
               <div style={{ fontSize: 13, fontWeight: 600 }}>{n.title}</div>
@@ -3935,6 +3957,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
           <Panel style={{ padding: 20, textAlign: "center", color: THEME.inkDim, fontSize: 12.5 }}>No sufficiently relevant sector reporting is currently available. Check again later.</Panel>
         )}
       </div>
+      <NewsPager page={safeSectorNewsPage} articles={sectorNews} onPageChange={setSectorNewsPage} label={`${sector} sector news`} />
 
       {newsOpen && (
         <div onClick={() => setNewsOpen(null)} style={{ position: "fixed", inset: 0, background: "rgba(5,8,14,0.65)", zIndex: 60, display: "flex", justifyContent: "flex-end" }}>
@@ -6584,6 +6607,7 @@ function GlobalIndexDetailPage({ indexKey, back }) {
   const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [newsPage, setNewsPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
@@ -6615,7 +6639,13 @@ function GlobalIndexDetailPage({ indexKey, back }) {
   useEffect(() => {
     let cancelled = false;
     getGlobalIndexNews(indexKey)
-      .then((result) => { if (!cancelled) setNews(result.articles || []); })
+      .then((result) => {
+        if (!cancelled) {
+          const articles = result.articles || [];
+          setNews(articles);
+          setNewsPage(1);
+        }
+      })
       .catch(() => { if (!cancelled) setNews([]); });
     return () => { cancelled = true; };
   }, [indexKey]);
@@ -6624,6 +6654,8 @@ function GlobalIndexDetailPage({ indexKey, back }) {
   const labels = (data?.points || []).map((point) =>
     formatChartDate(point.date, series.length > 400)
   );
+  const safeNewsPage = clampArticlePage(newsPage, news);
+  const visibleNews = articlesForPage(news, safeNewsPage);
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
@@ -6639,7 +6671,7 @@ function GlobalIndexDetailPage({ indexKey, back }) {
               {data && <LiveTag live statusLabel={quoteStatusLabel(data)} />}
             </div>
             <p style={{ fontSize: 12.5, color: THEME.creamDim, lineHeight: 1.55 }}>{data?.description || "Global equity-market benchmark."}</p>
-            <div style={{ fontSize: 11, color: THEME.inkDim }}>{data ? `${marketProviderLabel(data.dataProvider)} market data · As of ${formatMarketAsOf(data.asOf || data.marketTime)}` : "Loading market source..."}</div>
+            <div style={{ fontSize: 11, color: THEME.inkDim }}>{data ? (data.marketClosure ? `Market closed today · ${data.marketClosure}` : `${marketProviderLabel(data.dataProvider)} market data · As of ${formatMarketAsOf(data.asOf || data.marketTime)}`) : "Loading market source..."}</div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="sd-mono" style={{ fontSize: 28 }}>{Number.isFinite(data?.value) ? fmtNum(data.value, 2) : "—"}</div>
@@ -6663,9 +6695,10 @@ function GlobalIndexDetailPage({ indexKey, back }) {
       <div style={{ marginTop: 40 }}><SectionHeading title="Index News" /></div>
       <p style={{ fontSize: 11.5, color: THEME.inkDim, marginTop: -8, marginBottom: 12 }}>Reporting from the last 15 days that explicitly relates to this index.</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        {news.map((article) => <WideNewsTile key={article.id || article.link} article={article} href={article.link} />)}
+        {visibleNews.map((article) => <WideNewsTile key={article.id || article.link} article={article} href={article.link} />)}
         {!news.length && <Panel style={{ padding: 20, color: THEME.inkDim, textAlign: "center" }}>No sufficiently relevant reporting is currently available from the last 15 days.</Panel>}
       </div>
+      <NewsPager page={safeNewsPage} articles={news} onPageChange={setNewsPage} label={`${data?.name || "index"} news`} />
     </div>
   );
 }
@@ -6821,8 +6854,7 @@ function CurrenciesPage() {
         const collectedArticles = [...new Map(
           articles.map((article) => [article.id || article.link, article])
         ).values()]
-          .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt))
-          .slice(0, 32);
+          .sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
         if (!cancelled) {
           setGlobalNewsData(collectedArticles);
           setGlobalNewsPage(1);
@@ -6872,15 +6904,8 @@ const globalMarketNews = globalNewsData.map((article) => ({
   source: article.source,
   link: article.link,
 }));
-  const globalNewsPerPage = 8;
-  const globalNewsTotalPages = Math.max(
-    1,
-    Math.min(4, Math.ceil(globalMarketNews.length / globalNewsPerPage))
-  );
-  const paginatedGlobalMarketNews = globalMarketNews.slice(
-    (globalNewsPage - 1) * globalNewsPerPage,
-    globalNewsPage * globalNewsPerPage
-  );
+  const safeGlobalNewsPage = clampArticlePage(globalNewsPage, globalMarketNews);
+  const paginatedGlobalMarketNews = articlesForPage(globalMarketNews, safeGlobalNewsPage);
   const active = currencies.find((currency) => currency.code === activeCode);
   const completeGlobalIndices = completeGlobalIndexCards(globalIndices);
   const visibleGlobalIndices = globalRegion === "All Regions" ? completeGlobalIndices : completeGlobalIndices.filter((index) => index.region === globalRegion);
@@ -6971,33 +6996,7 @@ const globalMarketNews = globalNewsData.map((article) => ({
         )}
         {!globalNewsLoading && !globalNewsError && paginatedGlobalMarketNews.map((n) => <WideNewsTile key={n.id} article={n} onClick={() => setNewsOpen(n)} />)}
       </div>
-      {!globalNewsLoading && !globalNewsError && globalMarketNews.length > 0 && (
-        <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: -4, marginBottom: 24, alignItems: "center" }}>
-          <button
-            disabled={globalNewsPage === 1}
-            onClick={() => setGlobalNewsPage((page) => Math.max(1, page - 1))}
-            style={pagerBtn(globalNewsPage === 1)}
-            aria-label="Previous global news page"
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <span style={{ fontSize: 12, color: THEME.inkDim }}>
-            Page {globalNewsPage} of {globalNewsTotalPages}
-          </span>
-          <button
-            disabled={globalNewsPage === globalNewsTotalPages}
-            onClick={() =>
-              setGlobalNewsPage((page) =>
-                Math.min(globalNewsTotalPages, page + 1)
-              )
-            }
-            style={pagerBtn(globalNewsPage === globalNewsTotalPages)}
-            aria-label="Next global news page"
-          >
-            <ChevronRight size={14} />
-          </button>
-        </div>
-      )}
+      {!globalNewsLoading && !globalNewsError && <NewsPager page={safeGlobalNewsPage} articles={globalMarketNews} onPageChange={setGlobalNewsPage} label="global news" />}
 
       {newsOpen && (
         <div onClick={() => setNewsOpen(null)} style={{ position: "fixed", inset: 0, background: "rgba(5,8,14,0.65)", zIndex: 60, display: "flex", justifyContent: "flex-end" }}>

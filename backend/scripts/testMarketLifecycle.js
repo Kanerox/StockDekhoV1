@@ -178,4 +178,35 @@ assert.strictEqual(
   "Completed daily candles become eligible only after reconciliation"
 );
 
+assert.deepStrictEqual(
+  _test.exchangeClosure(ftse, new Date("2026-08-31T10:00:00.000Z")),
+  { closed: true, type: "holiday", name: "Late Summer Bank Holiday" },
+  "The FTSE must not expect live observations on the UK late-summer bank holiday"
+);
+assert.strictEqual(
+  _test.expectedLatestWeekdaySession(ftse, new Date("2026-08-31T10:00:00.000Z")),
+  "2026-08-28",
+  "A holiday retains the prior legitimate trading session"
+);
+assert.strictEqual(
+  indianMarketPhase(new Date("2026-01-26T06:30:00.000Z")),
+  "closed",
+  "A representative NSE holiday is closed"
+);
+assert.strictEqual(
+  _test.exchangeIsOpen(sp500, new Date("2026-09-07T15:00:00.000Z")),
+  false,
+  "A representative US market holiday is closed"
+);
+assert.strictEqual(
+  _test.exchangeIsOpen(sp500, new Date("2026-09-08T15:00:00.000Z")),
+  true,
+  "The adjacent normal US trading day remains open"
+);
+assert.strictEqual(
+  _test.exchangeClosure(sp500, new Date("2026-09-05T15:00:00.000Z")).type,
+  "weekend",
+  "Weekend closure remains distinct from an exchange holiday"
+);
+
 console.log("Market lifecycle checks passed.");

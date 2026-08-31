@@ -1,4 +1,5 @@
 const MAX_FUTURE_SKEW_MS = 60 * 1000;
+const { marketClosure } = require("../config/marketCalendars");
 const MAX_DISPLAY_AGE_MS = 5 * 24 * 60 * 60 * 1000;
 const INDIAN_INDEX_FRESHNESS_POLICY = Object.freeze({
   liveThroughMs: 15 * 60 * 1000,
@@ -38,7 +39,7 @@ function sessionKey(value) {
 
 function isIndianMarketOpen(now = new Date()) {
   const parts = istParts(now);
-  if (!parts || parts.weekday === "Sat" || parts.weekday === "Sun") return false;
+  if (!parts || marketClosure("INDIA", sessionKey(now), parts.weekday).closed) return false;
   const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   // Closing Auction Session activity can continue beyond the old 15:30
   // continuous-session boundary. Treat exchange observations through 15:40
@@ -48,7 +49,7 @@ function isIndianMarketOpen(now = new Date()) {
 
 function indianMarketPhase(now = new Date()) {
   const parts = istParts(now);
-  if (!parts || parts.weekday === "Sat" || parts.weekday === "Sun") return "closed";
+  if (!parts || marketClosure("INDIA", sessionKey(now), parts.weekday).closed) return "closed";
   const minutes = Number(parts.hour) * 60 + Number(parts.minute);
   if (minutes < 9 * 60 + 15) return "pre_market";
   if (minutes < 15 * 60 + 40) return "live";

@@ -167,6 +167,15 @@ function chooseNewerQuote(candidate, cached, requestedSymbol) {
   if (!cached) return validatedCandidate;
   try {
     const validatedCached = validateQuote(cached, { requestedSymbol, allowStale: true });
+    const cachedSession = cached.observationDate || sessionKey(validatedCached.regularMarketTime);
+    const candidateSession = candidate.observationDate || sessionKey(validatedCandidate.regularMarketTime);
+    if (
+      cached.observationKind === "session_close" &&
+      cachedSession === candidateSession &&
+      indianMarketPhase() !== "live"
+    ) {
+      return validatedCached;
+    }
     const candidateIsDirect = !/historical/i.test(String(validatedCandidate.quoteSourceName || ""));
     const cachedIsHistorical = /historical/i.test(String(validatedCached.quoteSourceName || ""));
     if (candidateIsDirect && cachedIsHistorical) return validatedCandidate;
@@ -196,7 +205,8 @@ function observationDate(value) {
 }
 
 function needsCompletedSessionReconciliation(quote, now = new Date()) {
-  return indianMarketPhase(now) === "closed" &&
+  return !String(quote?.symbol || "").startsWith("^") &&
+    indianMarketPhase(now) === "closed" &&
     quote?.observationKind !== "session_close";
 }
 
@@ -240,7 +250,7 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
     normalizedSymbol,
     period1,
     period2,
-    { appendLatestQuote: true }
+    { appendLatestQuote: true, completedSessionReconciliation: true }
   );
   // A quote appended to history contains only close/adjustedClose. Requiring
   // a complete OHLC candle prevents a provisional LTP from being promoted to
@@ -634,4 +644,5 @@ module.exports = {
   fetchMarketData,
   fetchMarketDataBatch,
   fetchPeerFundamentals,
+  _test: { chooseNewerQuote, needsCompletedSessionReconciliation },
 };

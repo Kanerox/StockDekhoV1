@@ -45,9 +45,10 @@ function dateKey(date) {
   });
 }
 
-function historyCacheKey(symbol, period1, period2, appendLatestQuote = true) {
+function historyCacheKey(symbol, period1, period2, appendLatestQuote = true, completedSessionReconciliation = false) {
   const variant = appendLatestQuote ? "" : ":completed-only";
-  const key = `history:${symbol}:1d${variant}:${dateKey(period1)}:${dateKey(period2)}`;
+  const reconcileVariant = completedSessionReconciliation ? ":reconcile" : "";
+  const key = `history:${symbol}:1d${variant}${reconcileVariant}:${dateKey(period1)}:${dateKey(period2)}`;
   const providerName = getMarketDataProviderName();
   const version = appendLatestQuote ? "v7" : "v9";
   return providerName === "yahoo" ? key : `${providerName}:${version}:${key}`;
@@ -150,16 +151,19 @@ async function fetchHistoricalPrices(
   symbol,
   period1,
   period2,
-  { appendLatestQuote = true } = {}
+  { appendLatestQuote = true, completedSessionReconciliation = false } = {}
 ) {
   const normalizedSymbol = normalizeSymbol(symbol);
   const key = historyCacheKey(
     normalizedSymbol,
     period1,
     period2,
-    appendLatestQuote
+    appendLatestQuote,
+    completedSessionReconciliation
   );
-  const freshTtl = getMarketDataProviderName() === "upstox"
+  const freshTtl = completedSessionReconciliation
+    ? 15 * 60 * 1000
+    : getMarketDataProviderName() === "upstox"
     ? (appendLatestQuote ? indianHistoryFreshTtl() : 6 * 60 * 60 * 1000)
     : YAHOO_FRESH_HISTORY_TTL_MS;
   const freshPrices = await getCachedValue(key, freshTtl);

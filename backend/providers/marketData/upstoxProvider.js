@@ -31,6 +31,15 @@ const INDEX_KEYS = {
   "^FTSE": "GLOBAL_INDEX|^FTSE",
 };
 
+const GLOBAL_INDEX_LATENCY_SECONDS = Object.freeze({
+  "^GSPC": 20,
+  "^DJI": 20,
+  "^HSI": 900,
+  "^N225": 900,
+  "^GDAXI": 900,
+  "^FTSE": 900,
+});
+
 const YAHOO_SUPPLEMENTAL_FIELDS = [
   "marketCap",
   "trailingPE",
@@ -110,6 +119,10 @@ async function resolveInstrument(symbol) {
       instrument_key: INDEX_KEYS[normalized],
       trading_symbol: tickerFromSymbol(normalized),
       name: null,
+      exchange: normalized.startsWith("^") && GLOBAL_INDEX_LATENCY_SECONDS[normalized]
+        ? "GLOBAL"
+        : undefined,
+      latencySeconds: GLOBAL_INDEX_LATENCY_SECONDS[normalized] || null,
     };
   }
 
@@ -171,9 +184,12 @@ function mapQuote(requestedSymbol, instrument, quote) {
     regularMarketVolume: finite(quote?.volume),
     regularMarketTime: observation.time,
     marketTimeSource: observation.source,
-    currency: "INR",
+    currency: instrument?.exchange === "GLOBAL" ? null : "INR",
     fullExchangeName: String(instrument?.exchange || "NSE"),
-    quoteSourceName: "Upstox",
+    quoteLatencySeconds: instrument?.latencySeconds || null,
+    quoteSourceName: instrument?.latencySeconds >= 900
+      ? "Upstox (15-minute delayed)"
+      : "Upstox",
   };
 }
 

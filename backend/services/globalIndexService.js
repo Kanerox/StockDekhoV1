@@ -1,10 +1,11 @@
-const { fetchMarketData } = require("../clients/marketClient");
+const { fetchMarketData, fetchMarketDataBatch } = require("../clients/marketClient");
 const { fetchHistoricalPrices } = require("../clients/historyClient");
 const yahooProvider = require("../providers/marketData/yahooProvider");
 const { GLOBAL_INDICES, getGlobalIndexDefinition } = require("../config/globalIndexConfig");
 const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
+const { marketClosure } = require("../config/marketCalendars");
 
-const DIRECT_GLOBAL_QUOTE_KEYS = new Set(["NASDAQ", "DOW", "EUROSTOXX50"]);
+const DIRECT_GLOBAL_QUOTE_KEYS = new Set(["NASDAQ", "EUROSTOXX50"]);
 const intradayCache = new Map();
 const INTRADAY_TTL_MS = 5 * 60 * 1000;
 const GLOBAL_CARD_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
@@ -62,10 +63,23 @@ function exchangeClock(definition, now = new Date()) {
   };
 }
 
+function exchangeClosure(definition, now = new Date()) {
+  const clock = exchangeClock(definition, now);
+  return marketClosure(definition.calendar, clock.date, clock.weekday);
+}
+
+function exchangeIsOpen(definition, now = new Date()) {
+  const clock = exchangeClock(definition, now);
+  return !exchangeClosure(definition, now).closed && definition.sessions.some(
+    ([open, close]) => clock.minutes >= open && clock.minutes < close
+  );
+}
+
 function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked = false, now = new Date(), completedDailyConfirmed = false) {
   const clock = exchangeClock(definition, now);
-  const weekday = !["Sat", "Sun"].includes(clock.weekday);
-  const scheduledOpen = weekday && definition.sessions.some(([open, close]) => clock.minutes >= open && clock.minutes < close);
+  const closure = exchangeClosure(definition, now);
+  const tradingDay = !closure.closed;
+  const scheduledOpen = tradingDay && definition.sessions.some(([open, close]) => clock.minutes >= open && clock.minutes < close);
   const observationValue = quote?.regularMarketTime || quote?.marketTime || quote?.asOf;
   const observation = exchangeClock(definition, new Date(observationValue || 0));
   const observationDate = observation.date;
@@ -78,7 +92,7 @@ function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked =
 
   if (completedDailyConfirmed) return "eod";
   if (age < -60 * 1000) return "unavailable";
-  if (!weekday || clock.minutes < Math.min(...definition.sessions.map((session) => session[0]))) {
+  if (!tradingDay || clock.minutes < Math.min(...definition.sessions.map((session) => session[0]))) {
     const expectedSession = expectedLatestWeekdaySession(definition, now);
     const expectedClose = new Date(exchangeSessionCloseTimestamp(expectedSession, definition)).getTime();
     const observationTime = new Date(observationValue || 0).getTime();
@@ -99,7 +113,7 @@ function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked =
 
 function reconciliationEligible(definition, now = new Date()) {
   const clock = exchangeClock(definition, now);
-  if (["Sat", "Sun"].includes(clock.weekday)) return true;
+  if (exchangeClosure(definition, now).closed) return true;
   const finalClose = Math.max(...definition.sessions.map((session) => session[1]));
   return clock.minutes >= finalClose + Number(definition.settlementBufferMinutes || 30);
 }
@@ -141,11 +155,11 @@ function observationAgeMs(value, now = new Date()) {
 function expectedLatestWeekdaySession(definition, now = new Date()) {
   const clock = exchangeClock(definition, now);
   const firstOpen = Math.min(...definition.sessions.map((session) => session[0]));
-  if (!["Sat", "Sun"].includes(clock.weekday) && clock.minutes >= firstOpen) return clock.date;
+  if (!exchangeClosure(definition, now).closed && clock.minutes >= firstOpen) return clock.date;
   const candidate = new Date(now);
   do {
     candidate.setUTCDate(candidate.getUTCDate() - 1);
-  } while (["Sat", "Sun"].includes(exchangeClock(definition, candidate).weekday));
+  } while (exchangeClosure(definition, candidate).closed);
   return exchangeClock(definition, candidate).date;
 }
 
@@ -160,13 +174,13 @@ function canReuseCompletedCard(card, definition, now = new Date()) {
     return false;
   }
   const clock = exchangeClock(definition, now);
-  const weekday = !["Sat", "Sun"].includes(clock.weekday);
+  const tradingDay = !exchangeClosure(definition, now).closed;
   const firstOpen = Math.min(...definition.sessions.map((session) => session[0]));
-  const marketOpen = weekday && definition.sessions.some(
+  const marketOpen = tradingDay && definition.sessions.some(
     ([open, close]) => clock.minutes >= open && clock.minutes < close
   );
   if (marketOpen) return false;
-  if (!weekday || clock.minutes < firstOpen) {
+  if (!tradingDay || clock.minutes < firstOpen) {
     return cardSession === expectedLatestWeekdaySession(definition, now);
   }
   return cardSession === clock.date;
@@ -184,7 +198,13 @@ function retainedCardWithCurrentStatus(card, definition, now = new Date()) {
     false
   );
   const safeStatus = status === "unavailable" ? "stale" : status;
-  return { ...card, dataStatus: safeStatus, isStale: safeStatus === "stale" };
+  const closure = exchangeClosure(definition, now);
+  return {
+    ...card,
+    dataStatus: safeStatus,
+    isStale: safeStatus === "stale",
+    marketClosure: closure.type === "holiday" ? closure.name : null,
+  };
 }
 
 function shouldUseRetainedHeadline(detail, retained, definition) {
@@ -240,6 +260,7 @@ async function getIntradayObservation(definition) {
 async function getGlobalIndexDetail(key, range = "1Y") {
   const definition = getGlobalIndexDefinition(key);
   if (!definition) throw new Error("Unknown global index");
+  const currentClosure = exchangeClosure(definition, new Date());
   const retainedHeadline = await getRetainedGlobalCard(definition.key);
   const { period1, period2 } = resolvePeriod(range);
   const [quoteResult, historyResult] = await Promise.allSettled([
@@ -288,6 +309,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
         dataStatus: status,
         isStale: status === "stale",
         dataProvider: quoteOnly.quoteSourceName || "market provider",
+        marketClosure: currentClosure.type === "holiday" ? currentClosure.name : null,
         periodReturn: null,
         periodHigh: null,
         periodLow: null,
@@ -310,6 +332,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
       dataStatus: retainedHeadline.dataStatus,
       isStale: Boolean(retainedHeadline.isStale),
       dataProvider: retainedHeadline.dataProvider,
+      marketClosure: currentClosure.type === "holiday" ? currentClosure.name : null,
       periodReturn: null,
       periodHigh: null,
       periodLow: null,
@@ -346,12 +369,25 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     }
   }
   const preflightClock = exchangeClock(definition, now);
-  const preflightOpen = !["Sat", "Sun"].includes(preflightClock.weekday) &&
-    definition.sessions.some(([open, close]) => preflightClock.minutes >= open && preflightClock.minutes < close);
-  const quoteSessionDate = exchangeObservationDate(quote?.regularMarketTime, definition);
+  const closure = exchangeClosure(definition, now);
+  const preflightOpen = exchangeIsOpen(definition, now);
+  let quoteSessionDate = exchangeObservationDate(quote?.regularMarketTime, definition);
+  if (closure.type === "holiday" && quoteSessionDate === preflightClock.date) {
+    // A provider can refresh an unchanged reference value on a full-day
+    // closure. Retrieval time is not a traded observation.
+    quote = {
+      ...quote,
+      regularMarketPrice: latestHistoricalPoint.adjustedClose,
+      regularMarketTime: latestHistoricalPoint.date,
+      quoteSourceName: "Historical market data",
+      marketState: "CLOSED",
+      isStale: false,
+    };
+    quoteSessionDate = exchangeObservationDate(quote.regularMarketTime, definition);
+  }
   const preflightHistoryBacked = /historical/i.test(String(quote?.quoteSourceName || ""));
-  const preflightWeekday = !["Sat", "Sun"].includes(preflightClock.weekday);
-  const marketHasOpenedToday = preflightWeekday && preflightClock.minutes >= Math.min(...definition.sessions.map((session) => session[0]));
+  const preflightTradingDay = !closure.closed;
+  const marketHasOpenedToday = preflightTradingDay && preflightClock.minutes >= Math.min(...definition.sessions.map((session) => session[0]));
   const quoteIsFuture = observationAgeMs(quote?.regularMarketTime, now) < -60 * 1000;
   const quoteIsTooOldWhileOpen = preflightOpen && observationAgeMs(quote?.regularMarketTime, now) > 15 * 60 * 1000;
   let intradayObservationApplied = false;
@@ -378,9 +414,8 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     points.at(-1)?.date,
     definition
   );
-  const exchangeIsOpen = !["Sat", "Sun"].includes(currentClock.weekday) &&
-    definition.sessions.some(([open, close]) => currentClock.minutes >= open && currentClock.minutes < close);
-  if (exchangeIsOpen && latestRawSessionDate === currentClock.date && points.length > 2) {
+  const marketOpenNow = exchangeIsOpen(definition, now);
+  if (marketOpenNow && latestRawSessionDate === currentClock.date && points.length > 2) {
     points = points.slice(0, -1);
   }
   const closes = points.map((point) => point.adjustedClose);
@@ -395,8 +430,8 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const previousClose = closes.at(-2);
   const latestClose = closes.at(-1);
   const historyChange = latestClose - previousClose;
-  const beforeOpen = preflightWeekday && preflightClock.minutes < Math.min(...definition.sessions.map((session) => session[0]));
-  const nonTradingDay = !preflightWeekday;
+  const beforeOpen = preflightTradingDay && preflightClock.minutes < Math.min(...definition.sessions.map((session) => session[0]));
+  const nonTradingDay = !preflightTradingDay;
   const preferredHistoryEligible = !definition.requirePreferredHistoryForEod || !usedFallbackHistory;
   const hasCompletedDailyClose = preferredHistoryEligible &&
     Number.isFinite(latestClose) &&
@@ -445,6 +480,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     dataProvider: hasCompletedDailyClose
       ? (usedFallbackHistory ? "Fallback historical market data" : definition.historySymbol ? "Yahoo Japan official cash-index history" : "Completed daily market data")
       : (quote.quoteSourceName || "market provider"),
+    marketClosure: closure.type === "holiday" ? closure.name : null,
     periodReturn: returnPercent(points),
     periodHigh: Math.max(...closes),
     periodLow: Math.min(...closes),
@@ -461,6 +497,16 @@ async function getGlobalIndexOverview() {
   if (overviewInFlight) return overviewInFlight;
 
   overviewInFlight = (async () => {
+    const exactUpstoxSymbols = GLOBAL_INDICES
+      .filter((definition) => definition.upstoxInstrumentKey)
+      .map((definition) => definition.symbol);
+    try {
+      // One batched Upstox request warms all exact global matches. Individual
+      // detail reads then reuse the normal market-data cache and fallback path.
+      await fetchMarketDataBatch(exactUpstoxSymbols, { supplement: false });
+    } catch (error) {
+      console.warn(`Batched Upstox global quote warm-up unavailable: ${error.message}`);
+    }
     const retainedSnapshots = await Promise.all([
       getCachedValue(cacheKey, GLOBAL_CARD_RETENTION_MS),
       getCachedValue("global-index-overview:v8", GLOBAL_CARD_RETENTION_MS),
@@ -490,7 +536,13 @@ async function getGlobalIndexOverview() {
     const results = await Promise.allSettled(
       definitions.map(async (definition) => {
       const retained = retainedByKey.get(definition.key);
-      if (canReuseCompletedCard(retained, definition)) return retained;
+      if (canReuseCompletedCard(retained, definition)) {
+        const retainedClosure = exchangeClosure(definition);
+        return {
+          ...retained,
+          marketClosure: retainedClosure.type === "holiday" ? retainedClosure.name : null,
+        };
+      }
       const detail = await getGlobalIndexDetail(definition.key, "1M");
       if (detail.historyUnavailable && retained) {
         return retainedCardWithCurrentStatus(retained, definition);
@@ -502,6 +554,7 @@ async function getGlobalIndexOverview() {
         sparkline: detail.points.map((point) => point.adjustedClose), marketTime: detail.marketTime,
         asOf: detail.asOf, dataStatus: detail.dataStatus, isStale: detail.isStale,
         dataProvider: detail.dataProvider, sessionDateOnly: detail.sessionDateOnly,
+        marketClosure: detail.marketClosure,
         isGlobalIndex: true,
       };
       })
@@ -553,6 +606,8 @@ module.exports = {
   getGlobalIndexDetail,
   _test: {
     exchangeClock,
+    exchangeClosure,
+    exchangeIsOpen,
     exchangeObservationDate,
     exchangeSessionCloseTimestamp,
     reconciliationEligible,
