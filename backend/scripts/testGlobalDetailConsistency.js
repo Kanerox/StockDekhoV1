@@ -27,7 +27,11 @@ for (const definition of GLOBAL_INDICES) {
   const merged = _test.mergeRetainedHeadline(regressedDetail, retained, definition);
   assert.strictEqual(merged.value, retained.value, `${definition.key} must retain the newer overview headline`);
   assert.strictEqual(merged.marketTime, retained.marketTime);
-  assert.strictEqual(merged.dataStatus, "eod");
+  assert.strictEqual(
+    merged.dataStatus,
+    _test.retainedCardWithCurrentStatus(retained, definition).dataStatus,
+    "retained headline status must be revalidated for the current exchange session"
+  );
   assert.deepStrictEqual(merged.points, regressedDetail.points, "headline reconciliation must not fabricate chart history");
 
   const newerDetail = { ...regressedDetail, value: 210, marketTime: "2026-08-29T12:00:00.000Z" };

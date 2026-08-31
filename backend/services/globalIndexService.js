@@ -200,18 +200,19 @@ function shouldUseRetainedHeadline(detail, retained, definition) {
 }
 
 function mergeRetainedHeadline(detail, retained, definition) {
-  if (!shouldUseRetainedHeadline(detail, retained, definition)) return detail;
+  const currentRetained = retainedCardWithCurrentStatus(retained, definition);
+  if (!shouldUseRetainedHeadline(detail, currentRetained, definition)) return detail;
   return {
     ...detail,
-    value: retained.value,
-    change: retained.change,
-    changePercent: retained.changePercent,
-    marketTime: retained.marketTime,
-    asOf: retained.asOf || retained.marketTime,
-    dataStatus: retained.dataStatus,
-    isStale: Boolean(retained.isStale),
-    dataProvider: retained.dataProvider,
-    sessionDateOnly: retained.sessionDateOnly,
+    value: currentRetained.value,
+    change: currentRetained.change,
+    changePercent: currentRetained.changePercent,
+    marketTime: currentRetained.marketTime,
+    asOf: currentRetained.asOf || currentRetained.marketTime,
+    dataStatus: currentRetained.dataStatus,
+    isStale: Boolean(currentRetained.isStale),
+    dataProvider: currentRetained.dataProvider,
+    sessionDateOnly: currentRetained.sessionDateOnly,
     headlineFromRetainedObservation: true,
   };
 }
