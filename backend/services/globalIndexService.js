@@ -416,7 +416,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
 }
 
 async function getGlobalIndexOverview() {
-  const cacheKey = "global-index-overview:v8";
+  const cacheKey = "global-index-overview:v9";
   const cached = await getCachedValue(cacheKey, 5 * 60 * 1000);
   if (cached) return cached;
   if (overviewInFlight) return overviewInFlight;
@@ -424,6 +424,7 @@ async function getGlobalIndexOverview() {
   overviewInFlight = (async () => {
     const retainedSnapshots = await Promise.all([
       getCachedValue(cacheKey, GLOBAL_CARD_RETENTION_MS),
+      getCachedValue("global-index-overview:v8", GLOBAL_CARD_RETENTION_MS),
       getCachedValue("global-index-overview:v7", GLOBAL_CARD_RETENTION_MS),
       getCachedValue("global-index-overview:v6", GLOBAL_CARD_RETENTION_MS),
       getCachedValue("global-index-overview:v5", GLOBAL_CARD_RETENTION_MS),
