@@ -2201,7 +2201,14 @@ async function getNiftyMarketEventsFromService() {
         .slice(0, 25);
     }
   );
-  const reliableCandidates = retainPublicationReliableCandidates(candidates)
+  // Google News listing timestamps are not presented as publisher timestamps,
+  // but candidates that already passed the financial-context, market-movement
+  // and publication-plausibility gates remain useful as "Recent coverage".
+  // Excluding every wrapper made a cold editorial rebuild collapse to the
+  // handful of direct-provider articles after a process restart.
+  const reliableCandidates = retainPublicationReliableCandidates(candidates, {
+    allowValidatedWrappers: true,
+  })
     .filter(({ article }) => recentMarketNewsDay(articleRecencyValue(article)));
   const todayCandidates = reliableCandidates.filter(
     ({ article }) => recentMarketNewsDay(articleRecencyValue(article)) === "today"
