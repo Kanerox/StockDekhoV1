@@ -2066,8 +2066,9 @@ function selectCompanyArticles(candidates, limit = 8) {
   return selected;
 }
 
-const MARKET_EVENTS_RESULT_CACHE_KEY = "news-editorial:market-events:v6";
+const MARKET_EVENTS_RESULT_CACHE_KEY = "news-editorial:market-events:v7";
 const LEGACY_MARKET_EVENTS_RESULT_CACHE_KEYS = [
+  "news-editorial:market-events:v6",
   "news-editorial:market-events:v5",
   "news-editorial:market-events:v4",
   "news-editorial:market-events:v3",
