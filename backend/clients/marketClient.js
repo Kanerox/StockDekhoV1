@@ -162,7 +162,7 @@ function quoteTimestamp(quote) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
-function chooseNewerQuote(candidate, cached, requestedSymbol) {
+function chooseNewerQuote(candidate, cached, requestedSymbol, now = new Date()) {
   const validatedCandidate = validateQuote(candidate, { requestedSymbol, allowStale: true });
   if (!cached) return validatedCandidate;
   try {
@@ -172,7 +172,7 @@ function chooseNewerQuote(candidate, cached, requestedSymbol) {
     if (
       cached.observationKind === "session_close" &&
       cachedSession === candidateSession &&
-      indianMarketPhase() !== "live"
+      indianMarketPhase(now) !== "live"
     ) {
       return validatedCached;
     }

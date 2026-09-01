@@ -20,7 +20,12 @@ const provisional = {
   quoteSourceName: "Upstox",
 };
 
-const chosen = _test.chooseNewerQuote(provisional, completed, "RELIANCE.NS");
+const chosen = _test.chooseNewerQuote(
+  provisional,
+  completed,
+  "RELIANCE.NS",
+  new Date("2026-08-31T18:00:00.000Z")
+);
 assert.equal(chosen.observationKind, "session_close");
 assert.equal(chosen.regularMarketPrice, 1500);
 

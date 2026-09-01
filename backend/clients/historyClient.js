@@ -201,6 +201,7 @@ async function fetchHistoricalPrices(
         .filter((quote) => quote.date && Number.isFinite(quote.close))
         .map((quote) => ({
           date: quote.date,
+          sessionDate: quote.sessionDate || null,
           open: Number.isFinite(quote.open) ? quote.open : null,
           high: Number.isFinite(quote.high) ? quote.high : null,
           low: Number.isFinite(quote.low) ? quote.low : null,

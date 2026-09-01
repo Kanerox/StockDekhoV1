@@ -73,9 +73,21 @@ function observationClosure(definition, timestamp) {
   return marketClosure(definition.calendar, clock.date, clock.weekday);
 }
 
+function pointSessionDate(point, definition) {
+  return point?.sessionDate || exchangeObservationDate(point?.date, definition);
+}
+
+function closureForSessionDate(definition, dateKey) {
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    weekday: "short",
+  }).format(new Date(`${dateKey}T12:00:00.000Z`));
+  return marketClosure(definition.calendar, dateKey, weekday);
+}
+
 function excludeClosureSessionPoints(points, definition) {
   const tradedPoints = points.filter(
-    (point) => observationClosure(definition, point.date).type !== "holiday"
+    (point) => closureForSessionDate(definition, pointSessionDate(point, definition)).type !== "holiday"
   );
   return tradedPoints.length >= 2 ? tradedPoints : points;
 }
@@ -398,7 +410,10 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     quote = {
       ...quote,
       regularMarketPrice: latestHistoricalPoint.adjustedClose,
-      regularMarketTime: latestHistoricalPoint.date,
+      regularMarketTime: exchangeSessionCloseTimestamp(
+        pointSessionDate(latestHistoricalPoint, definition),
+        definition
+      ),
       quoteSourceName: "Historical market data",
       marketState: "CLOSED",
       isStale: false,
@@ -430,19 +445,13 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   }
   const historyBacked = /historical/i.test(String(quote.quoteSourceName || ""));
   const currentClock = exchangeClock(definition, now);
-  const latestRawSessionDate = exchangeObservationDate(
-    points.at(-1)?.date,
-    definition
-  );
+  const latestRawSessionDate = pointSessionDate(points.at(-1), definition);
   const marketOpenNow = exchangeIsOpen(definition, now);
   if (marketOpenNow && latestRawSessionDate === currentClock.date && points.length > 2) {
     points = points.slice(0, -1);
   }
   const closes = points.map((point) => point.adjustedClose);
-  const latestSessionDate = exchangeObservationDate(
-    points.at(-1)?.date,
-    definition
-  );
+  const latestSessionDate = pointSessionDate(points.at(-1), definition);
 
   const servingPriorSession = marketHasOpenedToday &&
     exchangeObservationDate(quote?.regularMarketTime, definition) !== preflightClock.date &&
@@ -628,6 +637,7 @@ module.exports = {
     exchangeClock,
     exchangeClosure,
     observationClosure,
+    pointSessionDate,
     excludeClosureSessionPoints,
     exchangeIsOpen,
     exchangeObservationDate,

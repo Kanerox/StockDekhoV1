@@ -29,6 +29,16 @@ assert.strictEqual(
   "holiday",
   "Holiday-stamped observations remain identifiable after the holiday has passed"
 );
+const upstoxLabelledSeries = _test.excludeClosureSessionPoints([
+  { date: "2026-08-27T18:30:00.000Z", sessionDate: "2026-08-28", adjustedClose: 10824 },
+  { date: "2026-08-30T18:30:00.000Z", sessionDate: "2026-08-31", adjustedClose: 10824 },
+  { date: "2026-09-01T07:00:00.000Z", sessionDate: "2026-09-01", adjustedClose: 10830 },
+], ftse);
+assert.deepStrictEqual(
+  upstoxLabelledSeries.map((point) => point.sessionDate),
+  ["2026-08-28", "2026-09-01"],
+  "Upstox daily candle session labels prevent a holiday reference row becoming a traded session"
+);
 
 assert.strictEqual(
   _test.exchangeSessionCloseTimestamp("2026-08-28", hsi),

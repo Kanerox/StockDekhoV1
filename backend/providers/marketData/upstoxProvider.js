@@ -343,6 +343,9 @@ async function upstoxChart(symbol, options = {}) {
     .flatMap((response) => response?.data?.data?.candles || [])
     .map((candle) => ({
       date: new Date(candle[0]),
+      // Upstox daily global candles carry the provider's trading-date label
+      // in the timestamp string. Preserve it before timezone conversion.
+      sessionDate: String(candle[0]).slice(0, 10),
       open: finite(candle[1]),
       high: finite(candle[2]),
       low: finite(candle[3]),
