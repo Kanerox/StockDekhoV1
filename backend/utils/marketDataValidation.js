@@ -71,6 +71,44 @@ function classifyFreshness(timestamp, now = new Date(), policy = INDIAN_INDEX_FR
   return "eod";
 }
 
+function classifyObservationLifecycle(quote, now = new Date()) {
+  const timestamp = new Date(quote?.regularMarketTime || quote?.marketTime);
+  let observationKind = quote?.observationKind || null;
+  let dataStatus = classifyFreshness(timestamp, now);
+  const phase = indianMarketPhase(now);
+  const observationSession = quote?.observationDate || sessionKey(timestamp);
+  const currentSession = sessionKey(now);
+  const sameSession = Boolean(observationSession && observationSession === currentSession);
+
+  if (observationKind === "session_close") {
+    if (sameSession && phase === "live") {
+      // A provider may expose today's developing daily candle before trading
+      // has ended. Its session date is not evidence that it is a completed
+      // close, so keep the underlying observation but demote its lifecycle.
+      observationKind = "provisional_session";
+      dataStatus = classifyFreshness(timestamp, now);
+    } else if (sameSession && ["pre_market", "reconciling"].includes(phase)) {
+      observationKind = "provisional_close";
+      dataStatus = "last_updated";
+    } else if (sameSession || phase !== "live") {
+      dataStatus = "eod";
+    } else {
+      dataStatus = "stale";
+    }
+  } else if (["provisional_close", "provisional_session"].includes(observationKind)) {
+    const ageMs = now.getTime() - timestamp.getTime();
+    dataStatus = phase === "live"
+      ? classifyFreshness(timestamp, now)
+      : ageMs <= 3 * 24 * 60 * 60 * 1000
+        ? "last_updated"
+        : "stale";
+  } else if (["reconciling", "closed"].includes(phase) && sameSession) {
+    dataStatus = "last_updated";
+  }
+
+  return { dataStatus, observationKind };
+}
+
 function validateQuote(quote, { requestedSymbol, allowStale = false, now = new Date() } = {}) {
   if (!quote || typeof quote !== "object") throw new Error("Market provider returned an empty quote");
   if (requestedSymbol && quote.symbol && comparableSymbol(requestedSymbol) !== comparableSymbol(quote.symbol)) {
@@ -84,33 +122,8 @@ function validateQuote(quote, { requestedSymbol, allowStale = false, now = new D
   if (Number.isNaN(timestamp.getTime())) throw new Error(`Invalid market timestamp for ${requestedSymbol || quote.symbol || "instrument"}`);
   if (timestamp.getTime() > now.getTime() + MAX_FUTURE_SKEW_MS) throw new Error(`Future market timestamp for ${requestedSymbol || quote.symbol || "instrument"}`);
 
-  let freshness = classifyFreshness(timestamp, now);
-  if (quote.observationKind === "session_close") {
-    const observationSession = quote.observationDate || sessionKey(timestamp);
-    const currentSession = sessionKey(now);
-    freshness = observationSession === currentSession || indianMarketPhase(now) !== "live"
-      ? "eod"
-      : "stale";
-  } else if (["provisional_close", "provisional_session"].includes(quote.observationKind)) {
-    const phase = indianMarketPhase(now);
-    const ageMs = now.getTime() - timestamp.getTime();
-    // History-backed quotes may append a genuine current LTP before the
-    // completed daily candle exists. During the live session its observation
-    // timestamp still determines freshness; "provisional" only means it must
-    // not be promoted to a completed EOD close. Outside the live session keep
-    // the honest interim status until reconciliation confirms the daily bar.
-    freshness = phase === "live"
-      ? classifyFreshness(timestamp, now)
-      : ageMs <= 3 * 24 * 60 * 60 * 1000
-        ? "last_updated"
-        : "stale";
-  } else if (indianMarketPhase(now) === "reconciling" && sessionKey(timestamp) === sessionKey(now)) {
-    freshness = "last_updated";
-  } else if (indianMarketPhase(now) === "closed" && sessionKey(timestamp) === sessionKey(now)) {
-    // A same-day LTP after trading is only a provisional observation until a
-    // completed daily candle confirms the exchange close.
-    freshness = "last_updated";
-  }
+  const lifecycle = classifyObservationLifecycle(quote, now);
+  const freshness = lifecycle.dataStatus;
   if (freshness === "invalid" || freshness === "expired" || (freshness === "stale" && !allowStale)) {
     throw new Error(`Quote is beyond the accepted freshness window for ${requestedSymbol || quote.symbol || "instrument"}`);
   }
@@ -127,6 +140,7 @@ function validateQuote(quote, { requestedSymbol, allowStale = false, now = new D
     regularMarketChange: change,
     regularMarketChangePercent: changePercent,
     regularMarketTime: timestamp.toISOString(),
+    observationKind: lifecycle.observationKind,
     dataStatus: freshness,
     isStale: freshness === "stale",
   };
@@ -135,6 +149,7 @@ function validateQuote(quote, { requestedSymbol, allowStale = false, now = new D
 module.exports = {
   validateQuote,
   classifyFreshness,
+  classifyObservationLifecycle,
   sessionKey,
   isIndianMarketOpen,
   indianMarketPhase,

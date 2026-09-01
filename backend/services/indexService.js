@@ -16,7 +16,7 @@ const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
 const {
   sessionKey,
   isIndianMarketOpen,
-  classifyFreshness,
+  classifyObservationLifecycle,
 } = require("../utils/marketDataValidation");
 
 const LEADERSHIP_SNAPSHOT_FRESH_MS = 5 * 60 * 1000;
@@ -60,9 +60,11 @@ function indexSummaryCacheKey(key) {
 
 function withCurrentFreshness(observation) {
   if (!observation?.marketTime) return observation;
-  const dataStatus = classifyFreshness(observation.marketTime);
+  const lifecycle = classifyObservationLifecycle(observation);
+  const dataStatus = lifecycle.dataStatus;
   return {
     ...observation,
+    observationKind: lifecycle.observationKind,
     dataStatus,
     isStale: dataStatus === "stale",
   };

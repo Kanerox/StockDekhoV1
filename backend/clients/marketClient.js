@@ -163,10 +163,10 @@ function quoteTimestamp(quote) {
 }
 
 function chooseNewerQuote(candidate, cached, requestedSymbol, now = new Date()) {
-  const validatedCandidate = validateQuote(candidate, { requestedSymbol, allowStale: true });
+  const validatedCandidate = validateQuote(candidate, { requestedSymbol, allowStale: true, now });
   if (!cached) return validatedCandidate;
   try {
-    const validatedCached = validateQuote(cached, { requestedSymbol, allowStale: true });
+    const validatedCached = validateQuote(cached, { requestedSymbol, allowStale: true, now });
     const cachedSession = cached.observationDate || sessionKey(validatedCached.regularMarketTime);
     const candidateSession = candidate.observationDate || sessionKey(validatedCandidate.regularMarketTime);
     if (
