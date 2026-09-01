@@ -210,9 +210,31 @@ function canReuseCompletedCard(card, definition, now = new Date()) {
   return cardSession === clock.date;
 }
 
+function priorTradingSession(definition, timestamp) {
+  const candidate = new Date(timestamp);
+  do {
+    candidate.setUTCDate(candidate.getUTCDate() - 1);
+  } while (exchangeClosure(definition, candidate).closed);
+  return exchangeClock(definition, candidate).date;
+}
+
+function normalizeNonTradingObservation(card, definition) {
+  if (!card?.marketTime || !observationClosure(definition, card.marketTime).closed) return card;
+  const sessionDate = priorTradingSession(definition, card.marketTime);
+  const closeTime = exchangeSessionCloseTimestamp(sessionDate, definition);
+  return {
+    ...card,
+    marketTime: closeTime,
+    asOf: closeTime,
+    dataStatus: "eod",
+    isStale: false,
+    dataProvider: `${card.dataProvider || "Market provider"} · previous completed session`,
+  };
+}
+
 function retainedCardWithCurrentStatus(card, definition, now = new Date()) {
   if (observationAgeMs(card?.marketTime, now) < -60 * 1000) return null;
-  if (observationClosure(definition, card?.marketTime).closed) return null;
+  card = normalizeNonTradingObservation(card, definition);
   if (canReuseCompletedCard(card, definition, now)) return card;
   const status = globalQuoteStatus(
     card,
@@ -234,7 +256,6 @@ function retainedCardWithCurrentStatus(card, definition, now = new Date()) {
 
 function shouldUseRetainedHeadline(detail, retained, definition) {
   if (!retained?.marketTime || !Number.isFinite(Number(retained?.value))) return false;
-  if (observationClosure(definition, retained.marketTime).closed) return false;
   if (!detail?.marketTime || !Number.isFinite(Number(detail?.value))) return true;
   const retainedSession = exchangeObservationDate(retained.marketTime, definition);
   const detailSession = exchangeObservationDate(detail.marketTime, definition);
@@ -603,7 +624,8 @@ async function getGlobalIndexOverview() {
         return retainedCardWithCurrentStatus(previous, definition);
       }
       if (!previous) return fresh;
-      if (observationClosure(definition, previous.marketTime).closed) return fresh;
+      const normalizedPrevious = normalizeNonTradingObservation(previous, definition);
+      if (normalizedPrevious !== previous) return normalizedPrevious;
 
       const freshSession = exchangeObservationDate(fresh.marketTime, definition);
       const previousSession = exchangeObservationDate(previous.marketTime, definition);
@@ -641,6 +663,7 @@ module.exports = {
     exchangeClosure,
     observationClosure,
     pointSessionDate,
+    normalizeNonTradingObservation,
     excludeClosureSessionPoints,
     exchangeIsOpen,
     exchangeObservationDate,

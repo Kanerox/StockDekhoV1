@@ -39,14 +39,20 @@ assert.deepStrictEqual(
   ["2026-08-28", "2026-09-01"],
   "Upstox daily candle session labels prevent a holiday reference row becoming a traded session"
 );
-assert.strictEqual(
-  _test.retainedCardWithCurrentStatus({
+const normalizedHolidayReference = _test.retainedCardWithCurrentStatus({
     value: 10824.26,
     marketTime: "2026-08-31T15:10:03.000Z",
     dataStatus: "last_updated",
-  }, ftse, new Date("2026-09-01T08:00:00.000Z")),
-  null,
-  "A holiday-stamped retained reference row cannot outrank a traded-session observation later"
+  }, ftse, new Date("2026-09-01T08:00:00.000Z"));
+assert.strictEqual(
+  normalizedHolidayReference.marketTime,
+  "2026-08-28T15:30:00.000Z",
+  "A holiday reference value is attributed to the prior confirmed trading session"
+);
+assert.strictEqual(
+  normalizedHolidayReference.dataStatus,
+  "stale",
+  "The prior-session close is honestly stale once the next live session has opened"
 );
 
 assert.strictEqual(
