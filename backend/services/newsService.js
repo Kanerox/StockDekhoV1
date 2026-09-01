@@ -1265,7 +1265,8 @@ async function getGlobalMarketNewsFromService() {
   );
 
   const articles = deduplicateAndLimit(
-    retainPublicationReliableCandidates(candidates, { allowValidatedWrappers: true }),
+    retainPublicationReliableCandidates(candidates, { allowValidatedWrappers: true })
+      .sort((a, b) => new Date(articleRecencyValue(b.article) || 0) - new Date(articleRecencyValue(a.article) || 0)),
     Math.max(candidates.length, 1)
   ).map(
     (
@@ -2106,6 +2107,19 @@ function mergeEditorialResults(nextResult, previousResult) {
   };
 }
 
+function newestEditorialTimestamp(result) {
+  return Math.max(0, ...(result?.articles || []).map((article) => {
+    const value = new Date(article.recencyAt || article.publishedAt || 0).getTime();
+    return Number.isFinite(value) ? value : 0;
+  }));
+}
+
+function shouldPreserveStrongerRetainedSet(nextResult, previousResult) {
+  const previousNewest = newestEditorialTimestamp(previousResult);
+  const nextNewest = newestEditorialTimestamp(nextResult);
+  return previousNewest > 0 && nextNewest > 0 && previousNewest - nextNewest > 6 * 60 * 60 * 1000;
+}
+
 async function retainStableEditorialResult(cacheKey, nextResult, fallbackCacheKeys = []) {
   const retainedResults = await Promise.all([
     getCachedValue(cacheKey, EDITORIAL_RESULT_RETENTION_MS),
@@ -2117,7 +2131,12 @@ async function retainStableEditorialResult(cacheKey, nextResult, fallbackCacheKe
   const previousCount = previous?.articles?.length || 0;
   const nextCount = nextResult?.articles?.length || 0;
   const collapsed = previousCount >= 5 && nextCount < Math.ceil(previousCount * 0.6);
-  const selected = collapsed ? mergeEditorialResults(nextResult, previous) : nextResult;
+  const regressed = shouldPreserveStrongerRetainedSet(nextResult, previous);
+  const selected = collapsed
+    ? mergeEditorialResults(nextResult, previous)
+    : regressed
+      ? mergeEditorialResults(previous, nextResult)
+      : nextResult;
   await setCacheEntry(cacheKey, selected, EDITORIAL_RESULT_RETENTION_MS);
   return selected;
 }
@@ -2678,6 +2697,8 @@ module.exports = {
     recentMarketNewsDay,
     selectTopMarketArticles,
     mergeEditorialResults,
+    newestEditorialTimestamp,
+    shouldPreserveStrongerRetainedSet,
     retainPublicationReliableCandidates,
     retainStableEditorialResult,
   },

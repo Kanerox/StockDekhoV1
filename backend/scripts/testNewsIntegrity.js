@@ -1,4 +1,5 @@
 const assert = require("assert");
+const fs = require("fs");
 delete process.env.REDIS_URL;
 
 const { publicationIntegrity } = require("../news/utils/publicationDate");
@@ -104,6 +105,24 @@ assert.strictEqual(
   assert.ok(retained.articles.length >= 8, "a partial provider generation must not collapse a healthy editorial set");
   assert.ok(retained.articles.some((article) => article.title === "A genuinely new market event"), "a new distinct story must still enter the retained editorial set");
   assert.ok(retained.articles.some((article) => article.title === healthyTitles[0]), "healthy retained stories must survive a partial refresh");
+
+  const recencyKey = `news-test-recency:${Date.now()}`;
+  const stronger = { articles: Array.from({ length: 8 }, (_, index) => ({
+    title: `Validated current story ${index}`,
+    link: `https://current.test/${index}`,
+    publishedAt: `2026-08-31T${String(19 - index).padStart(2, "0")}:00:00Z`,
+  })) };
+  const equallyLargeButOlder = { articles: Array.from({ length: 8 }, (_, index) => ({
+    title: `Older provider generation ${index}`,
+    link: `https://older.test/${index}`,
+    publishedAt: `2026-08-30T${String(10 - index).padStart(2, "0")}:00:00Z`,
+  })) };
+  await _test.retainStableEditorialResult(recencyKey, stronger);
+  const recencyProtected = await _test.retainStableEditorialResult(recencyKey, equallyLargeButOlder);
+  assert.strictEqual(recencyProtected.articles[0].title, stronger.articles[0].title, "an equally large but materially older refresh cannot hide the stronger retained set");
+
+  const newsSource = fs.readFileSync(require.resolve("../services/newsService"), "utf8");
+  assert.ok(!/marketCalendars|marketClosure/.test(newsSource), "market calendars must not gate any news surface");
   console.log("News publication, event-diversity, source-context and result-stability tests passed.");
 })().catch((error) => {
   console.error(error);

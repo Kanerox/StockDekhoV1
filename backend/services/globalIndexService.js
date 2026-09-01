@@ -12,7 +12,7 @@ const GLOBAL_CARD_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 let overviewInFlight = null;
 
 function globalCardCacheKey(key) {
-  return `global-index-card:${key}:v1`;
+  return `global-index-card:${key}:v2`;
 }
 
 async function getRetainedGlobalCard(key) {
@@ -87,7 +87,7 @@ function closureForSessionDate(definition, dateKey) {
 
 function excludeClosureSessionPoints(points, definition) {
   const tradedPoints = points.filter(
-    (point) => closureForSessionDate(definition, pointSessionDate(point, definition)).type !== "holiday"
+    (point) => !closureForSessionDate(definition, pointSessionDate(point, definition)).closed
   );
   return tradedPoints.length >= 2 ? tradedPoints : points;
 }
@@ -118,11 +118,6 @@ function globalQuoteStatus(quote, definition, latestSessionDate, historyBacked =
   if (age < -60 * 1000) return "unavailable";
   if (!tradingDay || clock.minutes < Math.min(...definition.sessions.map((session) => session[0]))) {
     const expectedSession = expectedLatestWeekdaySession(definition, now);
-    const expectedClose = new Date(exchangeSessionCloseTimestamp(expectedSession, definition)).getTime();
-    const observationTime = new Date(observationValue || 0).getTime();
-    const closeAligned = Number.isFinite(expectedClose) && Number.isFinite(observationTime) &&
-      Math.abs(observationTime - expectedClose) <= 2 * 60 * 1000;
-    if (observationDate === expectedSession && closeAligned) return "eod";
     return observationDate && observationDate < expectedSession ? "stale" : "last_updated";
   }
   if (observationDate !== clock.date) return scheduledOpen ? "stale" : "last_updated";
@@ -188,7 +183,7 @@ function expectedLatestWeekdaySession(definition, now = new Date()) {
 }
 
 function canReuseCompletedCard(card, definition, now = new Date()) {
-  if (!card || card.dataStatus !== "eod") return false;
+  if (!card || card.dataStatus !== "eod" || card.completedSessionConfirmed !== true) return false;
   if (observationAgeMs(card.marketTime, now) < -60 * 1000) return false;
   const cardSession = exchangeObservationDate(card.marketTime, definition);
   if (!cardSession) return false;
@@ -229,6 +224,7 @@ function normalizeNonTradingObservation(card, definition) {
     dataStatus: "eod",
     isStale: false,
     dataProvider: `${card.dataProvider || "Market provider"} · previous completed session`,
+    completedSessionConfirmed: true,
   };
 }
 
@@ -279,6 +275,7 @@ function mergeRetainedHeadline(detail, retained, definition) {
     dataStatus: currentRetained.dataStatus,
     isStale: Boolean(currentRetained.isStale),
     dataProvider: currentRetained.dataProvider,
+    completedSessionConfirmed: currentRetained.completedSessionConfirmed === true,
     sessionDateOnly: currentRetained.sessionDateOnly,
     headlineFromRetainedObservation: true,
   };
@@ -532,6 +529,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     dataProvider: hasCompletedDailyClose
       ? (usedFallbackHistory ? "Fallback historical market data" : definition.historySymbol ? "Yahoo Japan official cash-index history" : "Completed daily market data")
       : (quote.quoteSourceName || "market provider"),
+    completedSessionConfirmed: hasCompletedDailyClose,
     marketClosure: closure.type === "holiday" ? closure.name : null,
     periodReturn: returnPercent(points),
     periodHigh: Math.max(...closes),
@@ -543,7 +541,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
 }
 
 async function getGlobalIndexOverview() {
-  const cacheKey = "global-index-overview:v9";
+  const cacheKey = "global-index-overview:v10";
   const cached = await getCachedValue(cacheKey, 5 * 60 * 1000);
   if (cached) return cached;
   if (overviewInFlight) return overviewInFlight;
@@ -606,6 +604,7 @@ async function getGlobalIndexOverview() {
         sparkline: detail.points.map((point) => point.adjustedClose), marketTime: detail.marketTime,
         asOf: detail.asOf, dataStatus: detail.dataStatus, isStale: detail.isStale,
         dataProvider: detail.dataProvider, sessionDateOnly: detail.sessionDateOnly,
+        completedSessionConfirmed: detail.completedSessionConfirmed === true,
         marketClosure: detail.marketClosure,
         isGlobalIndex: true,
       };

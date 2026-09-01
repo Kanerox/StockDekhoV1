@@ -50,7 +50,7 @@ function historyCacheKey(symbol, period1, period2, appendLatestQuote = true, com
   const reconcileVariant = completedSessionReconciliation ? ":reconcile" : "";
   const key = `history:${symbol}:1d${variant}${reconcileVariant}:${dateKey(period1)}:${dateKey(period2)}`;
   const providerName = getMarketDataProviderName();
-  const version = appendLatestQuote ? "v7" : "v9";
+  const version = appendLatestQuote ? "v7" : "v10";
   return providerName === "yahoo" ? key : `${providerName}:${version}:${key}`;
 }
 
@@ -58,7 +58,7 @@ function latestHistoryCacheKey(symbol, appendLatestQuote = true) {
   const variant = appendLatestQuote ? "" : ":completed-only";
   const key = `history:${symbol}:1d${variant}:latest`;
   const providerName = getMarketDataProviderName();
-  const version = appendLatestQuote ? "v7" : "v9";
+  const version = appendLatestQuote ? "v7" : "v10";
   return providerName === "yahoo" ? key : `${providerName}:${version}:${key}`;
 }
 

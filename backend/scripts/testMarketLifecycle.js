@@ -134,7 +134,7 @@ assert.strictEqual(
   "eod"
 );
 
-const retained = { dataStatus: "eod", marketTime: "2026-08-27T08:00:00.000Z" };
+const retained = { dataStatus: "eod", completedSessionConfirmed: true, marketTime: "2026-08-27T08:00:00.000Z" };
 assert.strictEqual(
   _test.canReuseCompletedCard(retained, hsi, new Date("2026-08-28T00:30:00.000Z")),
   true,
@@ -147,7 +147,7 @@ assert.strictEqual(
 );
 assert.strictEqual(
   _test.canReuseCompletedCard(
-    { dataStatus: "eod", marketTime: "2026-08-28T08:00:00.000Z" },
+    { dataStatus: "eod", completedSessionConfirmed: true, marketTime: "2026-08-28T08:00:00.000Z" },
     hsi,
     new Date("2026-08-29T02:00:00.000Z")
   ),
@@ -156,7 +156,7 @@ assert.strictEqual(
 );
 assert.strictEqual(
   _test.canReuseCompletedCard(
-    { dataStatus: "eod", marketTime: "2026-08-27T08:30:00.000Z" },
+    { dataStatus: "eod", completedSessionConfirmed: true, marketTime: "2026-08-27T08:30:00.000Z" },
     hsi,
     new Date("2026-08-28T00:30:00.000Z")
   ),
