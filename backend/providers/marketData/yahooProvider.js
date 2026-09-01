@@ -4,6 +4,11 @@ function getClient() {
   return getYahooFinanceClient();
 }
 
+function yahooChartOptions(options = {}) {
+  const { supplement: _supplement, ...yahooOptions } = options;
+  return yahooOptions;
+}
+
 module.exports = {
   name: "yahoo",
 
@@ -12,7 +17,9 @@ module.exports = {
   },
 
   chart(symbol, options) {
-    return getClient().chart(symbol, options);
+    // `supplement` is an internal StockDekho routing flag. yahoo-finance2
+    // validates chart options strictly, so never forward provider-only fields.
+    return getClient().chart(symbol, yahooChartOptions(options));
   },
 
   quoteSummary(symbol, options) {
@@ -22,4 +29,6 @@ module.exports = {
   fundamentalsTimeSeries(symbol, options) {
     return getClient().fundamentalsTimeSeries(symbol, options);
   },
+
+  _test: { yahooChartOptions },
 };
