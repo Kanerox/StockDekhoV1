@@ -68,12 +68,14 @@ function exchangeClosure(definition, now = new Date()) {
   return marketClosure(definition.calendar, clock.date, clock.weekday);
 }
 
-function excludeClosureSessionPoints(points, definition, now = new Date()) {
-  const closure = exchangeClosure(definition, now);
-  if (closure.type !== "holiday") return points;
-  const closureDate = exchangeClock(definition, now).date;
+function observationClosure(definition, timestamp) {
+  const clock = exchangeClock(definition, new Date(timestamp));
+  return marketClosure(definition.calendar, clock.date, clock.weekday);
+}
+
+function excludeClosureSessionPoints(points, definition) {
   const tradedPoints = points.filter(
-    (point) => exchangeObservationDate(point.date, definition) !== closureDate
+    (point) => observationClosure(definition, point.date).type !== "holiday"
   );
   return tradedPoints.length >= 2 ? tradedPoints : points;
 }
@@ -381,18 +383,16 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   const preflightClock = exchangeClock(definition, now);
   const closure = exchangeClosure(definition, now);
   const preflightOpen = exchangeIsOpen(definition, now);
-  if (closure.type === "holiday") {
+  const tradedPoints = excludeClosureSessionPoints(points, definition);
+  if (tradedPoints !== points) {
     // Some providers emit a synthetic daily/reference row dated on a full-day
     // closure. It is not a traded session and must not become the observation
     // date shown to users or qualify as a completed daily candle.
-    const tradedPoints = excludeClosureSessionPoints(points, definition, now);
-    if (tradedPoints !== points) {
-      points = tradedPoints;
-      latestHistoricalPoint = points.at(-1);
-    }
+    points = tradedPoints;
+    latestHistoricalPoint = points.at(-1);
   }
   let quoteSessionDate = exchangeObservationDate(quote?.regularMarketTime, definition);
-  if (closure.type === "holiday" && quoteSessionDate === preflightClock.date) {
+  if (observationClosure(definition, quote?.regularMarketTime).type === "holiday") {
     // A provider can refresh an unchanged reference value on a full-day
     // closure. Retrieval time is not a traded observation.
     quote = {
@@ -627,6 +627,7 @@ module.exports = {
   _test: {
     exchangeClock,
     exchangeClosure,
+    observationClosure,
     excludeClosureSessionPoints,
     exchangeIsOpen,
     exchangeObservationDate,

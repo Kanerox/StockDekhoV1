@@ -17,13 +17,17 @@ const ftseHolidaySeries = [
 ];
 const ftseTradedSeries = _test.excludeClosureSessionPoints(
   ftseHolidaySeries,
-  ftse,
-  new Date("2026-08-31T16:00:00.000Z")
+  ftse
 );
 assert.deepStrictEqual(
   ftseTradedSeries.map((point) => point.date),
   ["2026-08-27T15:30:00.000Z", "2026-08-28T15:30:00.000Z"],
   "A provider reference row stamped on a full-day closure is not a traded observation"
+);
+assert.strictEqual(
+  _test.observationClosure(ftse, "2026-08-31T15:10:00.000Z").type,
+  "holiday",
+  "Holiday-stamped observations remain identifiable after the holiday has passed"
 );
 
 assert.strictEqual(
