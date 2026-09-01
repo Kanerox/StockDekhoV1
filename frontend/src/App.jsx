@@ -1702,6 +1702,9 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
     .slice(0, 10)
     .map((stock) => stock.ticker)
     .join(",");
+  const newsSector = (indexData?.constituents || [])
+    .map((stock) => stock.sector)
+    .find(Boolean) || "";
 
   useEffect(() => {
     let cancelled = false;
@@ -1786,7 +1789,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
           Utilities: ["power sector", "electricity", "utilities"],
           "Communication Services": ["telecom sector", "communications", "spectrum"],
           "Real Estate": ["real estate sector", "realty", "property market"],
-        }[sector] || [String(sector).toLowerCase()];
+        }[newsSector] || [String(newsSector).toLowerCase()].filter(Boolean);
         const macroTerms = ["rbi", "government", "regulation", "policy", "tariff", "budget", "inflation", "interest rate"];
         const articles = results
           .filter((result) => result.status === "fulfilled")
@@ -1830,7 +1833,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
     return () => {
       cancelled = true;
     };
-  }, [newsSymbols, isDemo, isVix, indexKey, demoConfig]);
+  }, [newsSymbols, newsSector, isDemo, isVix, indexKey, demoConfig]);
 
   const constituents = indexData?.constituents || [];
   const series = (indexData?.points || []).map(
