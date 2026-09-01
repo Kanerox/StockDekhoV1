@@ -867,6 +867,25 @@ const fmtInt = (n) => (n === null || n === undefined ? "—" : n.toLocaleString(
 const fmtPct = (n) => (n === null || n === undefined ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(2)}%`);
 const fmtCr = (n) => (n === null || n === undefined ? "—" : `₹${fmtInt(Math.round(n))} Cr`);
 const cls = (...a) => a.filter(Boolean).join(" ");
+const normalizeSearchText = (value) => String(value || "")
+  .toLowerCase()
+  .replace(/&/g, " and ")
+  .replace(/[^a-z0-9]+/g, " ")
+  .trim();
+
+const companySearchScore = (stock, query) => {
+  const needle = normalizeSearchText(query);
+  if (!needle) return -1;
+  const ticker = normalizeSearchText(stock.ticker);
+  const name = normalizeSearchText(stock.name);
+  if (ticker === needle) return 1000;
+  if (name === needle) return 950;
+  if (ticker.startsWith(needle)) return 850;
+  if (name.startsWith(needle)) return 800;
+  if (name.split(" ").some((word) => word === needle)) return 750;
+  if (`${ticker} ${name}`.includes(needle)) return 650;
+  return -1;
+};
 const formatMarketAsOf = (value) => {
   if (!value) return "Time unavailable";
   const date = new Date(value);
@@ -1378,20 +1397,11 @@ function Header({
       return [];
     }
 
-    const normalizedQuery = query
-      .trim()
-      .toLowerCase();
-
     return RAW_STOCKS
-      .filter(
-        (stock) =>
-          stock.ticker
-            .toLowerCase()
-            .includes(normalizedQuery) ||
-          stock.name
-            .toLowerCase()
-            .includes(normalizedQuery)
-      )
+      .map((stock) => ({ stock, score: companySearchScore(stock, query) }))
+      .filter(({ score }) => score >= 0)
+      .sort((a, b) => b.score - a.score || a.stock.name.localeCompare(b.stock.name))
+      .map(({ stock }) => stock)
       .slice(0, 8);
   }, [query]);
 
@@ -1742,15 +1752,23 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
       if (!newsSymbols) {
         setNews([]);
         setNewsError("");
+        setNewsLoading(false);
         return;
       }
 
       setNewsLoading(true);
       setNewsError("");
+      const boundedCompanyNews = (ticker) => Promise.race([
+        getCompanyNews(ticker),
+        new Promise((_, reject) => window.setTimeout(
+          () => reject(new Error(`Company news timed out for ${ticker}`)),
+          12000
+        )),
+      ]);
       const results = await Promise.allSettled(
         newsSymbols.split(",").map(async (ticker) => ({
           ticker,
-          data: await getCompanyNews(ticker),
+          data: await boundedCompanyNews(ticker),
         }))
       );
 
@@ -1851,6 +1869,11 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
             <div style={{ fontSize: 11.5, color: THEME.inkDim, marginTop: 8 }}>
               {isDemo ? "Illustrative benchmark · Demo data" : `Benchmark index · ${marketProviderLabel(indexData?.dataProvider)} market data`}
             </div>
+            {!isDemo && indexData && (
+              <div style={{ fontSize: 11.5, color: THEME.inkDim, marginTop: 4 }}>
+                {formatMarketObservation(indexData)}
+              </div>
+            )}
           </div>
           <div style={{ textAlign: "right" }}>
             <div className="sd-mono" style={{ fontSize: 28 }}>
@@ -4467,7 +4490,7 @@ function calculatePerformanceMetrics(points, useAdjustedClose, fiftyTwoWeekHigh)
   };
 }
 
-function CompanyPage({ ticker, mode, watchlist, toggleWatch, compareList, toggleCompare, notes, setNote, openCompany, }) {
+function CompanyPage({ ticker, mode, watchlist, toggleWatch, compareList, toggleCompare, notes, setNote, openCompany, back }) {
   const s = STOCKS_BY_TICKER[ticker] || STOCKS_BY_TICKER.RELIANCE;
   const [stockData, setStockData] = useState(null);
   const [newsData, setNewsData] = useState(null);
@@ -4765,6 +4788,9 @@ useEffect(() => {
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 70px", maxWidth: 1280, margin: "0 auto" }}>
       <PageLoadingOverlay active={newsLoading} message="Loading Company Research..." />
+      <button onClick={back} style={{ background: "none", border: "none", color: THEME.gold, cursor: "pointer", fontSize: 12.5, display: "flex", alignItems: "center", gap: 4, marginBottom: 10 }}>
+        <ChevronLeft size={14} /> Back to Stocks
+      </button>
       <Panel style={{ padding: 20, marginBottom: 18 }}>
         <div style={{ display: "flex", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
           <div>
@@ -7079,7 +7105,7 @@ const SEARCH_TOPIC_ALIASES = {
   chemical: "chemicals", pharma: "pharmaceuticals", pharmaceutical: "pharmaceuticals",
   health: "pharmaceuticals", healthcare: "pharmaceuticals", "health care": "pharmaceuticals", medicines: "pharmaceuticals", hospital: "hospitals", "consumer staples": "fmcg", staples: "fmcg",
   property: "real estate", electronics: "consumer electronics", jewelry: "jewellery",
-  airtel: "telecom", jio: "telecom", infosys: "it services", tcs: "it services", hdfc: "banking", sbi: "banking", "state bank": "banking", realty: "real estate", housing: "real estate", crude: "oil and gas", petroleum: "oil and gas", mining: "metals",
+  jio: "telecom", hdfc: "banking", "state bank": "banking", realty: "real estate", housing: "real estate", crude: "oil and gas", petroleum: "oil and gas", mining: "metals",
 };
 
 const SEARCH_TOPIC_INDEX_KEYS = {
@@ -7129,14 +7155,17 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
   const matchingDefinitions = useMemo(() => {
     if (!normalized) return [];
     const aliases = new Set(SEARCH_TOPIC_TICKERS[canonicalTopic] || []);
-    return RAW_STOCKS.filter((stock) =>
-      aliases.has(stock.ticker) ||
-      [stock.ticker, stock.name, stock.sector, stock.industry, stock.description]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(normalized)
-    ).slice(0, 20);
+    return RAW_STOCKS.map((stock) => {
+      const companyScore = companySearchScore(stock, normalized);
+      const topicMatch = aliases.has(stock.ticker) ||
+        [stock.sector, stock.industry, stock.description]
+          .filter(Boolean).join(" ").toLowerCase().includes(normalized);
+      return { stock, score: companyScore >= 0 ? companyScore : topicMatch ? 100 : -1 };
+    })
+      .filter(({ score }) => score >= 0)
+      .sort((a, b) => b.score - a.score || a.stock.name.localeCompare(b.stock.name))
+      .map(({ stock }) => stock)
+      .slice(0, 20);
   }, [normalized, canonicalTopic]);
 
   useEffect(() => {
@@ -7462,12 +7491,6 @@ const [notes, setNotes] = useState({});
   const openBenchmark = (key) => { setActiveBenchmark(key); setPage("benchmark"); };
   const openGlobalIndex = (key) => { setActiveGlobalIndex(key); setPage("global-index"); };
   const openSearch = (term) => {
-    const normalized = String(term || "").trim().toLowerCase();
-    if ((SEARCH_TOPIC_ALIASES[normalized] || normalized) === "indian markets") {
-      setQuery("");
-      setPage("markets");
-      return;
-    }
     setSearchTerm(term);
     setQuery(term);
     setPage("search");
@@ -7491,10 +7514,10 @@ const [notes, setNotes] = useState({});
           : <BenchmarkDetailPage indexKey={activeBenchmark} back={() => setPage("markets")} openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />)}
         {page === "stocks" && <StocksPage mode={mode} setPage={setPage} openCompany={openCompany} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} />}
         {page === "sectors" && <SectorsPage mode={mode} openCompany={openCompany} openSector={setActiveSector} activeSector={activeSector} />}
-        {page === "company" && <CompanyPage ticker={activeTicker} mode={mode} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} notes={notes} setNote={setNote} openCompany={openCompany} />}
+        {page === "company" && <CompanyPage ticker={activeTicker} mode={mode} watchlist={watchlist} toggleWatch={toggleWatch} compareList={compareList} toggleCompare={toggleCompare} notes={notes} setNote={setNote} openCompany={openCompany} back={() => setPage("stocks")} />}
         {page === "compare" && <ComparePage compareList={compareList} toggleCompare={toggleCompare} openCompany={openCompany} />}
         {page === "currencies" && <CurrenciesPage />}
-        {page === "global-index" && <GlobalIndexDetailPage indexKey={activeGlobalIndex} back={() => setPage("search")} />}
+        {page === "global-index" && <GlobalIndexDetailPage indexKey={activeGlobalIndex} back={() => setPage("currencies")} />}
         {page === "watchlist" && <WatchlistPage watchlist={watchlist} toggleWatch={toggleWatch} openCompany={openCompany} setPage={setPage} />}
         {page === "search" && <SearchResultsPage searchTerm={searchTerm} openCompany={openCompany} openGlobalIndex={openGlobalIndex} />}
       </div>
