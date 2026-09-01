@@ -4,6 +4,7 @@ const {
   classifyObservationLifecycle,
 } = require("../utils/marketDataValidation");
 const { _test: marketClientTest } = require("../clients/marketClient");
+const { _test: indexServiceTest } = require("../services/indexService");
 
 function quote(overrides = {}) {
   return {
@@ -26,6 +27,25 @@ const developing = validateQuote(quote(), {
 });
 assert.strictEqual(developing.dataStatus, "live");
 assert.strictEqual(developing.observationKind, "provisional_session");
+
+const cachedLiveCard = {
+  marketTime: "2026-09-01T09:04:00.000Z",
+  observationDate: null,
+  observationKind: null,
+  dataStatus: "live",
+  isStale: false,
+};
+const originalDate = global.Date;
+global.Date = class extends originalDate {
+  constructor(value) {
+    super(value === undefined ? "2026-09-01T11:06:00.000Z" : value);
+  }
+  static now() { return new originalDate("2026-09-01T11:06:00.000Z").getTime(); }
+};
+const postCloseCachedCard = indexServiceTest.withCurrentFreshness(cachedLiveCard);
+global.Date = originalDate;
+assert.strictEqual(postCloseCachedCard.dataStatus, "last_updated");
+assert.notStrictEqual(postCloseCachedCard.dataStatus, "live");
 
 const overview = classifyObservationLifecycle({
   marketTime: developing.regularMarketTime,

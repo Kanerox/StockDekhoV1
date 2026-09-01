@@ -285,7 +285,11 @@ async function getIndexSummary(definition) {
 async function getIndexOverview() {
   const cacheKey = "index-overview:v8";
   const cached = await getCachedValue(cacheKey, indexOverviewFreshMs());
-  if (cached) return cached;
+  // Price payloads may be safely reused after the session, but lifecycle
+  // labels must be evaluated against the current exchange phase on every
+  // response. Otherwise a quote cached while LIVE can remain labelled LIVE
+  // for the full post-close cache window.
+  if (cached) return cached.map(withCurrentFreshness);
   if (overviewInFlight) return overviewInFlight;
 
   overviewInFlight = (async () => {
@@ -329,7 +333,12 @@ async function getIndexDetail(key, range = "1Y") {
       leadershipCacheKey,
       leadershipSnapshotFreshMs()
     );
-    if (cached) return cached;
+    if (cached) {
+      return {
+        ...withCurrentFreshness(cached),
+        constituents: (cached.constituents || []).map(withCurrentFreshness),
+      };
+    }
   }
 
   const { period1, period2 } = resolvePeriod(range);
@@ -404,4 +413,5 @@ async function getIndexDetail(key, range = "1Y") {
 module.exports = {
   getIndexOverview,
   getIndexDetail,
+  _test: { withCurrentFreshness },
 };

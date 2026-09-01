@@ -2428,34 +2428,10 @@ useEffect(() => {
 
           return !blockedMarketEventTerms.some((term) => title.includes(term));
         })
-        .sort((articleA, articleB) => {
-  const dateA =
-    parseNewsDate(
-      articleA.publishedAt
-    );
-
-  const dateB =
-    parseNewsDate(
-      articleB.publishedAt
-    );
-
-  if (!dateA && !dateB) {
-    return 0;
-  }
-
-  if (!dateA) {
-    return 1;
-  }
-
-  if (!dateB) {
-    return -1;
-  }
-
-  return (
-    dateB.getTime() -
-    dateA.getTime()
-  );
-})
+        // Preserve the backend's validated editorial order. Sorting only by
+        // publishedAt here incorrectly pushed all trustworthy "Recent
+        // coverage" behind older exact-dated stories, hiding qualified
+        // current-day reporting from the initial set.
         .slice(0, 15);
 
       setMarketEvents(
