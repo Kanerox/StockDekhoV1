@@ -67,6 +67,30 @@ assert.strictEqual(reconciling.dataStatus, "last_updated");
 assert.strictEqual(reconciling.observationKind, "provisional_close");
 
 const closedNow = new Date("2026-09-01T10:40:00.000Z"); // 16:10 IST
+assert.strictEqual(
+  marketClientTest.needsCompletedSessionReconciliation(
+    quote({ observationKind: "provisional_close" }),
+    closedNow
+  ),
+  true,
+  "Indian index symbols must enter completed-session reconciliation after close"
+);
+assert.strictEqual(
+  marketClientTest.needsCompletedSessionReconciliation(
+    quote({ symbol: "^GSPC", observationKind: "provisional_close" }),
+    closedNow
+  ),
+  false,
+  "Global caret-prefixed indices must not be reconciled against the Indian session clock"
+);
+assert.strictEqual(
+  marketClientTest.needsCompletedSessionReconciliation(
+    quote({ observationKind: "provisional_close" }),
+    liveNow
+  ),
+  false,
+  "A developing Indian index candle must never reconcile to EOD while the session is active"
+);
 const completed = validateQuote(quote({
   regularMarketPrice: 25080,
   regularMarketTime: "2026-09-01T10:15:00.000Z",

@@ -5,6 +5,7 @@ const {
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 const { fetchHistoricalPrices } = require("./historyClient");
 const { validateQuote, indianMarketPhase, sessionKey } = require("../utils/marketDataValidation");
+const { INDICES: INDIAN_INDICES } = require("../config/indexConfig");
 
 const FRESH_QUOTE_TTL_MS = 5 * 60 * 1000;
 const CLOSED_SESSION_QUOTE_TTL_MS = 6 * 60 * 60 * 1000;
@@ -31,6 +32,9 @@ const SUPPLEMENTAL_QUOTE_FIELDS = [
 const quoteRequestsInFlight = new Map();
 const fundamentalsRequestsInFlight = new Map();
 let batchRequestInFlight = null;
+const INDIAN_INDEX_SYMBOLS = new Set(
+  INDIAN_INDICES.map((index) => String(index.symbol || "").toUpperCase())
+);
 
 function quoteFreshTtlMs() {
   return indianMarketPhase() === "closed"
@@ -205,7 +209,9 @@ function observationDate(value) {
 }
 
 function needsCompletedSessionReconciliation(quote, now = new Date()) {
-  return !String(quote?.symbol || "").startsWith("^") &&
+  const symbol = String(quote?.symbol || "").toUpperCase();
+  const isIndianInstrument = !symbol.startsWith("^") || INDIAN_INDEX_SYMBOLS.has(symbol);
+  return isIndianInstrument &&
     indianMarketPhase(now) === "closed" &&
     quote?.observationKind !== "session_close";
 }

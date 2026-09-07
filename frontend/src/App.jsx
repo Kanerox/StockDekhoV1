@@ -908,7 +908,7 @@ const formatMarketObservation = (data, prefix = "As of") => {
   }
   if (data?.observationKind === "session_close" && data?.observationDate) {
     const date = new Date(`${data.observationDate}T00:00:00+05:30`);
-    return `Session close ${date.toLocaleDateString("en-IN", {
+    return `Session Close — ${date.toLocaleDateString("en-IN", {
       day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata",
     })}`;
   }
@@ -1066,6 +1066,28 @@ function isIndianMarketRefreshWindow(now = new Date()) {
   return ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(parts.weekday) &&
     minuteOfDay >= 9 * 60 + 15 &&
     minuteOfDay <= 15 * 60 + 40;
+}
+
+function isIndianPostCloseReconciliationWindow(now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(now).map((part) => [part.type, part.value])
+  );
+  const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
+  return ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(parts.weekday) &&
+    minuteOfDay > 15 * 60 + 40 && minuteOfDay <= 18 * 60 + 30;
+}
+
+function isIndianEditorialRefreshWindow(now = new Date()) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata", weekday: "short", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+    }).formatToParts(now).map((part) => [part.type, part.value])
+  );
+  const minuteOfDay = Number(parts.hour) * 60 + Number(parts.minute);
+  return ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(parts.weekday) &&
+    minuteOfDay > 15 * 60 + 40 && minuteOfDay <= 22 * 60;
 }
 
 const MARKET_REFRESH_MS = 5 * 60 * 1000;
@@ -2164,6 +2186,7 @@ function EventStrip({ mode, onOpen, events, loading, error }) {
 }
 
 let retainedMarketIndices = [];
+let retainedSectorOverview = [];
 
 function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, toggleWatch, compareList, toggleCompare }) {
   const readiness = useRef({ startedAt: performance.now(), reported: new Set(["shell"]) });
@@ -2175,8 +2198,8 @@ function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, tog
   const [marketEvents, setMarketEvents] = useState([]);
   const [marketEventsLoading, setMarketEventsLoading] = useState(true);
   const [marketEventsError, setMarketEventsError] = useState("");
-  const [sectorData, setSectorData] = useState([]);
-  const [sectorLoading, setSectorLoading] = useState(true);
+  const [sectorData, setSectorData] = useState(() => retainedSectorOverview);
+  const [sectorLoading, setSectorLoading] = useState(() => retainedSectorOverview.length === 0);
   const [sectorError, setSectorError] = useState("");
   const [heatRange, setHeatRange] = useState("1M");
   const [perfTab, setPerfTab] = useState("This Week");
@@ -2383,10 +2406,15 @@ useEffect(() => {
     () => loadIndices({ force: true }),
     { shouldRefresh: isIndianMarketRefreshWindow }
   );
+  const stopReconciliationRefresh = installVisibilityAwareRefresh(
+    () => loadIndices({ force: true }),
+    { intervalMs: 10 * 60 * 1000, shouldRefresh: isIndianPostCloseReconciliationWindow }
+  );
 
   return () => {
     cancelled = true;
     stopRefresh();
+    stopReconciliationRefresh();
   };
 }, []);
 
@@ -2496,10 +2524,15 @@ date: formatArticleNewsDate(article),
     () => loadMarketContext({ force: true }),
     { shouldRefresh: isIndianMarketRefreshWindow }
   );
+  const stopEditorialRefresh = installVisibilityAwareRefresh(
+    () => loadMarketContext({ force: true }),
+    { intervalMs: 30 * 60 * 1000, shouldRefresh: isIndianEditorialRefreshWindow }
+  );
 
   return () => {
     cancelled = true;
     stopRefresh();
+    stopEditorialRefresh();
   };
 }, []);
 
@@ -2514,9 +2547,10 @@ useEffect(() => {
       const data = await getSectors();
 
       if (!cancelled) {
-        setSectorData(
-          Array.isArray(data) ? data : []
-        );
+        const nextSectorData = Array.isArray(data) ? data : [];
+        retainedSectorOverview = nextSectorData;
+        setSectorData(nextSectorData);
+        setSectorError("");
       }
     } catch (error) {
       console.error(
@@ -2525,8 +2559,9 @@ useEffect(() => {
       );
 
       if (!cancelled) {
-        setSectorData([]);
-        setSectorError("Unable to load live sector performance. Please try again shortly.");
+        if (retainedSectorOverview.length === 0) {
+          setSectorError("Unable to load live sector performance. Please try again shortly.");
+        }
       }
     } finally {
       if (!cancelled) {
@@ -3659,8 +3694,8 @@ const thStyle = { textAlign: "left", padding: "9px 10px", fontSize: 10.5, textTr
 const tdStyle = { padding: "9px 10px" };
 const pagerBtn = (disabled) => ({ border: `1px solid ${THEME.hairline}`, background: "none", color: disabled ? THEME.hairline : THEME.ink, borderRadius: 4, padding: "5px 8px", cursor: disabled ? "not-allowed" : "pointer" });
 
-function NewsPager({ page, articles, onPageChange, label }) {
-  const totalPages = articlePageCount(articles);
+function NewsPager({ page, articles, onPageChange, label, pageSize }) {
+  const totalPages = articlePageCount(articles, pageSize);
   if (!Array.isArray(articles) || articles.length === 0 || totalPages <= 1) return null;
   return (
     <div style={{ display: "flex", justifyContent: "center", gap: 10, marginTop: 12, marginBottom: 24, alignItems: "center" }}>
@@ -4043,6 +4078,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
 function CompanyOverviewTab({ ticker, liveNews, newsLoading, newsError }) {
   const profile = companyProfile(ticker);
   const [openArticle, setOpenArticle] = useState(null);
+  const [newsPageState, setNewsPageState] = useState({ ticker, page: 1 });
 
  const formattedLiveNews = liveNews.map((article) => ({
   id: article.id,
@@ -4059,7 +4095,9 @@ function CompanyOverviewTab({ ticker, liveNews, newsLoading, newsError }) {
   link: article.link,
 }));
 
-  const news = formattedLiveNews;
+  const requestedNewsPage = newsPageState.ticker === ticker ? newsPageState.page : 1;
+  const safeNewsPage = clampArticlePage(requestedNewsPage, formattedLiveNews, 6);
+  const news = articlesForPage(formattedLiveNews, safeNewsPage, 6);
 
   return (
     <div className="sd-grid-2" style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 16 }}>
@@ -4125,6 +4163,9 @@ function CompanyOverviewTab({ ticker, liveNews, newsLoading, newsError }) {
 )}
             </div>
           ))}
+          {!newsLoading && !newsError && (
+            <NewsPager page={safeNewsPage} articles={formattedLiveNews} onPageChange={(page) => setNewsPageState({ ticker, page })} label={`${ticker} company news`} pageSize={6} />
+          )}
         </div>
       </Panel>
 
@@ -7089,7 +7130,9 @@ const SEARCH_TOPIC_TICKERS = {
 };
 
 const SEARCH_TOPIC_ALIASES = {
-  india: "indian markets", indian: "indian markets", "india markets": "indian markets", nse: "indian markets", nifty: "indian markets", sensex: "indian markets", volatility: "indian markets", vix: "indian markets", bonds: "indian markets", yields: "indian markets", "g-sec": "indian markets", gsec: "indian markets",
+  india: "indian markets", indian: "indian markets", "india markets": "indian markets", nse: "indian markets", nifty: "indian markets", sensex: "indian markets",
+  volatility: "india vix", vix: "india vix", "india vix": "india vix",
+  bonds: "india 10y g-sec", "bond yields": "india 10y g-sec", yields: "india 10y g-sec", "government bonds": "india 10y g-sec", "g-sec": "india 10y g-sec", gsec: "india 10y g-sec", "india 10y": "india 10y g-sec",
   global: "global markets", "world markets": "global markets",
   us: "united states", usa: "united states", "us markets": "united states", "american stocks": "united states", "s&p 500": "united states", sp500: "united states", nasdaq: "united states", dow: "united states", "dow jones": "united states",
   chinese: "china", "chinese stocks": "china", "csi 300": "china", "shanghai composite": "china",
@@ -7101,7 +7144,7 @@ const SEARCH_TOPIC_ALIASES = {
   insurer: "insurance", insurers: "insurance", nbfcs: "nbfc", "non banking finance": "nbfc",
   "mutual funds": "asset management", amc: "asset management", exchanges: "stock exchanges",
   auto: "automobiles", automobile: "automobiles", cars: "automobiles", ev: "electric vehicles", evs: "electric vehicles",
-  telecommunications: "telecom", it: "it services", technology: "it services", software: "it services",
+  telecommunications: "telecom", it: "it services", "information technology": "it services", technology: "it services", software: "it services",
   railway: "railways", airport: "aviation", airports: "aviation", port: "ports",
   utilities: "power", renewable: "renewable energy", renewables: "renewable energy", "clean energy": "renewable energy",
   oil: "oil and gas", gas: "oil and gas", metal: "metals", steel: "metals",
@@ -7124,6 +7167,10 @@ const SEARCH_TOPIC_INDEX_KEYS = {
   germany: ["DAX"],
 };
 
+const SEARCH_TOPIC_INDIAN_INDEX_KEYS = {
+  "india vix": ["VIX"],
+};
+
 const SEARCH_TOPIC_SECTOR_KEYS = {
   banking: "Financials",
   "it services": "Information Technology",
@@ -7138,22 +7185,34 @@ const SEARCH_TOPIC_SECTOR_KEYS = {
   "real estate": "Real Estate",
 };
 
-function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
+function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex, openBenchmark }) {
   const [stocks, setStocks] = useState([]);
   const [indices, setIndices] = useState([]);
   const [articles, setArticles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [newsLoading, setNewsLoading] = useState(true);
   const normalized = searchTerm.trim().toLowerCase();
   const canonicalTopic = SEARCH_TOPIC_ALIASES[normalized] || normalized;
-  const matchingIndexKeys = SEARCH_TOPIC_INDEX_KEYS[canonicalTopic] || [];
-  const globalTopicTerms = {
+  const matchingIndexKeys = useMemo(
+    () => SEARCH_TOPIC_INDEX_KEYS[canonicalTopic] || [],
+    [canonicalTopic]
+  );
+  const matchingIndianIndexKeys = useMemo(
+    () => SEARCH_TOPIC_INDIAN_INDEX_KEYS[canonicalTopic] || [],
+    [canonicalTopic]
+  );
+  const isRecognizedTopic = canonicalTopic !== normalized || Boolean(
+    SEARCH_TOPIC_TICKERS[canonicalTopic] || SEARCH_TOPIC_SECTOR_KEYS[canonicalTopic] ||
+    SEARCH_TOPIC_INDEX_KEYS[canonicalTopic] || SEARCH_TOPIC_INDIAN_INDEX_KEYS[canonicalTopic]
+  );
+  const globalTopicTerms = useMemo(() => ({
     "global markets": ["global", "world markets"],
     "united states": ["united states", "u.s.", "us stocks", "wall street", "s&p 500", "nasdaq", "dow jones"],
     china: ["china", "chinese stocks", "csi 300", "shanghai composite"],
     "hong kong": ["hong kong", "hang seng"], japan: ["japan", "nikkei"],
     "south korea": ["south korea", "korean stocks", "kospi"], taiwan: ["taiwan", "taiex", "taiwan weighted"],
     europe: ["europe", "european stocks", "euro stoxx"], "united kingdom": ["united kingdom", "uk stocks", "ftse"], germany: ["germany", "german stocks", "dax"],
-  };
+  }), []);
 
   const matchingDefinitions = useMemo(() => {
     if (!normalized) return [];
@@ -7163,13 +7222,14 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
       const topicMatch = aliases.has(stock.ticker) ||
         [stock.sector, stock.industry, stock.description]
           .filter(Boolean).join(" ").toLowerCase().includes(normalized);
-      return { stock, score: companyScore >= 0 ? companyScore : topicMatch ? 100 : -1 };
+      const permittedCompanyScore = isRecognizedTopic && companyScore < 750 ? -1 : companyScore;
+      return { stock, score: permittedCompanyScore >= 0 ? permittedCompanyScore : topicMatch ? 100 : -1 };
     })
       .filter(({ score }) => score >= 0)
       .sort((a, b) => b.score - a.score || a.stock.name.localeCompare(b.stock.name))
       .map(({ stock }) => stock)
       .slice(0, 20);
-  }, [normalized, canonicalTopic]);
+  }, [normalized, canonicalTopic, isRecognizedTopic]);
 
   useEffect(() => {
     let cancelled = false;
@@ -7179,9 +7239,11 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
     ]);
     async function loadResults() {
       setLoading(true);
+      setNewsLoading(true);
       setArticles([]);
       const loadMatchingIndices = async () => {
-        if (!matchingIndexKeys.length || matchingIndexKeys.length > 3) return bounded(getGlobalIndices());
+        if (!matchingIndexKeys.length) return [];
+        if (matchingIndexKeys.length > 3) return bounded(getGlobalIndices());
         const focusedResults = await Promise.allSettled(
           matchingIndexKeys.map((key) => bounded(getGlobalIndexDetail(key, "1M")))
         );
@@ -7206,21 +7268,30 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
         bounded(getGlobalMarketNews()),
         bounded(getNiftyMarketEvents()),
       ]);
-      const [stockResult, indicesResult] = await Promise.allSettled([
+      const [stockResult, indicesResult, indianIndicesResult, gsecResult] = await Promise.allSettled([
         matchingDefinitions.length
           ? bounded(getStockUniverse(matchingDefinitions.map((stock) => stock.ticker)))
           : Promise.resolve([]),
         loadMatchingIndices(),
+        matchingIndianIndexKeys.length ? bounded(getIndices()) : Promise.resolve([]),
+        canonicalTopic === "india 10y g-sec" ? bounded(getIndiaTenYearYield("1M")) : Promise.resolve(null),
       ]);
       if (cancelled) return;
       setStocks(stockResult.status === "fulfilled" ? stockResult.value : matchingDefinitions);
       const allowedIndexKeys = new Set(SEARCH_TOPIC_INDEX_KEYS[canonicalTopic] || []);
       const availableIndices = indicesResult.status === "fulfilled" ? indicesResult.value : [];
-      setIndices(availableIndices.filter((index) =>
+      const globalIndices = availableIndices.filter((index) =>
         allowedIndexKeys.has(index.key) ||
         [index.name, index.key, index.region, index.description]
           .filter(Boolean).join(" ").toLowerCase().includes(normalized)
-      ));
+      );
+      const indianIndices = indianIndicesResult.status === "fulfilled"
+        ? indianIndicesResult.value.filter((index) => matchingIndianIndexKeys.includes(index.key))
+        : [];
+      if (gsecResult.status === "fulfilled" && gsecResult.value) {
+        indianIndices.push({ ...gsecResult.value, key: "INDIA10Y", name: "India 10Y G-Sec", isGsec: true });
+      }
+      setIndices([...globalIndices, ...indianIndices]);
       setLoading(false);
 
       const [companyNewsResults, indexNewsResults, sectorNewsResult, secondaryNewsResults] = await Promise.all([
@@ -7259,10 +7330,11 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
         seen.add(key);
         return true;
       }).slice(0, 15));
+      setNewsLoading(false);
     }
-    loadResults().catch(() => { if (!cancelled) setLoading(false); });
+    loadResults().catch(() => { if (!cancelled) { setLoading(false); setNewsLoading(false); } });
     return () => { cancelled = true; };
-  }, [normalized, canonicalTopic, matchingDefinitions]);
+  }, [normalized, canonicalTopic, matchingDefinitions, matchingIndexKeys, matchingIndianIndexKeys, globalTopicTerms]);
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto", width: "100%" }}>
@@ -7273,7 +7345,7 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
       {!loading && stocks.length === 0 && indices.length === 0 && <Panel style={{ padding: 18, color: THEME.inkDim, fontSize: 12.5 }}>No tracked companies or indices directly match this topic.</Panel>}
       {(stocks.length > 0 || indices.length > 0) && (
         <div className="sd-scroll" style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 10, marginBottom: 24 }}>
-          {indices.map((index) => <IndexCard key={index.key} idx={index} onOpen={openGlobalIndex} matchCurrencyCard />)}
+          {indices.map((index) => <IndexCard key={index.key} idx={index} onOpen={["VIX", "INDIA10Y"].includes(index.key) ? openBenchmark : openGlobalIndex} matchCurrencyCard />)}
           {stocks.map((stock) => {
             const definition = RAW_STOCKS.find((item) => item.ticker === stock.ticker) || stock;
             return (
@@ -7289,7 +7361,8 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex }) {
       )}
 
       <SectionHeading title={`Relevant topics related to ${searchTerm}`} />
-      {!loading && articles.length === 0 && <Panel style={{ padding: 18, color: THEME.inkDim, fontSize: 12.5 }}>No current matching articles are available.</Panel>}
+      {newsLoading && <Panel style={{ padding: 18, color: THEME.inkDim, fontSize: 12.5 }}>Loading relevant market coverage…</Panel>}
+      {!newsLoading && articles.length === 0 && <Panel style={{ padding: 18, color: THEME.inkDim, fontSize: 12.5 }}>No current matching articles are available.</Panel>}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
         {articles.map((article, index) => (
           <Panel key={article.link || article.url || `${article.title}-${index}`} style={{ padding: 16 }}>
@@ -7522,7 +7595,7 @@ const [notes, setNotes] = useState({});
         {page === "currencies" && <CurrenciesPage />}
         {page === "global-index" && <GlobalIndexDetailPage indexKey={activeGlobalIndex} back={() => setPage("currencies")} />}
         {page === "watchlist" && <WatchlistPage watchlist={watchlist} toggleWatch={toggleWatch} openCompany={openCompany} setPage={setPage} />}
-        {page === "search" && <SearchResultsPage searchTerm={searchTerm} openCompany={openCompany} openGlobalIndex={openGlobalIndex} />}
+        {page === "search" && <SearchResultsPage searchTerm={searchTerm} openCompany={openCompany} openGlobalIndex={openGlobalIndex} openBenchmark={openBenchmark} />}
       </div>
       <Footer />
     </div>

@@ -806,6 +806,20 @@ function storyEventCategory(title = "") {
   return categories.find(([, pattern]) => pattern.test(value))?.[0] || null;
 }
 
+function classifyMarketEventTopic(originalTopic, title = "") {
+  const value = String(title).toLowerCase();
+  const eventCategory = storyEventCategory(value);
+  if (eventCategory === "earnings") return "Earnings";
+  if (["leadership-change", "corporate-action"].includes(eventCategory)) return "Corporate Action";
+  if (eventCategory === "policy-rates") return /\brbi\b|repo rate|monetary policy/.test(value) ? "Policy" : "Macro";
+  if (["exchange-price-gap"].includes(eventCategory) || /\b(bank|banking|nifty bank|credit|deposit)\b/.test(value)) return "Banking";
+  if (/\b(tcs|infosys|wipro|hcltech|technology|software|it sector|it stocks)\b/.test(value)) return "Technology";
+  if (/\b(pharma|pharmaceutical|drug|fda|healthcare)\b/.test(value)) return "Pharmaceuticals";
+  if (/\b(auto|automobile|vehicle|maruti|mahindra|tata motors)\b/.test(value)) return "Automobiles";
+  if (eventCategory === "market-close") return "Market";
+  return originalTopic || "Market";
+}
+
 function areSameEvent(titleA, titleB) {
   if (areSimilarStories(titleA, titleB)) return true;
   const categoryA = storyEventCategory(titleA);
@@ -1634,6 +1648,10 @@ function getMarketArticleScore(item) {
 
   let score = 0;
 
+  if (item.article?.publicationDateSource === "unverified_google_news_listing") {
+    score -= 25;
+  }
+
   for (const [sourceName, sourceScore] of Object.entries(
     MARKET_SOURCE_SCORES
   )) {
@@ -2121,14 +2139,24 @@ function shouldPreserveStrongerRetainedSet(nextResult, previousResult) {
   return previousNewest > 0 && nextNewest > 0 && previousNewest - nextNewest > 6 * 60 * 60 * 1000;
 }
 
+function selectBestRetainedResult(results = []) {
+  return results
+    .filter((result) => Array.isArray(result?.articles))
+    .sort((a, b) => {
+      const recencyGap = newestEditorialTimestamp(b) - newestEditorialTimestamp(a);
+      if (Math.abs(recencyGap) > 6 * 60 * 60 * 1000) return recencyGap;
+      return b.articles.length - a.articles.length;
+    })[0] || null;
+}
+
 async function retainStableEditorialResult(cacheKey, nextResult, fallbackCacheKeys = []) {
+  const strongCacheKey = `${cacheKey}:strong-lkg`;
   const retainedResults = await Promise.all([
     getCachedValue(cacheKey, EDITORIAL_RESULT_RETENTION_MS),
+    getCachedValue(strongCacheKey, EDITORIAL_RESULT_RETENTION_MS),
     ...fallbackCacheKeys.map((key) => getCachedValue(key, EDITORIAL_RESULT_RETENTION_MS)),
   ]);
-  const previous = retainedResults
-    .filter((result) => Array.isArray(result?.articles))
-    .sort((a, b) => b.articles.length - a.articles.length)[0] || null;
+  const previous = selectBestRetainedResult(retainedResults);
   const previousCount = previous?.articles?.length || 0;
   const nextCount = nextResult?.articles?.length || 0;
   const collapsed = previousCount >= 5 && nextCount < Math.ceil(previousCount * 0.6);
@@ -2139,12 +2167,21 @@ async function retainStableEditorialResult(cacheKey, nextResult, fallbackCacheKe
       ? mergeEditorialResults(previous, nextResult)
       : nextResult;
   await setCacheEntry(cacheKey, selected, EDITORIAL_RESULT_RETENTION_MS);
+  if ((selected?.articles?.length || 0) >= 5) {
+    const priorStrong = retainedResults[1];
+    const shouldReplaceStrong = !Array.isArray(priorStrong?.articles) ||
+      selected.articles.length >= Math.ceil(priorStrong.articles.length * 0.6) ||
+      newestEditorialTimestamp(selected) > newestEditorialTimestamp(priorStrong);
+    if (shouldReplaceStrong) {
+      await setCacheEntry(strongCacheKey, selected, EDITORIAL_RESULT_RETENTION_MS);
+    }
+  }
   return selected;
 }
 
 async function getNiftyMarketEventsFromService() {
   const cachedResult = await getCachedValue(MARKET_EVENTS_RESULT_CACHE_KEY, 30 * 60 * 1000);
-  if (cachedResult) return presentStableMarketEvents(cachedResult);
+  if ((cachedResult?.articles?.length || 0) >= 5) return presentStableMarketEvents(cachedResult);
   const topicResults =
     await Promise.allSettled(
       
@@ -2239,7 +2276,7 @@ const articles = selectedArticles.map(
         article.link ||
         `nifty-market-${index}`,
 
-      category: topic,
+      category: classifyMarketEventTopic(topic, cleanedArticle.title),
       title: cleanedArticle.title,
       source: cleanedArticle.source,
       publishedAt: article.pubDate,
@@ -2519,7 +2556,7 @@ const companyName =
 
   const currentArticles = selectCompanyArticles(
     retainPublicationReliableCandidates(candidates),
-    8
+    Math.max(candidates.length, 1)
   ).map(({ article, cleanedArticle }, index) => {
 
       const analysis = analyseArticle(
@@ -2549,13 +2586,13 @@ const companyName =
       };
     });
 
-  return {
+  return retainStableEditorialResult(`news-editorial:company:${String(symbol).toUpperCase()}:v1`, {
     symbol: quote?.symbol || symbol,
     company: companyName,
     range: "Last 14 days",
     articleCount: currentArticles.length,
     articles: currentArticles,
-  };
+  });
 }
 
 function isRelevantToIndiaGsec(article, cleanedArticle) {
@@ -2709,5 +2746,7 @@ module.exports = {
     shouldPreserveStrongerRetainedSet,
     retainPublicationReliableCandidates,
     retainStableEditorialResult,
+    selectBestRetainedResult,
+    classifyMarketEventTopic,
   },
 };

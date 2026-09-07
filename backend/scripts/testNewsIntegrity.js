@@ -17,6 +17,15 @@ assert.strictEqual(
 );
 assert.strictEqual(publicationIntegrity({ pubDate: "2026-08-29T09:00:00Z", link: "https://publisher.test/2026/03/09/story" }, now).reason, "url_date_conflict");
 assert.strictEqual(publicationIntegrity({ pubDate: "2026-08-31T09:00:00Z" }, now).reason, "future");
+assert.strictEqual(
+  publicationIntegrity({
+    pubDate: "2026-04-06T09:00:00Z",
+    title: "Settlement scheduled for 30 September 2026",
+    contentSnippet: "The filing also refers to 7 September and 4 October.",
+  }, new Date("2026-09-07T12:00:00Z")).publishedAt,
+  "2026-04-06T09:00:00.000Z",
+  "dates mentioned in a headline or article body cannot replace publication chronology"
+);
 
 const leadershipTitles = [
   "HDFC Bank CEO Jagdishan opts out of reappointment; succession begins",
@@ -60,6 +69,10 @@ const cricinfo = _test.isBlockedGlobalArticle(
 );
 assert.strictEqual(cricinfo, true, "Cricinfo must be excluded from financial-news candidates");
 assert.strictEqual(_test.isBlockedLiveHeadline("List of Oil & Gas Stocks in India (2026)"), true);
+assert.strictEqual(_test.classifyMarketEventTopic("Autos & Pharma", "Maruti vehicle sales rise in August"), "Automobiles");
+assert.strictEqual(_test.classifyMarketEventTopic("Autos & Pharma", "Sun Pharma receives US FDA approval"), "Pharmaceuticals");
+assert.strictEqual(_test.classifyMarketEventTopic("Sector", "RBI credit rules weigh on banking stocks"), "Banking");
+assert.strictEqual(_test.classifyMarketEventTopic("Market", "Infosys earnings beat estimates"), "Earnings");
 
 const rankedIndexCandidates = _test.rankGlobalIndexCandidates([{
   provider: "marketaux",
@@ -120,6 +133,14 @@ assert.strictEqual(
   await _test.retainStableEditorialResult(recencyKey, stronger);
   const recencyProtected = await _test.retainStableEditorialResult(recencyKey, equallyLargeButOlder);
   assert.strictEqual(recencyProtected.articles[0].title, stronger.articles[0].title, "an equally large but materially older refresh cannot hide the stronger retained set");
+  assert.strictEqual(
+    _test.selectBestRetainedResult([
+      { articles: Array.from({ length: 40 }, (_, index) => ({ title: `Old ${index}`, publishedAt: "2026-08-29T08:00:00Z" })) },
+      { articles: Array.from({ length: 8 }, (_, index) => ({ title: `Current ${index}`, publishedAt: "2026-08-31T10:00:00Z" })) },
+    ]).articles[0].title,
+    "Current 0",
+    "a much older large retained pool cannot hide a healthy current retained generation"
+  );
 
   const newsSource = fs.readFileSync(require.resolve("../services/newsService"), "utf8");
   assert.ok(!/marketCalendars|marketClosure/.test(newsSource), "market calendars must not gate any news surface");

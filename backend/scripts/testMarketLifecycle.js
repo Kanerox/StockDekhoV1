@@ -135,6 +135,26 @@ assert.strictEqual(
 );
 
 const retained = { dataStatus: "eod", completedSessionConfirmed: true, marketTime: "2026-08-27T08:00:00.000Z" };
+const auctionCompleted = {
+  value: 25123,
+  dataStatus: "eod",
+  completedSessionConfirmed: true,
+  completedSessionDate: "2026-08-28",
+  marketTime: "2026-08-28T08:23:00.000Z",
+};
+assert.strictEqual(
+  _test.canReuseCompletedCard(auctionCompleted, hsi, new Date("2026-08-28T15:00:00.000Z")),
+  true,
+  "A validated auction-session close remains authoritative without requiring a synthetic continuous-close timestamp"
+);
+const weakerAfterAuction = _test.mergeRetainedHeadline({
+  value: 25000,
+  marketTime: "2026-08-28T08:29:00.000Z",
+  dataStatus: "last_updated",
+  completedSessionConfirmed: false,
+}, auctionCompleted, hsi, new Date("2026-08-28T15:00:00.000Z"));
+assert.strictEqual(weakerAfterAuction.dataStatus, "eod");
+assert.strictEqual(weakerAfterAuction.marketTime, auctionCompleted.marketTime);
 assert.strictEqual(
   _test.canReuseCompletedCard(retained, hsi, new Date("2026-08-28T00:30:00.000Z")),
   true,

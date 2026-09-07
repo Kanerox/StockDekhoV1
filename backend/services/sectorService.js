@@ -184,11 +184,28 @@ async function getSectorSummary(definition) {
   };
 }
 
+function mergeSectorOverview(results, retained = []) {
+  const retainedByKey = new Map(
+    (Array.isArray(retained) ? retained : []).map((item) => [item.key, item])
+  );
+  return SECTORS.map((definition, index) =>
+    results[index]?.status === "fulfilled"
+      ? results[index].value
+      : retainedByKey.get(definition.key) || null
+  ).filter(Boolean);
+}
+
 async function getSectorOverview() {
-  const cached = await getCachedValue("sector-overview:v3", 15 * 60 * 1000);
+  const cacheKey = "sector-overview:v3";
+  const cached = await getCachedValue(cacheKey, 15 * 60 * 1000);
   if (cached) return cached;
-  const overview = await Promise.all(SECTORS.map(getSectorSummary));
-  await setCacheEntry("sector-overview:v3", overview, 24 * 60 * 60 * 1000);
+  const retained = await getCachedValue(cacheKey, 24 * 60 * 60 * 1000);
+  const results = await Promise.allSettled(SECTORS.map(getSectorSummary));
+  const overview = mergeSectorOverview(results, retained);
+  if (overview.length === 0) {
+    throw new Error("Sector performance is temporarily unavailable");
+  }
+  await setCacheEntry(cacheKey, overview, 24 * 60 * 60 * 1000);
   return overview;
 }
 
@@ -249,4 +266,5 @@ async function getSectorDetail(key, range = "1Y") {
 module.exports = {
   getSectorOverview,
   getSectorDetail,
+  _test: { mergeSectorOverview },
 };

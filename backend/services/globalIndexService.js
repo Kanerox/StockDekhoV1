@@ -185,12 +185,17 @@ function expectedLatestWeekdaySession(definition, now = new Date()) {
 function canReuseCompletedCard(card, definition, now = new Date()) {
   if (!card || card.dataStatus !== "eod" || card.completedSessionConfirmed !== true) return false;
   if (observationAgeMs(card.marketTime, now) < -60 * 1000) return false;
-  const cardSession = exchangeObservationDate(card.marketTime, definition);
+  const cardSession = card.completedSessionDate || exchangeObservationDate(card.marketTime, definition);
   if (!cardSession) return false;
-  const expectedClose = new Date(exchangeSessionCloseTimestamp(cardSession, definition)).getTime();
-  const observedClose = new Date(card.marketTime).getTime();
-  if (!Number.isFinite(expectedClose) || Math.abs(observedClose - expectedClose) > 2 * 60 * 1000) {
-    return false;
+  // New records carry their validated exchange-session identity explicitly.
+  // Retain the strict timestamp check only for legacy cache entries whose
+  // completion provenance predates completedSessionDate.
+  if (!card.completedSessionDate) {
+    const expectedClose = new Date(exchangeSessionCloseTimestamp(cardSession, definition)).getTime();
+    const observedClose = new Date(card.marketTime).getTime();
+    if (!Number.isFinite(expectedClose) || Math.abs(observedClose - expectedClose) > 2 * 60 * 1000) {
+      return false;
+    }
   }
   const clock = exchangeClock(definition, now);
   const tradingDay = !exchangeClosure(definition, now).closed;
@@ -225,6 +230,9 @@ function normalizeNonTradingObservation(card, definition) {
     isStale: false,
     dataProvider: `${card.dataProvider || "Market provider"} · previous completed session`,
     completedSessionConfirmed: true,
+    completedSessionDate: sessionDate,
+    observationDate: sessionDate,
+    observationKind: "session_close",
   };
 }
 
@@ -253,8 +261,8 @@ function retainedCardWithCurrentStatus(card, definition, now = new Date()) {
 function shouldUseRetainedHeadline(detail, retained, definition) {
   if (!retained?.marketTime || !Number.isFinite(Number(retained?.value))) return false;
   if (!detail?.marketTime || !Number.isFinite(Number(detail?.value))) return true;
-  const retainedSession = exchangeObservationDate(retained.marketTime, definition);
-  const detailSession = exchangeObservationDate(detail.marketTime, definition);
+  const retainedSession = retained.completedSessionDate || exchangeObservationDate(retained.marketTime, definition);
+  const detailSession = detail.completedSessionDate || exchangeObservationDate(detail.marketTime, definition);
   if (!retainedSession) return false;
   if (!detailSession || retainedSession > detailSession) return true;
   if (retainedSession < detailSession) return false;
@@ -262,8 +270,8 @@ function shouldUseRetainedHeadline(detail, retained, definition) {
   return new Date(retained.marketTime).getTime() > new Date(detail.marketTime).getTime();
 }
 
-function mergeRetainedHeadline(detail, retained, definition) {
-  const currentRetained = retainedCardWithCurrentStatus(retained, definition);
+function mergeRetainedHeadline(detail, retained, definition, now = new Date()) {
+  const currentRetained = retainedCardWithCurrentStatus(retained, definition, now);
   if (!shouldUseRetainedHeadline(detail, currentRetained, definition)) return detail;
   return {
     ...detail,
@@ -276,6 +284,9 @@ function mergeRetainedHeadline(detail, retained, definition) {
     isStale: Boolean(currentRetained.isStale),
     dataProvider: currentRetained.dataProvider,
     completedSessionConfirmed: currentRetained.completedSessionConfirmed === true,
+    completedSessionDate: currentRetained.completedSessionDate || null,
+    observationDate: currentRetained.observationDate || null,
+    observationKind: currentRetained.observationKind || null,
     sessionDateOnly: currentRetained.sessionDateOnly,
     headlineFromRetainedObservation: true,
   };
@@ -530,6 +541,10 @@ async function getGlobalIndexDetail(key, range = "1Y") {
       ? (usedFallbackHistory ? "Fallback historical market data" : definition.historySymbol ? "Yahoo Japan official cash-index history" : "Completed daily market data")
       : (quote.quoteSourceName || "market provider"),
     completedSessionConfirmed: hasCompletedDailyClose,
+    completedSessionDate: hasCompletedDailyClose ? latestSessionDate : null,
+    observationDate: hasCompletedDailyClose ? latestSessionDate : quoteSessionDate,
+    observationKind: hasCompletedDailyClose ? "session_close" : "intraday",
+    providerObservationTime: rawObservationTime,
     marketClosure: closure.type === "holiday" ? closure.name : null,
     periodReturn: returnPercent(points),
     periodHigh: Math.max(...closes),
@@ -605,6 +620,10 @@ async function getGlobalIndexOverview() {
         asOf: detail.asOf, dataStatus: detail.dataStatus, isStale: detail.isStale,
         dataProvider: detail.dataProvider, sessionDateOnly: detail.sessionDateOnly,
         completedSessionConfirmed: detail.completedSessionConfirmed === true,
+        completedSessionDate: detail.completedSessionDate || null,
+        observationDate: detail.observationDate || null,
+        observationKind: detail.observationKind || null,
+        providerObservationTime: detail.providerObservationTime || null,
         marketClosure: detail.marketClosure,
         isGlobalIndex: true,
       };
