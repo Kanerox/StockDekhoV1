@@ -14,6 +14,7 @@ import { getPerformanceHistory } from "./api/performanceApi";
 import { getSectorDetail, getSectors } from "./api/sectorApi";
 import stockUniverse from "./data/stockUniverse.json";
 import { shouldRunVisibilityRefresh } from "./utils/refreshPolicy";
+import { SEARCH_TOPIC_ALIASES, searchTopicSuggestion } from "./utils/searchSemantics";
 import {
   ResponsiveContainer,
   LineChart,
@@ -1414,7 +1415,7 @@ function Header({
     active?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [page]);
 
-  const results = useMemo(() => {
+  const scoredResults = useMemo(() => {
     if (!query.trim()) {
       return [];
     }
@@ -1423,9 +1424,11 @@ function Header({
       .map((stock) => ({ stock, score: companySearchScore(stock, query) }))
       .filter(({ score }) => score >= 0)
       .sort((a, b) => b.score - a.score || a.stock.name.localeCompare(b.stock.name))
-      .map(({ stock }) => stock)
       .slice(0, 8);
   }, [query]);
+  const results = scoredResults.map(({ stock }) => stock);
+  const topicSuggestion = useMemo(() => searchTopicSuggestion(query), [query]);
+  const showTopicFirst = Boolean(topicSuggestion) && !scoredResults.some(({ score }) => score >= 950);
 
   const navItems = [
     { key: "markets", label: "Markets" },
@@ -1484,6 +1487,12 @@ function Header({
           </div>
           {searchOpen && query.trim() && (
             <div className="sd-fade-in" style={{ position: "absolute", top: 40, left: 0, right: 0, background: THEME.panelAlt, border: `1px solid ${THEME.hairline}`, borderRadius: 6, overflow: "hidden", boxShadow: "0 12px 28px rgba(0,0,0,0.4)" }}>
+              {showTopicFirst && (
+                <button onClick={() => { onSearchTopic(query.trim()); setSearchOpen(false); }}
+                  style={{ width: "100%", padding: "10px 12px", textAlign: "left", border: "none", borderBottom: `1px solid ${THEME.hairline}`, background: "rgba(201,162,75,0.08)", color: THEME.gold, cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}>
+                  Explore {topicSuggestion.label}
+                </button>
+              )}
               {results.map((r) => (
                 <div key={r.ticker} className="sd-row-hover" onClick={() => { onSelectSearch(r.ticker); setSearchOpen(false); setQuery(""); }}
                   style={{ padding: "9px 12px", cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: `1px solid ${THEME.hairline}` }}>
@@ -1493,12 +1502,12 @@ function Header({
                   </div>
                 </div>
               ))}
-              <button
+              {!showTopicFirst && <button
                 onClick={() => { onSearchTopic(query.trim()); setSearchOpen(false); }}
                 style={{ width: "100%", padding: "10px 12px", textAlign: "left", border: "none", background: "rgba(201,162,75,0.08)", color: THEME.gold, cursor: "pointer", fontSize: 12.5, fontWeight: 700 }}
               >
                 View stocks and news related to “{query.trim()}”
-              </button>
+              </button>}
             </div>
           )}
         </div>
@@ -7127,31 +7136,6 @@ const SEARCH_TOPIC_TICKERS = {
   "real estate": ["DLF", "LODHA", "GODREJPROP", "OBEROIRLTY", "PHOENIXLTD", "PRESTIGE"],
   "consumer electronics": ["DIXON", "VOLTAS", "BLUESTARCO", "HAVELLS", "LGEINDIA"],
   jewellery: ["TITAN", "KALYANKJIL"], "food delivery": ["ETERNAL", "SWIGGY", "JUBLFOOD"],
-};
-
-const SEARCH_TOPIC_ALIASES = {
-  india: "indian markets", indian: "indian markets", "india markets": "indian markets", nse: "indian markets", nifty: "indian markets", sensex: "indian markets",
-  volatility: "india vix", vix: "india vix", "india vix": "india vix",
-  bonds: "india 10y g-sec", "bond yields": "india 10y g-sec", yields: "india 10y g-sec", "government bonds": "india 10y g-sec", "g-sec": "india 10y g-sec", gsec: "india 10y g-sec", "india 10y": "india 10y g-sec",
-  global: "global markets", "world markets": "global markets",
-  us: "united states", usa: "united states", "us markets": "united states", "american stocks": "united states", "s&p 500": "united states", sp500: "united states", nasdaq: "united states", dow: "united states", "dow jones": "united states",
-  chinese: "china", "chinese stocks": "china", "csi 300": "china", "shanghai composite": "china",
-  "hang seng": "hong kong", nikkei: "japan", "nikkei 225": "japan", korea: "south korea", kospi: "south korea", taiex: "taiwan", "taiwan weighted": "taiwan",
-  european: "europe", "european markets": "europe", "euro stoxx": "europe", "euro stoxx 50": "europe", uk: "united kingdom", ftse: "united kingdom", "ftse 100": "united kingdom", dax: "germany",
-  ai: "artificial intelligence", "artificial intelligence": "artificial intelligence", "machine learning": "artificial intelligence",
-  chip: "semiconductors", chips: "semiconductors", semiconductor: "semiconductors",
-  defence: "defence", defense: "defence", bank: "banking", banks: "banking",
-  insurer: "insurance", insurers: "insurance", nbfcs: "nbfc", "non banking finance": "nbfc",
-  "mutual funds": "asset management", amc: "asset management", exchanges: "stock exchanges",
-  auto: "automobiles", automobile: "automobiles", cars: "automobiles", ev: "electric vehicles", evs: "electric vehicles",
-  telecommunications: "telecom", it: "it services", "information technology": "it services", technology: "it services", software: "it services",
-  railway: "railways", airport: "aviation", airports: "aviation", port: "ports",
-  utilities: "power", renewable: "renewable energy", renewables: "renewable energy", "clean energy": "renewable energy",
-  oil: "oil and gas", gas: "oil and gas", metal: "metals", steel: "metals",
-  chemical: "chemicals", pharma: "pharmaceuticals", pharmaceutical: "pharmaceuticals",
-  health: "pharmaceuticals", healthcare: "pharmaceuticals", "health care": "pharmaceuticals", medicines: "pharmaceuticals", hospital: "hospitals", "consumer staples": "fmcg", staples: "fmcg",
-  property: "real estate", electronics: "consumer electronics", jewelry: "jewellery",
-  jio: "telecom", hdfc: "banking", "state bank": "banking", realty: "real estate", housing: "real estate", crude: "oil and gas", petroleum: "oil and gas", mining: "metals",
 };
 
 const SEARCH_TOPIC_INDEX_KEYS = {

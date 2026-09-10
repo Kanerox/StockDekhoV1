@@ -15,9 +15,10 @@ assert.strictEqual(merged[1].marker, `retained-${SECTORS[1].key}`, "the failed s
 assert.strictEqual(merged[0].marker, `fresh-${SECTORS[0].key}`, "healthy sectors continue to refresh independently");
 
 const appSource = fs.readFileSync(require.resolve("../../frontend/src/App.jsx"), "utf8");
-assert.match(appSource, /volatility:\s*"india vix"/);
-assert.match(appSource, /bonds:\s*"india 10y g-sec"/);
-assert.match(appSource, /it:\s*"it services"/);
+const searchSource = fs.readFileSync(require.resolve("../../frontend/src/utils/searchSemantics.js"), "utf8");
+assert.match(searchSource, /volatility:\s*"india vix"/);
+assert.match(searchSource, /bonds:\s*"india 10y g-sec"/);
+assert.match(searchSource, /it:\s*"it services"/);
 assert.match(appSource, /newsLoading && <Panel[^>]*>Loading relevant market coverage/);
 assert.match(appSource, /articlesForPage\(formattedLiveNews, safeNewsPage, 6\)/);
 assert.match(appSource, /Session Close —/);

@@ -19,6 +19,24 @@ async function getRetainedGlobalCard(key) {
   return getCachedValue(globalCardCacheKey(key), GLOBAL_CARD_RETENTION_MS);
 }
 
+function globalHeadlineCard(detail) {
+  return {
+    key: detail.key, name: detail.name, symbol: detail.symbol, region: detail.region,
+    description: detail.description, value: detail.value, change: detail.change,
+    changePercent: detail.changePercent, oneMonthReturn: detail.periodReturn,
+    sparkline: (detail.points || []).map((point) => point.adjustedClose),
+    marketTime: detail.marketTime, asOf: detail.asOf, dataStatus: detail.dataStatus,
+    isStale: detail.isStale, dataProvider: detail.dataProvider,
+    sessionDateOnly: detail.sessionDateOnly,
+    completedSessionConfirmed: detail.completedSessionConfirmed === true,
+    completedSessionDate: detail.completedSessionDate || null,
+    observationDate: detail.observationDate || null,
+    observationKind: detail.observationKind || null,
+    providerObservationTime: detail.providerObservationTime || null,
+    marketClosure: detail.marketClosure, isGlobalIndex: true,
+  };
+}
+
 function finite(value) {
   return Number.isFinite(Number(value)) ? Number(value) : null;
 }
@@ -292,6 +310,17 @@ function mergeRetainedHeadline(detail, retained, definition, now = new Date()) {
   };
 }
 
+async function persistAuthoritativeGlobalHeadline(detail, definition, now = new Date()) {
+  const retained = await getRetainedGlobalCard(definition.key);
+  const merged = mergeRetainedHeadline(detail, retained, definition, now);
+  await setCacheEntry(
+    globalCardCacheKey(definition.key),
+    globalHeadlineCard(merged),
+    GLOBAL_CARD_RETENTION_MS
+  );
+  return merged;
+}
+
 async function getIntradayObservation(definition) {
   const cached = intradayCache.get(definition.key);
   if (cached && cached.expiresAt > Date.now()) return cached.value;
@@ -352,7 +381,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
         new Date(),
         false
       );
-      return {
+      return persistAuthoritativeGlobalHeadline({
         ...definition,
         value: quoteOnlyValue,
         change: finite(quoteOnly.regularMarketChange),
@@ -372,10 +401,10 @@ async function getGlobalIndexDetail(key, range = "1Y") {
         range,
         historyUnavailable: true,
         historyError: reason || "Insufficient global-index history",
-      };
+      }, definition);
     }
     if (!retainedHeadline) throw new Error(reason || "Insufficient global-index history");
-    return {
+    return persistAuthoritativeGlobalHeadline({
       ...definition,
       value: retainedHeadline.value,
       change: retainedHeadline.change,
@@ -396,7 +425,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
       historyUnavailable: true,
       historyError: reason || "Insufficient global-index history",
       headlineFromRetainedObservation: true,
-    };
+    }, definition);
   }
   const now = new Date();
   let latestHistoricalPoint = points.at(-1);
@@ -552,13 +581,28 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     points,
     range,
   };
-  return mergeRetainedHeadline(detail, retainedHeadline, definition);
+  return persistAuthoritativeGlobalHeadline(
+    mergeRetainedHeadline(detail, retainedHeadline, definition),
+    definition,
+    now
+  );
 }
 
 async function getGlobalIndexOverview() {
   const cacheKey = "global-index-overview:v10";
   const cached = await getCachedValue(cacheKey, 5 * 60 * 1000);
-  if (cached) return cached;
+  if (cached) {
+    const retainedCards = await Promise.all(
+      GLOBAL_INDICES.map((definition) => getRetainedGlobalCard(definition.key))
+    );
+    return cached.map((item) => {
+      const definition = getGlobalIndexDefinition(item.key);
+      const retained = retainedCards.find((card) => card?.key === item.key);
+      return definition
+        ? globalHeadlineCard(mergeRetainedHeadline(item, retained, definition))
+        : item;
+    });
+  }
   if (overviewInFlight) return overviewInFlight;
 
   overviewInFlight = (async () => {
@@ -612,21 +656,7 @@ async function getGlobalIndexOverview() {
       if (detail.historyUnavailable && retained) {
         return retainedCardWithCurrentStatus(retained, definition);
       }
-      return {
-        key: detail.key, name: detail.name, symbol: detail.symbol, region: detail.region,
-        description: detail.description, value: detail.value, change: detail.change,
-        changePercent: detail.changePercent, oneMonthReturn: detail.periodReturn,
-        sparkline: detail.points.map((point) => point.adjustedClose), marketTime: detail.marketTime,
-        asOf: detail.asOf, dataStatus: detail.dataStatus, isStale: detail.isStale,
-        dataProvider: detail.dataProvider, sessionDateOnly: detail.sessionDateOnly,
-        completedSessionConfirmed: detail.completedSessionConfirmed === true,
-        completedSessionDate: detail.completedSessionDate || null,
-        observationDate: detail.observationDate || null,
-        observationKind: detail.observationKind || null,
-        providerObservationTime: detail.providerObservationTime || null,
-        marketClosure: detail.marketClosure,
-        isGlobalIndex: true,
-      };
+      return globalHeadlineCard(detail);
       })
     );
       results.forEach((result) => {
@@ -692,6 +722,7 @@ module.exports = {
     retainedCardWithCurrentStatus,
     shouldUseRetainedHeadline,
     mergeRetainedHeadline,
+    globalHeadlineCard,
     expectedLatestWeekdaySession,
   },
 };

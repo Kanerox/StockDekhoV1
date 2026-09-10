@@ -11,6 +11,11 @@ const {
   publicationIntegrity,
   isGoogleNewsWrapper,
 } = require("../news/utils/publicationDate");
+const {
+  registerCanonicalArticles,
+  getCanonicalArticles,
+  rankCanonicalArticles,
+} = require("../news/canonicalArticleCorpus");
 
 const BLOCKED_NEWS_TERMS = [
   "class action",
@@ -840,12 +845,14 @@ function normalizePublicationCandidate(article) {
       ...article,
       pubDate: null,
       recencyAt: integrity.publishedAt,
+      publicationPrecision: "unknown",
       publicationDateSource: "unverified_google_news_listing",
     };
   }
   return {
     ...article,
     pubDate: integrity.publishedAt,
+    publicationPrecision: integrity.precision,
     publicationDateSource: integrity.reason,
   };
 }
@@ -855,11 +862,28 @@ function articleRecencyValue(article) {
 }
 
 function publicationPresentation(article) {
+  const precision = article?.publicationPrecision || (article?.pubDate ? "exact_datetime" : "unknown");
   return {
-    publishedAt: article?.pubDate || null,
+    publishedAt: precision === "exact_datetime" ? article?.pubDate || null : null,
     recencyAt: articleRecencyValue(article),
     publicationDateStatus: article?.publicationDateSource || null,
+    publicationPrecision: precision,
   };
+}
+
+function isWhatMovedEligibleArticle(article, cleanedArticle = cleanGoogleNewsArticle(article)) {
+  const text = [cleanedArticle.title, cleanedArticle.snippet, article?.contentSnippet, article?.content]
+    .filter(Boolean).join(" ").toLowerCase();
+  const eventSignals = /\b(launch(?:es|ed)?|raises?|cuts?|flows?|inflows?|outflows?|sebi|rbi|regulat(?:or|ion)|acquires?|merger|approval|announces?|reports?|earnings|results?|policy|fund manager|asset management compan(?:y|ies)|amc)\b/i;
+  if (eventSignals.test(text)) return true;
+  const productReferenceSignals = [
+    /\bdirect plan returns?\b/i,
+    /\bregular plan portfolio\b/i,
+    /\bnav\b.*\b(?:review|return|rating|calculator|today)\b/i,
+    /\b(?:mutual fund|etf|fund)\b.*\b(?:information|details?|portfolio|asset allocation|minimum sip|expense ratio|returns? calculator|review)\b/i,
+    /\b(?:fund info|scheme details?|plan portfolio)\b/i,
+  ];
+  return !productReferenceSignals.some((pattern) => pattern.test(text));
 }
 
 function sourceIdentity(article, cleanedArticle) {
@@ -1315,7 +1339,7 @@ async function getGlobalMarketNewsFromService() {
     range: "Last 14 days",
     articleCount: articles.length,
     articles,
-  });
+  }, [], { destination: "global" });
 }
 
 function isRelevantToVixTopic(article, cleanedArticle, topic) {
@@ -1494,11 +1518,11 @@ async function getVixMarketNewsFromService() {
     })
   );
 
-  return {
+  return retainStableEditorialResult("news-editorial:indian-index:VIX:v1", {
     range: "Last 30 days",
     articleCount: articles.length,
     articles,
-  };
+  }, [], { destination: "indian-index:VIX" });
 }
 
 const MARKET_SOURCE_SCORES = {
@@ -2149,7 +2173,21 @@ function selectBestRetainedResult(results = []) {
     })[0] || null;
 }
 
-async function retainStableEditorialResult(cacheKey, nextResult, fallbackCacheKeys = []) {
+async function retainStableEditorialResult(cacheKey, nextResult, fallbackCacheKeys = [], options = {}) {
+  const destination = options.destination || null;
+  let canonicalNext = nextResult;
+  if (destination) {
+    const normalizedNext = await registerCanonicalArticles(nextResult?.articles || [], [destination]);
+    const sharedArticles = await getCanonicalArticles(destination);
+    canonicalNext = {
+      ...nextResult,
+      articles: rankCanonicalArticles(mergeEditorialResults(
+        { articles: normalizedNext },
+        { articles: sharedArticles }
+      ).articles, new Date(), destination),
+    };
+    canonicalNext.articleCount = canonicalNext.articles.length;
+  }
   const strongCacheKey = `${cacheKey}:strong-lkg`;
   const retainedResults = await Promise.all([
     getCachedValue(cacheKey, EDITORIAL_RESULT_RETENTION_MS),
@@ -2158,14 +2196,16 @@ async function retainStableEditorialResult(cacheKey, nextResult, fallbackCacheKe
   ]);
   const previous = selectBestRetainedResult(retainedResults);
   const previousCount = previous?.articles?.length || 0;
-  const nextCount = nextResult?.articles?.length || 0;
+  const nextCount = canonicalNext?.articles?.length || 0;
   const collapsed = previousCount >= 5 && nextCount < Math.ceil(previousCount * 0.6);
-  const regressed = shouldPreserveStrongerRetainedSet(nextResult, previous);
+  const regressed = shouldPreserveStrongerRetainedSet(canonicalNext, previous);
   const selected = collapsed
-    ? mergeEditorialResults(nextResult, previous)
+    ? mergeEditorialResults(canonicalNext, previous)
     : regressed
-      ? mergeEditorialResults(previous, nextResult)
-      : nextResult;
+      ? mergeEditorialResults(previous, canonicalNext)
+      : canonicalNext;
+  selected.articles = rankCanonicalArticles(selected.articles || [], new Date(), destination);
+  selected.articleCount = selected.articles.length;
   await setCacheEntry(cacheKey, selected, EDITORIAL_RESULT_RETENTION_MS);
   if ((selected?.articles?.length || 0) >= 5) {
     const priorStrong = retainedResults[1];
@@ -2176,6 +2216,7 @@ async function retainStableEditorialResult(cacheKey, nextResult, fallbackCacheKe
       await setCacheEntry(strongCacheKey, selected, EDITORIAL_RESULT_RETENTION_MS);
     }
   }
+  if (destination) await registerCanonicalArticles(selected.articles, [destination]);
   return selected;
 }
 
@@ -2225,7 +2266,8 @@ async function getNiftyMarketEventsFromService() {
       article,
       cleanedArticle
     ) &&
-    isPlausibleMarketPublication(article, cleanedArticle)
+    isPlausibleMarketPublication(article, cleanedArticle) &&
+    isWhatMovedEligibleArticle(article, cleanedArticle)
 )
         .sort(
           (itemA, itemB) =>
@@ -2279,9 +2321,8 @@ const articles = selectedArticles.map(
       category: classifyMarketEventTopic(topic, cleanedArticle.title),
       title: cleanedArticle.title,
       source: cleanedArticle.source,
-      publishedAt: article.pubDate,
-      recencyAt: articleRecencyValue(article),
-      publicationDateStatus: article.publicationDateSource,
+      ...publicationPresentation(article),
+      editorialScore: getMarketArticleScore({ article, cleanedArticle, topic }),
       link: article.link,
 
       summary: isMeaningfulSummary(
@@ -2297,7 +2338,7 @@ const articles = selectedArticles.map(
     range: "Recent market sessions",
     articleCount: articles.length,
     articles,
-  }, LEGACY_MARKET_EVENTS_RESULT_CACHE_KEYS);
+  }, LEGACY_MARKET_EVENTS_RESULT_CACHE_KEYS, { destination: "market" });
   return presentStableMarketEvents(retained);
 }
 
@@ -2573,6 +2614,7 @@ const companyName =
         title: cleanedArticle.title,
         source: cleanedArticle.source,
         ...publicationPresentation(article),
+        editorialScore: 75,
         link: article.link,
         snippet: cleanedArticle.snippet,
 
@@ -2592,7 +2634,7 @@ const companyName =
     range: "Last 14 days",
     articleCount: currentArticles.length,
     articles: currentArticles,
-  });
+  }, [], { destination: `company:${String(symbol).toUpperCase()}` });
 }
 
 function isRelevantToIndiaGsec(article, cleanedArticle) {
@@ -2631,7 +2673,9 @@ async function getIndiaGsecNewsFromService() {
     link: article.link,
     summary: isMeaningfulSummary(cleanedArticle.title, cleanedArticle.snippet) ? cleanedArticle.snippet : "",
   }));
-  return { range: "Last 15 days", articleCount: articles.length, articles };
+  return retainStableEditorialResult("news-editorial:indian-index:INDIA10Y:v1", {
+    range: "Last 15 days", articleCount: articles.length, articles,
+  }, [], { destination: "indian-index:INDIA10Y" });
 }
 
 function rankGlobalIndexCandidates(fetched, config) {
@@ -2667,18 +2711,19 @@ async function getGlobalIndexNewsFromService(key) {
   const articles = deduplicateAndLimit(
     retainPublicationReliableCandidates(candidates, { allowValidatedWrappers: true }),
     Math.max(candidates.length, 1)
-  ).map(({ article, cleanedArticle, topic }, index) => ({
+  ).map(({ article, cleanedArticle, topic, relevanceScore }, index) => ({
     id: article.guid || article.link || `global-index-${key}-${index}`,
     topic,
     title: cleanedArticle.title,
     source: cleanedArticle.source,
     ...publicationPresentation(article),
+    editorialScore: Number(relevanceScore || 0),
     link: article.link,
     summary: isMeaningfulSummary(cleanedArticle.title, cleanedArticle.snippet) ? cleanedArticle.snippet : "",
   }));
   return retainStableEditorialResult(`news-editorial:global-index:${String(key).toUpperCase()}:v1`, {
     key: String(key).toUpperCase(), range: "Last 15 days", articleCount: articles.length, articles,
-  });
+  }, [], { destination: `global-index:${String(key).toUpperCase()}` });
 }
 
 async function getSectorNewsFromService(key) {
@@ -2711,18 +2756,19 @@ async function getSectorNewsFromService(key) {
     retainPublicationReliableCandidates(candidates, { allowValidatedWrappers: true }),
     Math.max(candidates.length, 1)
   )
-    .map(({ article, cleanedArticle, topic }, index) => ({
+    .map(({ article, cleanedArticle, topic, relevanceScore }, index) => ({
       id: article.guid || article.link || `sector-${sectorKey}-${index}`,
       topic,
       title: cleanedArticle.title,
       source: cleanedArticle.source,
       ...publicationPresentation(article),
+      editorialScore: Number(relevanceScore || 0),
       link: article.link,
       summary: isMeaningfulSummary(cleanedArticle.title, cleanedArticle.snippet) ? cleanedArticle.snippet : "",
     }));
   return retainStableEditorialResult(`news-editorial:sector:${sectorKey}:v1`, {
     sector: sectorKey, range: "Last 15 days", articleCount: articles.length, articles,
-  });
+  }, [], { destination: `sector:${sectorKey}` });
 }
 
 module.exports = {
@@ -2748,5 +2794,6 @@ module.exports = {
     retainStableEditorialResult,
     selectBestRetainedResult,
     classifyMarketEventTopic,
+    isWhatMovedEligibleArticle,
   },
 };

@@ -25,23 +25,25 @@ function extractDateFromUrl(value = "") {
 }
 
 function publicationIntegrity(article, now = new Date()) {
-  const published = validDate(article?.pubDate || article?.publishedAt);
-  if (!published) return { valid: false, publishedAt: null, reason: "missing_or_malformed" };
+  const rawValue = article?.pubDate || article?.publishedAt;
+  const published = validDate(rawValue);
+  if (!published) return { valid: false, publishedAt: null, precision: "unknown", reason: "missing_or_malformed" };
   if (published.getTime() > now.getTime() + MAX_FUTURE_SKEW_MS) {
-    return { valid: false, publishedAt: null, reason: "future" };
+    return { valid: false, publishedAt: null, precision: "unknown", reason: "future" };
   }
 
   const urlDate = extractDateFromUrl(article?.link || article?.url);
   if (urlDate) {
     const differenceDays = Math.abs(published.getTime() - urlDate.getTime()) / (24 * 60 * 60 * 1000);
     if (differenceDays > 2) {
-      return { valid: false, publishedAt: null, reason: "url_date_conflict", urlDate: dateKey(urlDate) };
+      return { valid: false, publishedAt: null, precision: "unknown", reason: "url_date_conflict", urlDate: dateKey(urlDate) };
     }
   }
 
   return {
     valid: true,
     publishedAt: published.toISOString(),
+    precision: /^\d{4}-\d{2}-\d{2}$/.test(String(rawValue).trim()) ? "date_only" : "exact_datetime",
     reason: "provider_publication_time",
     urlDate: dateKey(urlDate),
   };

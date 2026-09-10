@@ -16,8 +16,10 @@ const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
 const {
   sessionKey,
   isIndianMarketOpen,
+  indianMarketPhase,
   classifyObservationLifecycle,
 } = require("../utils/marketDataValidation");
+const { marketClosure } = require("../config/marketCalendars");
 
 const LEADERSHIP_SNAPSHOT_FRESH_MS = 5 * 60 * 1000;
 const CLOSED_LEADERSHIP_SNAPSHOT_FRESH_MS = 6 * 60 * 60 * 1000;
@@ -58,9 +60,9 @@ function indexSummaryCacheKey(key) {
   return `index-summary:${key}:v2`;
 }
 
-function withCurrentFreshness(observation) {
+function withCurrentFreshness(observation, now = new Date()) {
   if (!observation?.marketTime) return observation;
-  const lifecycle = classifyObservationLifecycle(observation);
+  const lifecycle = classifyObservationLifecycle(observation, now);
   const dataStatus = lifecycle.dataStatus;
   return {
     ...observation,
@@ -68,6 +70,69 @@ function withCurrentFreshness(observation) {
     dataStatus,
     isStale: dataStatus === "stale",
   };
+}
+
+function indianTradingDay(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Kolkata",
+    weekday: "short",
+  }).formatToParts(now);
+  const weekday = parts.find((part) => part.type === "weekday")?.value;
+  return !marketClosure("INDIA", sessionKey(now), weekday).closed;
+}
+
+function observationTimestamp(observation) {
+  const value = new Date(observation?.marketTime || observation?.asOf || 0).getTime();
+  return Number.isFinite(value) ? value : 0;
+}
+
+function observationSession(observation) {
+  return observation?.observationDate || sessionKey(observation?.marketTime || observation?.asOf);
+}
+
+function selectAuthoritativeIndexObservation(candidate, retained, now = new Date()) {
+  if (!retained) return candidate;
+  if (!candidate) return withCurrentFreshness(retained, now);
+  const currentCandidate = withCurrentFreshness(candidate, now);
+  const currentRetained = withCurrentFreshness(retained, now);
+  const candidateSession = observationSession(currentCandidate);
+  const retainedSession = observationSession(currentRetained);
+  if (!retainedSession) return currentCandidate;
+  if (!candidateSession || retainedSession > candidateSession) return currentRetained;
+  if (candidateSession > retainedSession) return currentCandidate;
+  const candidateCompleted = currentCandidate.observationKind === "session_close" && currentCandidate.dataStatus === "eod";
+  const retainedCompleted = currentRetained.observationKind === "session_close" && currentRetained.dataStatus === "eod";
+  if (retainedCompleted !== candidateCompleted) return retainedCompleted ? currentRetained : currentCandidate;
+  return observationTimestamp(currentRetained) > observationTimestamp(currentCandidate)
+    ? currentRetained
+    : currentCandidate;
+}
+
+function mergeAuthoritativeIndexHeadline(detail, retained, now = new Date()) {
+  const authoritative = selectAuthoritativeIndexObservation(detail, retained, now);
+  if (authoritative === detail) return detail;
+  return {
+    ...detail,
+    value: authoritative.value,
+    change: authoritative.change,
+    changePercent: authoritative.changePercent,
+    marketTime: authoritative.marketTime,
+    asOf: authoritative.asOf || authoritative.marketTime,
+    observationDate: authoritative.observationDate || null,
+    observationKind: authoritative.observationKind || null,
+    dataStatus: authoritative.dataStatus,
+    isStale: Boolean(authoritative.isStale),
+    dataProvider: authoritative.dataProvider || detail.dataProvider,
+    quoteSource: authoritative.quoteSource || detail.quoteSource,
+  };
+}
+
+function cachedOverviewNeedsReconciliation(cached, now = new Date()) {
+  if (!Array.isArray(cached) || indianMarketPhase(now) !== "closed" || !indianTradingDay(now)) return false;
+  const today = sessionKey(now);
+  return cached.some((item) =>
+    observationSession(item) === today && item?.observationKind !== "session_close"
+  );
 }
 
 function valueOrNull(value) {
@@ -289,7 +354,14 @@ async function getIndexOverview() {
   // labels must be evaluated against the current exchange phase on every
   // response. Otherwise a quote cached while LIVE can remain labelled LIVE
   // for the full post-close cache window.
-  if (cached) return cached.map(withCurrentFreshness);
+  if (cached && !cachedOverviewNeedsReconciliation(cached)) {
+    const retained = await Promise.all(cached.map((item) =>
+      getCachedValue(indexSummaryCacheKey(item.key), INDEX_OVERVIEW_RETENTION_MS)
+    ));
+    return cached.map((item, index) =>
+      selectAuthoritativeIndexObservation(item, retained[index])
+    );
+  }
   if (overviewInFlight) return overviewInFlight;
 
   overviewInFlight = (async () => {
@@ -297,12 +369,17 @@ async function getIndexOverview() {
   const summaries = await Promise.all(results.map(async (result, index) => {
     const definition = INDICES[index];
     if (result.status === "fulfilled") {
-      await setCacheEntry(
+      const retained = await getCachedValue(
         indexSummaryCacheKey(definition.key),
-        result.value,
         INDEX_OVERVIEW_RETENTION_MS
       );
-      return result.value;
+      const authoritative = selectAuthoritativeIndexObservation(result.value, retained);
+      await setCacheEntry(
+        indexSummaryCacheKey(definition.key),
+        authoritative,
+        INDEX_OVERVIEW_RETENTION_MS
+      );
+      return authoritative;
     }
     const retained = await getCachedValue(
       indexSummaryCacheKey(definition.key),
@@ -334,8 +411,16 @@ async function getIndexDetail(key, range = "1Y") {
       leadershipSnapshotFreshMs()
     );
     if (cached) {
+      const retainedSummary = await getCachedValue(
+        indexSummaryCacheKey(definition.key),
+        INDEX_OVERVIEW_RETENTION_MS
+      );
+      const authoritative = mergeAuthoritativeIndexHeadline(
+        withCurrentFreshness(cached),
+        retainedSummary
+      );
       return {
-        ...withCurrentFreshness(cached),
+        ...authoritative,
         constituents: (cached.constituents || []).map(withCurrentFreshness),
       };
     }
@@ -357,7 +442,7 @@ async function getIndexDetail(key, range = "1Y") {
     .map((point) => point.adjustedClose)
     .filter(Number.isFinite);
 
-  const detail = {
+  let detail = {
     ...mapQuote(definition, quote),
     ...(valueOrNull(quote.regularMarketChangePercent) === null
       ? calculateDailyMove(sessions)
@@ -376,6 +461,22 @@ async function getIndexDetail(key, range = "1Y") {
     })),
     constituents,
   };
+
+  const retainedSummary = await getCachedValue(
+    indexSummaryCacheKey(definition.key),
+    INDEX_OVERVIEW_RETENTION_MS
+  );
+  detail = mergeAuthoritativeIndexHeadline(detail, retainedSummary);
+  const authoritativeSummary = selectAuthoritativeIndexObservation(detail, retainedSummary);
+  await setCacheEntry(
+    indexSummaryCacheKey(definition.key),
+    {
+      ...authoritativeSummary,
+      oneMonthReturn: retainedSummary?.oneMonthReturn ?? null,
+      sparkline: retainedSummary?.sparkline || [],
+    },
+    INDEX_OVERVIEW_RETENTION_MS
+  );
 
   if (!leadershipCacheKey) return detail;
 
@@ -413,5 +514,10 @@ async function getIndexDetail(key, range = "1Y") {
 module.exports = {
   getIndexOverview,
   getIndexDetail,
-  _test: { withCurrentFreshness },
+  _test: {
+    withCurrentFreshness,
+    selectAuthoritativeIndexObservation,
+    mergeAuthoritativeIndexHeadline,
+    cachedOverviewNeedsReconciliation,
+  },
 };
