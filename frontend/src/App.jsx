@@ -14,7 +14,7 @@ import { getPerformanceHistory } from "./api/performanceApi";
 import { getSectorDetail, getSectors } from "./api/sectorApi";
 import stockUniverse from "./data/stockUniverse.json";
 import { shouldRunVisibilityRefresh } from "./utils/refreshPolicy";
-import { SEARCH_TOPIC_ALIASES, searchTopicSuggestion } from "./utils/searchSemantics";
+import { SEARCH_TOPIC_ALIASES, searchTopicSuggestion, rankSearchDefinitions } from "./utils/searchSemantics";
 import {
   ResponsiveContainer,
   LineChart,
@@ -1942,6 +1942,10 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
           <div style={{ height: 320, display: "flex", alignItems: "center", justifyContent: "center", color: THEME.down }}>
             {error}
           </div>
+        ) : indexData?.historyUnavailable ? (
+          <div style={{ height: 320, display: "flex", alignItems: "center", justifyContent: "center", color: THEME.inkDim, textAlign: "center" }}>
+            The latest benchmark observation is available, but historical chart data is temporarily unavailable.
+          </div>
         ) : (
           <PriceChart series={series} labels={labels} height={320} color={THEME.gold} />
         )}
@@ -2122,7 +2126,11 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
             ))}
             {constituents.length === 0 && (
               <tr><td colSpan={5} style={{ ...tdStyle, textAlign: "center", color: THEME.inkDim, padding: 30 }}>
-                {indexData?.isVix ? "India VIX is derived from Nifty option prices and has no equity constituents." : "No tracked constituent data is available."}
+                {indexData?.isVix
+                  ? "India VIX is derived from Nifty option prices and has no equity constituents."
+                  : indexData?.constituentsUnavailable
+                    ? "The benchmark remains available, but constituent data is temporarily unavailable."
+                    : "No tracked constituent data is available."}
               </td></tr>
             )}
           </tbody>
@@ -2196,16 +2204,23 @@ function EventStrip({ mode, onOpen, events, loading, error }) {
 
 let retainedMarketIndices = [];
 let retainedSectorOverview = [];
+const retainedMarketsPage = {
+  gsec: null,
+  niftyDetail: null,
+  marketEvents: [],
+  performerStocks: [],
+  activityStocks: [],
+};
 
 function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, toggleWatch, compareList, toggleCompare }) {
   const readiness = useRef({ startedAt: performance.now(), reported: new Set(["shell"]) });
   const [liveIndices, setLiveIndices] = useState(() => retainedMarketIndices);
   const [indicesLoading, setIndicesLoading] = useState(() => retainedMarketIndices.length === 0);
   const [indicesError, setIndicesError] = useState("");
-  const [gsec, setGsec] = useState(null);
-  const [niftyDetail, setNiftyDetail] = useState(null);
-  const [marketEvents, setMarketEvents] = useState([]);
-  const [marketEventsLoading, setMarketEventsLoading] = useState(true);
+  const [gsec, setGsec] = useState(() => retainedMarketsPage.gsec);
+  const [niftyDetail, setNiftyDetail] = useState(() => retainedMarketsPage.niftyDetail);
+  const [marketEvents, setMarketEvents] = useState(() => retainedMarketsPage.marketEvents);
+  const [marketEventsLoading, setMarketEventsLoading] = useState(() => !retainedMarketsPage.niftyDetail && retainedMarketsPage.marketEvents.length === 0);
   const [marketEventsError, setMarketEventsError] = useState("");
   const [sectorData, setSectorData] = useState(() => retainedSectorOverview);
   const [sectorLoading, setSectorLoading] = useState(() => retainedSectorOverview.length === 0);
@@ -2214,9 +2229,9 @@ function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, tog
   const [perfTab, setPerfTab] = useState("This Week");
   const [eventOpen, setEventOpen] = useState(null);
   const [capFilter, setCapFilter] = useState("All caps");
-  const [performerStocks, setPerformerStocks] = useState([]);
-  const [activityStocks, setActivityStocks] = useState([]);
-  const [performersLoading, setPerformersLoading] = useState(true);
+  const [performerStocks, setPerformerStocks] = useState(() => retainedMarketsPage.performerStocks);
+  const [activityStocks, setActivityStocks] = useState(() => retainedMarketsPage.activityStocks);
+  const [performersLoading, setPerformersLoading] = useState(() => retainedMarketsPage.performerStocks.length === 0);
   const [performersError, setPerformersError] = useState("");
 
   const reportReadiness = (name, ready) => {
@@ -2430,17 +2445,17 @@ useEffect(() => {
 useEffect(() => {
   let cancelled = false;
   getIndiaTenYearYield("1M")
-    .then((data) => { if (!cancelled) setGsec(data); })
+    .then((data) => { if (!cancelled) { retainedMarketsPage.gsec = data; setGsec(data); } })
     .catch((error) => {
       console.error("Unable to load India 10Y G-Sec:", error);
-      if (!cancelled) setGsec(null);
+      if (!cancelled && !retainedMarketsPage.gsec) setGsec(null);
     });
   return () => { cancelled = true; };
 }, []);
 
 useEffect(() => {
   let cancelled = false;
-  let hasLoadedMarketContext = false;
+  let hasLoadedMarketContext = Boolean(retainedMarketsPage.niftyDetail || retainedMarketsPage.marketEvents.length);
 
   async function loadMarketContext({ force = false } = {}) {
     if (!hasLoadedMarketContext) setMarketEventsLoading(true);
@@ -2458,6 +2473,7 @@ useEffect(() => {
       }
 
       if (detailResult.status === "fulfilled") {
+        retainedMarketsPage.niftyDetail = detailResult.value;
         setNiftyDetail(detailResult.value);
         hasLoadedMarketContext = true;
       }
@@ -2468,7 +2484,11 @@ useEffect(() => {
           : [];
 
       if (eventsResult.status === "rejected") {
-        setMarketEventsError("Unable to load current market events. Please try again shortly.");
+        if (retainedMarketsPage.marketEvents.length === 0) {
+          setMarketEventsError("Unable to load current market events. Please try again shortly.");
+        }
+      } else {
+        setMarketEventsError("");
       }
 
       const blockedMarketEventTerms = [
@@ -2497,8 +2517,7 @@ useEffect(() => {
         // current-day reporting from the initial set.
         .slice(0, 15);
 
-      setMarketEvents(
-        filteredArticles.map((article) => ({
+      const nextEvents = filteredArticles.map((article) => ({
           id: article.id,
           cat: article.category || "Market",
           title: article.title,
@@ -2509,8 +2528,11 @@ date: formatArticleNewsDate(article),
           source: article.source,
           link: article.link,
           related: [],
-        }))
-      );
+        }));
+      if (nextEvents.length || retainedMarketsPage.marketEvents.length === 0) {
+        retainedMarketsPage.marketEvents = nextEvents;
+        setMarketEvents(nextEvents);
+      }
     } catch (error) {
       console.error(
         "Unable to load market context:",
@@ -2549,7 +2571,7 @@ useEffect(() => {
   let cancelled = false;
 
   async function loadSectorData() {
-    setSectorLoading(true);
+    if (retainedSectorOverview.length === 0) setSectorLoading(true);
     setSectorError("");
 
     try {
@@ -2597,7 +2619,7 @@ useEffect(() => {
   };
 
   async function loadPerformerStocks() {
-    setPerformersLoading(true);
+    if (retainedMarketsPage.performerStocks.length === 0) setPerformersLoading(true);
     setPerformersError("");
 
     try {
@@ -2637,6 +2659,7 @@ useEffect(() => {
         };
       });
 
+      retainedMarketsPage.performerStocks = mergedStocks;
       setPerformerStocks(mergedStocks);
     } catch (error) {
       console.error(
@@ -2645,10 +2668,10 @@ useEffect(() => {
       );
 
       if (!cancelled) {
-        setPerformerStocks([]);
-        setPerformersError(
-          "Unable to load live performer data."
-        );
+        if (retainedMarketsPage.performerStocks.length === 0) setPerformerStocks([]);
+        if (retainedMarketsPage.performerStocks.length === 0) {
+          setPerformersError("Unable to load live performer data.");
+        }
       }
     } finally {
       if (!cancelled) {
@@ -2672,7 +2695,13 @@ useEffect(() => {
   let cancelled = false;
   getStockUniverse(performerSymbols)
     .then((stocks) => {
-      if (!cancelled) setActivityStocks(Array.isArray(stocks) ? stocks : []);
+      if (!cancelled) {
+        const nextStocks = Array.isArray(stocks) ? stocks : [];
+        if (nextStocks.length || retainedMarketsPage.activityStocks.length === 0) {
+          retainedMarketsPage.activityStocks = nextStocks;
+          setActivityStocks(nextStocks);
+        }
+      }
     })
     .catch((error) => console.error("Unable to load most-active quotes:", error));
   return () => { cancelled = true; };
@@ -7200,20 +7229,10 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex, openBench
 
   const matchingDefinitions = useMemo(() => {
     if (!normalized) return [];
-    const aliases = new Set(SEARCH_TOPIC_TICKERS[canonicalTopic] || []);
-    return RAW_STOCKS.map((stock) => {
-      const companyScore = companySearchScore(stock, normalized);
-      const topicMatch = aliases.has(stock.ticker) ||
-        [stock.sector, stock.industry, stock.description]
-          .filter(Boolean).join(" ").toLowerCase().includes(normalized);
-      const permittedCompanyScore = isRecognizedTopic && companyScore < 750 ? -1 : companyScore;
-      return { stock, score: permittedCompanyScore >= 0 ? permittedCompanyScore : topicMatch ? 100 : -1 };
-    })
-      .filter(({ score }) => score >= 0)
-      .sort((a, b) => b.score - a.score || a.stock.name.localeCompare(b.stock.name))
-      .map(({ stock }) => stock)
-      .slice(0, 20);
-  }, [normalized, canonicalTopic, isRecognizedTopic]);
+    return rankSearchDefinitions(
+      RAW_STOCKS, normalized, SEARCH_TOPIC_TICKERS, SEARCH_TOPIC_SECTOR_KEYS, companySearchScore
+    ).slice(0, 20);
+  }, [normalized]);
 
   useEffect(() => {
     let cancelled = false;
@@ -7297,11 +7316,12 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex, openBench
         ...companyNewsResults.flatMap((result) => result.status === "fulfilled" ? result.value?.articles || [] : []),
       ];
       const topicTerms = new Set([
-        normalized,
+        ...(isRecognizedTopic ? [] : [normalized]),
         canonicalTopic,
         ...Object.entries(SEARCH_TOPIC_ALIASES)
           .filter(([, topic]) => topic === canonicalTopic)
-          .map(([alias]) => alias),
+          .map(([alias]) => alias)
+          .filter((alias) => alias.length >= 3),
         ...(globalTopicTerms[canonicalTopic] || []),
         ...matchingDefinitions.flatMap((stock) => [stock.ticker.toLowerCase(), stock.name?.toLowerCase()]).filter(Boolean),
       ]);
@@ -7310,7 +7330,12 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex, openBench
         const haystack = [article.title, article.topic, article.teaser, article.body, article.summary]
           .filter(Boolean).join(" ").toLowerCase();
         const key = article.link || article.url || article.title;
-        if (![...topicTerms].some((term) => term && haystack.includes(term)) || seen.has(key)) return false;
+        const matchesTopic = [...topicTerms].some((term) => {
+          if (!term) return false;
+          const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          return new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, "i").test(haystack);
+        });
+        if (!matchesTopic || seen.has(key)) return false;
         seen.add(key);
         return true;
       }).slice(0, 15));
@@ -7318,7 +7343,7 @@ function SearchResultsPage({ searchTerm, openCompany, openGlobalIndex, openBench
     }
     loadResults().catch(() => { if (!cancelled) { setLoading(false); setNewsLoading(false); } });
     return () => { cancelled = true; };
-  }, [normalized, canonicalTopic, matchingDefinitions, matchingIndexKeys, matchingIndianIndexKeys, globalTopicTerms]);
+  }, [normalized, canonicalTopic, isRecognizedTopic, matchingDefinitions, matchingIndexKeys, matchingIndianIndexKeys, globalTopicTerms]);
 
   return (
     <div className="sd-fade-in" style={{ padding: "22px 20px 60px", maxWidth: 1280, margin: "0 auto", width: "100%" }}>

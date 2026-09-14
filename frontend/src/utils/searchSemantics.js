@@ -37,3 +37,19 @@ export function searchTopicSuggestion(query) {
   const canonical = SEARCH_TOPIC_ALIASES[normalized];
   return canonical ? { canonical, label: TOPIC_LABELS[canonical] || canonical.replace(/\b\w/g, (letter) => letter.toUpperCase()) } : null;
 }
+
+export function rankSearchDefinitions(stocks, query, topicTickers = {}, sectorKeys = {}, scoreCompany) {
+  const normalized = String(query || "").toLowerCase().replace(/[^a-z0-9&]+/g, " ").trim();
+  const canonical = SEARCH_TOPIC_ALIASES[normalized] || normalized;
+  const recognized = canonical !== normalized || Boolean(topicTickers[canonical] || sectorKeys[canonical]);
+  const members = new Set(topicTickers[canonical] || []);
+  return stocks.map((stock) => {
+    const companyScore = scoreCompany(stock, normalized);
+    const exactEntity = companyScore >= 950;
+    const sectorMatch = sectorKeys[canonical] && stock.sector === sectorKeys[canonical];
+    const topicScore = members.has(stock.ticker) ? 700 : sectorMatch ? 650 : -1;
+    return { stock, score: exactEntity ? companyScore : recognized ? topicScore : companyScore };
+  }).filter(({ score }) => score >= 0)
+    .sort((a, b) => b.score - a.score || a.stock.name.localeCompare(b.stock.name))
+    .map(({ stock }) => stock);
+}

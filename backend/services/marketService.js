@@ -8,6 +8,12 @@ const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
 const {
   getMarketDataProviderName,
 } = require("../providers/marketData");
+const { indianMarketClosure } = require("../utils/marketDataValidation");
+
+function currentIndianMarketClosure() {
+  const closure = indianMarketClosure();
+  return closure.type === "holiday" ? closure.name : null;
+}
 
 const getMarketData = () => {
   return {
@@ -65,6 +71,7 @@ const getStockDataFromService = async (symbol) => {
     quoteSource: quote.quoteSourceName || getMarketDataProviderName(),
     dataStatus: quote.dataStatus || null,
     isStale: Boolean(quote.isStale),
+    marketClosure: quote.marketClosure || currentIndianMarketClosure(),
   };
 };
 
@@ -205,6 +212,7 @@ de: null,
       quoteSource: quote?.quoteSourceName || getMarketDataProviderName(),
       dataStatus: quote?.dataStatus || null,
       isStale: Boolean(quote?.isStale),
+      marketClosure: quote?.marketClosure || currentIndianMarketClosure(),
     };
   });
 };

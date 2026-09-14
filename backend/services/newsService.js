@@ -54,6 +54,8 @@ const BLOCKED_SOURCES = [
   "espncricinfo",
   "espn cricinfo",
   "cricinfo",
+  "indexbox",
+  "indexbox.io",
 ];
 
 const BLOCKED_TITLE_TERMS = [
@@ -811,8 +813,8 @@ function storyEventCategory(title = "") {
   return categories.find(([, pattern]) => pattern.test(value))?.[0] || null;
 }
 
-function classifyMarketEventTopic(originalTopic, title = "") {
-  const value = String(title).toLowerCase();
+function classifyMarketEventTopic(originalTopic, title = "", context = "") {
+  const value = `${String(title)} ${String(context)}`.toLowerCase();
   const eventCategory = storyEventCategory(value);
   if (eventCategory === "earnings") return "Earnings";
   if (["leadership-change", "corporate-action"].includes(eventCategory)) return "Corporate Action";
@@ -874,16 +876,19 @@ function publicationPresentation(article) {
 function isWhatMovedEligibleArticle(article, cleanedArticle = cleanGoogleNewsArticle(article)) {
   const text = [cleanedArticle.title, cleanedArticle.snippet, article?.contentSnippet, article?.content]
     .filter(Boolean).join(" ").toLowerCase();
-  const eventSignals = /\b(launch(?:es|ed)?|raises?|cuts?|flows?|inflows?|outflows?|sebi|rbi|regulat(?:or|ion)|acquires?|merger|approval|announces?|reports?|earnings|results?|policy|fund manager|asset management compan(?:y|ies)|amc)\b/i;
-  if (eventSignals.test(text)) return true;
   const productReferenceSignals = [
     /\bdirect plan returns?\b/i,
     /\bregular plan portfolio\b/i,
     /\bnav\b.*\b(?:review|return|rating|calculator|today)\b/i,
     /\b(?:mutual fund|etf|fund)\b.*\b(?:information|details?|portfolio|asset allocation|minimum sip|expense ratio|returns? calculator|review)\b/i,
     /\b(?:fund info|scheme details?|plan portfolio)\b/i,
+    /\bofficial (?:web)?site of (?:the )?(?:reserve bank of india|rbi)\b/i,
+    /\b(?:home|homepage|site map|contact us|about us)\b.*\b(?:rbi|reserve bank of india)\b/i,
   ];
-  return !productReferenceSignals.some((pattern) => pattern.test(text));
+  if (productReferenceSignals.some((pattern) => pattern.test(text))) return false;
+  const eventSignals = /\b(launch(?:es|ed)?|raises?|cuts?|flows?|inflows?|outflows?|sebi|regulat(?:or|ion)|acquires?|merger|approval|announces?|reports?|earnings|results?|policy|circular|speech|statement|decision|fund manager|asset management compan(?:y|ies)|amc)\b/i;
+  const marketAction = /\b(rise|rose|gain|advance|fall|fell|drop|decline|rally|slide|selloff|close[sd]?|surge|weigh|pressure|impact|move[sd]?)\b/i;
+  return eventSignals.test(text) || marketAction.test(text);
 }
 
 function sourceIdentity(article, cleanedArticle) {
@@ -1297,8 +1302,7 @@ async function getGlobalMarketNewsFromService() {
             new Date(
               itemA.article.pubDate
             )
-        )
-        .slice(0, 8);
+        );
     }
   );
 
@@ -2318,7 +2322,7 @@ const articles = selectedArticles.map(
         article.link ||
         `nifty-market-${index}`,
 
-      category: classifyMarketEventTopic(topic, cleanedArticle.title),
+      category: classifyMarketEventTopic(topic, cleanedArticle.title, cleanedArticle.snippet || article.contentSnippet || ""),
       title: cleanedArticle.title,
       source: cleanedArticle.source,
       ...publicationPresentation(article),

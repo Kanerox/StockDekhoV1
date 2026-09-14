@@ -12,18 +12,19 @@ const {
 const {
   getMarketDataProviderName,
 } = require("../providers/marketData");
-const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
+const { getCachedValue, setCacheEntry, updateCacheEntryAtomic } = require("../clients/cacheClient");
 const {
   sessionKey,
   isIndianMarketOpen,
   indianMarketPhase,
   classifyObservationLifecycle,
+  indianMarketClosure,
 } = require("../utils/marketDataValidation");
 const { marketClosure } = require("../config/marketCalendars");
 
 const LEADERSHIP_SNAPSHOT_FRESH_MS = 5 * 60 * 1000;
 const CLOSED_LEADERSHIP_SNAPSHOT_FRESH_MS = 6 * 60 * 60 * 1000;
-const LEADERSHIP_SNAPSHOT_RETENTION_MS = 48 * 60 * 60 * 1000;
+const LEADERSHIP_SNAPSHOT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const INDEX_OVERVIEW_RETENTION_MS = 48 * 60 * 60 * 1000;
 const lastConsistentLeadershipByRange = new Map();
 let overviewInFlight = null;
@@ -79,6 +80,22 @@ function indianTradingDay(now = new Date()) {
   }).formatToParts(now);
   const weekday = parts.find((part) => part.type === "weekday")?.value;
   return !marketClosure("INDIA", sessionKey(now), weekday).closed;
+}
+
+function expectedLatestIndianSession(now = new Date()) {
+  const today = sessionKey(now);
+  const parts = indianClockMinutes(now);
+  if (indianTradingDay(now) && parts.minutes >= 9 * 60 + 15) return today;
+  const candidate = new Date(`${today}T12:00:00+05:30`);
+  do candidate.setUTCDate(candidate.getUTCDate() - 1);
+  while (!indianTradingDay(candidate));
+  return sessionKey(candidate);
+}
+
+function isAuthoritativeCompletedLeadership(detail, now = new Date()) {
+  return isConsistentLeadershipDetail(detail) &&
+    detail.observationKind === "session_close" &&
+    observationSession(detail) === expectedLatestIndianSession(now);
 }
 
 function observationTimestamp(observation) {
@@ -280,6 +297,7 @@ async function fetchConstituents(definition) {
 }
 
 function mapQuote(definition, quote) {
+  const closure = indianMarketClosure();
   return {
     key: definition.key,
     name: definition.name,
@@ -299,6 +317,7 @@ function mapQuote(definition, quote) {
     quoteSource: quote.quoteSourceName || getMarketDataProviderName(),
     dataStatus: quote.dataStatus || null,
     isStale: Boolean(quote.isStale),
+    marketClosure: quote.marketClosure || (closure.type === "holiday" ? closure.name : null),
   };
 }
 
@@ -355,12 +374,13 @@ async function getIndexOverview() {
   // response. Otherwise a quote cached while LIVE can remain labelled LIVE
   // for the full post-close cache window.
   if (cached && !cachedOverviewNeedsReconciliation(cached)) {
-    const retained = await Promise.all(cached.map((item) =>
-      getCachedValue(indexSummaryCacheKey(item.key), INDEX_OVERVIEW_RETENTION_MS)
+    const cachedByKey = new Map(cached.map((item) => [item.key, item]));
+    const retained = await Promise.all(INDICES.map((definition) =>
+      getCachedValue(indexSummaryCacheKey(definition.key), INDEX_OVERVIEW_RETENTION_MS)
     ));
-    return cached.map((item, index) =>
-      selectAuthoritativeIndexObservation(item, retained[index])
-    );
+    return INDICES.map((definition, index) =>
+      selectAuthoritativeIndexObservation(cachedByKey.get(definition.key), retained[index])
+    ).filter(Boolean);
   }
   if (overviewInFlight) return overviewInFlight;
 
@@ -374,12 +394,13 @@ async function getIndexOverview() {
         INDEX_OVERVIEW_RETENTION_MS
       );
       const authoritative = selectAuthoritativeIndexObservation(result.value, retained);
-      await setCacheEntry(
+      const persisted = await updateCacheEntryAtomic(
         indexSummaryCacheKey(definition.key),
         authoritative,
-        INDEX_OVERVIEW_RETENTION_MS
+        INDEX_OVERVIEW_RETENTION_MS,
+        (candidate, existing) => selectAuthoritativeIndexObservation(candidate, existing)
       );
-      return authoritative;
+      return persisted;
     }
     const retained = await getCachedValue(
       indexSummaryCacheKey(definition.key),
@@ -395,7 +416,23 @@ async function getIndexOverview() {
   return overviewInFlight;
 }
 
-async function getIndexDetail(key, range = "1Y") {
+async function reconcileIndexClose(key, now = new Date(), dependencies = {}) {
+  const definition = getIndexDefinition(key);
+  if (!definition) throw new Error("Unknown index");
+  const quote = await (dependencies.fetchMarketData || fetchMarketData)(definition.symbol);
+  const candidate = withCurrentFreshness(mapQuote(definition, quote), now);
+  if (candidate.observationKind !== "session_close" || candidate.dataStatus !== "eod") {
+    const error = new Error("Completed-session observation is not available yet");
+    error.code = "COMPLETED_SESSION_NOT_READY";
+    throw error;
+  }
+  return updateCacheEntryAtomic(
+    indexSummaryCacheKey(definition.key), candidate, INDEX_OVERVIEW_RETENTION_MS,
+    (next, retained) => selectAuthoritativeIndexObservation(next, retained, now)
+  );
+}
+
+async function getIndexDetail(key, range = "1Y", dependencies = {}) {
   const definition = getIndexDefinition(key);
 
   if (!definition) {
@@ -406,6 +443,13 @@ async function getIndexDetail(key, range = "1Y") {
     ? leadershipSnapshotCacheKey(range)
     : null;
   if (leadershipCacheKey) {
+    const retainedCompleted = await getCachedValue(
+      leadershipCacheKey,
+      LEADERSHIP_SNAPSHOT_RETENTION_MS
+    );
+    if (indianMarketPhase() === "closed" && isAuthoritativeCompletedLeadership(retainedCompleted)) {
+      return retainedCompleted;
+    }
     const cached = await getCachedValue(
       leadershipCacheKey,
       leadershipSnapshotFreshMs()
@@ -427,29 +471,35 @@ async function getIndexDetail(key, range = "1Y") {
   }
 
   const { period1, period2 } = resolvePeriod(range);
-  const [quote, points, constituents] = await Promise.all([
-    fetchMarketData(definition.symbol),
-    fetchHistoricalPrices(definition.symbol, period1, period2),
-    fetchConstituents(definition),
+  const retainedSummary = await getCachedValue(
+    indexSummaryCacheKey(definition.key),
+    INDEX_OVERVIEW_RETENTION_MS
+  );
+  const [quoteResult, historyResult, constituentsResult] = await Promise.allSettled([
+    (dependencies.fetchMarketData || fetchMarketData)(definition.symbol),
+    (dependencies.fetchHistoricalPrices || fetchHistoricalPrices)(definition.symbol, period1, period2),
+    (dependencies.fetchConstituents || fetchConstituents)(definition),
   ]);
+  if (quoteResult.status === "rejected" && !retainedSummary) throw quoteResult.reason;
 
+  const quote = quoteResult.status === "fulfilled" ? quoteResult.value : null;
+  const points = historyResult.status === "fulfilled" ? historyResult.value : [];
+  const constituents = constituentsResult.status === "fulfilled" ? constituentsResult.value : [];
   const sessions = completedSessionPoints(points);
-  if (sessions.length < 2) {
-    throw new Error("Insufficient historical index data");
-  }
 
   const closes = sessions
     .map((point) => point.adjustedClose)
     .filter(Number.isFinite);
 
+  const candidateHeadline = quote ? mapQuote(definition, quote) : retainedSummary;
   let detail = {
-    ...mapQuote(definition, quote),
-    ...(valueOrNull(quote.regularMarketChangePercent) === null
+    ...candidateHeadline,
+    ...(quote && valueOrNull(quote.regularMarketChangePercent) === null && sessions.length >= 2
       ? calculateDailyMove(sessions)
-      : {
+      : quote ? {
           change: valueOrNull(quote.regularMarketChange),
           changePercent: valueOrNull(quote.regularMarketChangePercent),
-        }),
+        } : {}),
     range,
     periodReturn: calculateReturn(sessions),
     periodHigh: closes.length ? Math.max(...closes) : null,
@@ -460,22 +510,21 @@ async function getIndexDetail(key, range = "1Y") {
       adjustedClose: point.adjustedClose,
     })),
     constituents,
+    historyUnavailable: historyResult.status === "rejected" || sessions.length < 2,
+    constituentsUnavailable: constituentsResult.status === "rejected",
   };
 
-  const retainedSummary = await getCachedValue(
-    indexSummaryCacheKey(definition.key),
-    INDEX_OVERVIEW_RETENTION_MS
-  );
   detail = mergeAuthoritativeIndexHeadline(detail, retainedSummary);
   const authoritativeSummary = selectAuthoritativeIndexObservation(detail, retainedSummary);
-  await setCacheEntry(
+  await updateCacheEntryAtomic(
     indexSummaryCacheKey(definition.key),
     {
       ...authoritativeSummary,
       oneMonthReturn: retainedSummary?.oneMonthReturn ?? null,
       sparkline: retainedSummary?.sparkline || [],
     },
-    INDEX_OVERVIEW_RETENTION_MS
+    INDEX_OVERVIEW_RETENTION_MS,
+    (candidate, existing) => selectAuthoritativeIndexObservation(candidate, existing)
   );
 
   if (!leadershipCacheKey) return detail;
@@ -514,10 +563,13 @@ async function getIndexDetail(key, range = "1Y") {
 module.exports = {
   getIndexOverview,
   getIndexDetail,
+  reconcileIndexClose,
   _test: {
     withCurrentFreshness,
     selectAuthoritativeIndexObservation,
     mergeAuthoritativeIndexHeadline,
     cachedOverviewNeedsReconciliation,
+    expectedLatestIndianSession,
+    isAuthoritativeCompletedLeadership,
   },
 };

@@ -2,7 +2,7 @@ const { fetchMarketData, fetchMarketDataBatch } = require("../clients/marketClie
 const { fetchHistoricalPrices } = require("../clients/historyClient");
 const yahooProvider = require("../providers/marketData/yahooProvider");
 const { GLOBAL_INDICES, getGlobalIndexDefinition } = require("../config/globalIndexConfig");
-const { getCachedValue, setCacheEntry } = require("../clients/cacheClient");
+const { getCachedValue, setCacheEntry, updateCacheEntryAtomic } = require("../clients/cacheClient");
 const { marketClosure } = require("../config/marketCalendars");
 
 const DIRECT_GLOBAL_QUOTE_KEYS = new Set(["NASDAQ", "EUROSTOXX50"]);
@@ -33,6 +33,8 @@ function globalHeadlineCard(detail) {
     observationDate: detail.observationDate || null,
     observationKind: detail.observationKind || null,
     providerObservationTime: detail.providerObservationTime || null,
+    previousSessionClose: finite(detail.previousSessionClose),
+    previousSessionCloseDate: detail.previousSessionCloseDate || null,
     marketClosure: detail.marketClosure, isGlobalIndex: true,
   };
 }
@@ -306,19 +308,22 @@ function mergeRetainedHeadline(detail, retained, definition, now = new Date()) {
     observationDate: currentRetained.observationDate || null,
     observationKind: currentRetained.observationKind || null,
     sessionDateOnly: currentRetained.sessionDateOnly,
+    previousSessionClose: currentRetained.previousSessionClose ?? detail.previousSessionClose,
+    previousSessionCloseDate: currentRetained.previousSessionCloseDate || detail.previousSessionCloseDate,
     headlineFromRetainedObservation: true,
   };
 }
 
 async function persistAuthoritativeGlobalHeadline(detail, definition, now = new Date()) {
-  const retained = await getRetainedGlobalCard(definition.key);
-  const merged = mergeRetainedHeadline(detail, retained, definition, now);
-  await setCacheEntry(
+  const selected = await updateCacheEntryAtomic(
     globalCardCacheKey(definition.key),
-    globalHeadlineCard(merged),
-    GLOBAL_CARD_RETENTION_MS
+    globalHeadlineCard(detail),
+    GLOBAL_CARD_RETENTION_MS,
+    (candidate, retained) => globalHeadlineCard(
+      mergeRetainedHeadline(candidate, retained, definition, now)
+    )
   );
-  return merged;
+  return mergeRetainedHeadline(detail, selected, definition, now);
 }
 
 async function getIntradayObservation(definition) {
@@ -556,10 +561,14 @@ async function getGlobalIndexDetail(key, range = "1Y") {
       : (finite(quote.regularMarketPrice) ?? latestClose),
     change: hasCompletedDailyClose
       ? historyChange
-      : finite(quote.regularMarketChange),
+      : (finite(quote.regularMarketChange) ??
+        (quoteSessionDate && latestSessionDate && quoteSessionDate > latestSessionDate && Number.isFinite(latestClose)
+          ? finite(quote.regularMarketPrice) - latestClose : null)),
     changePercent: hasCompletedDailyClose
       ? (previousClose ? (historyChange / previousClose) * 100 : null)
-      : finite(quote.regularMarketChangePercent),
+      : (finite(quote.regularMarketChangePercent) ??
+        (quoteSessionDate && latestSessionDate && quoteSessionDate > latestSessionDate && Number.isFinite(latestClose) && latestClose !== 0
+          ? ((finite(quote.regularMarketPrice) - latestClose) / latestClose) * 100 : null)),
     marketTime: observationTime,
     asOf: observationTime,
     sessionDateOnly: false,
@@ -574,6 +583,10 @@ async function getGlobalIndexDetail(key, range = "1Y") {
     observationDate: hasCompletedDailyClose ? latestSessionDate : quoteSessionDate,
     observationKind: hasCompletedDailyClose ? "session_close" : "intraday",
     providerObservationTime: rawObservationTime,
+    previousSessionClose: hasCompletedDailyClose ? previousClose : latestClose,
+    previousSessionCloseDate: hasCompletedDailyClose
+      ? pointSessionDate(points.at(-2), definition)
+      : latestSessionDate,
     marketClosure: closure.type === "holiday" ? closure.name : null,
     periodReturn: returnPercent(points),
     periodHigh: Math.max(...closes),
@@ -595,13 +608,13 @@ async function getGlobalIndexOverview() {
     const retainedCards = await Promise.all(
       GLOBAL_INDICES.map((definition) => getRetainedGlobalCard(definition.key))
     );
-    return cached.map((item) => {
-      const definition = getGlobalIndexDefinition(item.key);
-      const retained = retainedCards.find((card) => card?.key === item.key);
-      return definition
-        ? globalHeadlineCard(mergeRetainedHeadline(item, retained, definition))
-        : item;
-    });
+    const cachedByKey = new Map(cached.map((item) => [item.key, item]));
+    return GLOBAL_INDICES.map((definition, index) => {
+      const item = cachedByKey.get(definition.key);
+      const retained = retainedCards[index];
+      if (!item) return retained ? retainedCardWithCurrentStatus(retained, definition) : null;
+      return globalHeadlineCard(mergeRetainedHeadline(item, retained, definition));
+    }).filter(Boolean);
   }
   if (overviewInFlight) return overviewInFlight;
 
@@ -692,13 +705,19 @@ async function getGlobalIndexOverview() {
       }
       return fresh;
     }).filter(Boolean);
-    await Promise.all(
-      merged.map((item) =>
-        setCacheEntry(globalCardCacheKey(item.key), item, GLOBAL_CARD_RETENTION_MS)
-      )
+    const authoritativeMerged = await Promise.all(
+      merged.map((item) => {
+        const definition = getGlobalIndexDefinition(item.key);
+        return updateCacheEntryAtomic(
+          globalCardCacheKey(item.key), item, GLOBAL_CARD_RETENTION_MS,
+          (candidate, retained) => globalHeadlineCard(
+            mergeRetainedHeadline(candidate, retained, definition)
+          )
+        );
+      })
     );
-    await setCacheEntry(cacheKey, merged, GLOBAL_CARD_RETENTION_MS);
-    return merged;
+    await setCacheEntry(cacheKey, authoritativeMerged, GLOBAL_CARD_RETENTION_MS);
+    return authoritativeMerged;
   })().finally(() => { overviewInFlight = null; });
   return overviewInFlight;
 }

@@ -63,9 +63,10 @@ async function run(level) {
   provider.quote = async () => { throw new Error("deterministic provider outage"); };
   provider.chart = async () => { throw new Error("deterministic history outage"); };
   const retained = await fetchMarketData(failureSymbol);
+  const retainedDuringHoliday = retained.marketClosure === "Ganesh Chaturthi";
   Date.now = realNow;
   assert.strictEqual(retained.regularMarketPrice, cached.regularMarketPrice);
-  assert.strictEqual(retained.dataStatus, "stale");
+  assert.strictEqual(retained.dataStatus, retainedDuringHoliday ? "eod" : "stale");
 
   console.log(JSON.stringify({ levels: results, providerFailureRetainedLastKnownGood: true }));
 })().catch((error) => {

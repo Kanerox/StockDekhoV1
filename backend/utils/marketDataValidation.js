@@ -37,6 +37,13 @@ function sessionKey(value) {
   return parts ? `${parts.year}-${parts.month}-${parts.day}` : null;
 }
 
+function indianMarketClosure(now = new Date()) {
+  const parts = istParts(now);
+  return parts
+    ? marketClosure("INDIA", sessionKey(now), parts.weekday)
+    : { closed: false, type: null, name: null };
+}
+
 function isIndianMarketOpen(now = new Date()) {
   const parts = istParts(now);
   if (!parts || marketClosure("INDIA", sessionKey(now), parts.weekday).closed) return false;
@@ -155,4 +162,5 @@ module.exports = {
   indianMarketPhase,
   INDIAN_INDEX_FRESHNESS_POLICY,
   MAX_DISPLAY_AGE_MS,
+  indianMarketClosure,
 };

@@ -20,8 +20,9 @@ jobs:
           curl --fail-with-body \
             --silent \
             --show-error \
-            --retry 3 \
+            --request POST \
+            --retry 2 \
             --retry-delay 15 \
             --max-time 90 \
-            "https://stockdekho-api.onrender.com/api/indices/NIFTY50?range=1M" \
+            "https://stockdekho-api.onrender.com/api/indices/NIFTY50/reconcile-close" \
             --output /dev/null

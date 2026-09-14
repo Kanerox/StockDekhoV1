@@ -4,7 +4,7 @@ const {
 } = require("../providers/marketData");
 const { getCachedValue, setCacheEntry } = require("./cacheClient");
 const { fetchHistoricalPrices } = require("./historyClient");
-const { validateQuote, indianMarketPhase, sessionKey } = require("../utils/marketDataValidation");
+const { validateQuote, indianMarketPhase, sessionKey, indianMarketClosure } = require("../utils/marketDataValidation");
 const { INDICES: INDIAN_INDICES } = require("../config/indexConfig");
 
 const FRESH_QUOTE_TTL_MS = 5 * 60 * 1000;
@@ -35,6 +35,17 @@ let batchRequestInFlight = null;
 const INDIAN_INDEX_SYMBOLS = new Set(
   INDIAN_INDICES.map((index) => String(index.symbol || "").toUpperCase())
 );
+
+function isIndianInstrument(symbol) {
+  const normalized = String(symbol || "").toUpperCase();
+  return normalized.endsWith(".NS") || normalized.endsWith(".BO") || INDIAN_INDEX_SYMBOLS.has(normalized);
+}
+
+function currentIndianHoliday(symbol) {
+  if (!isIndianInstrument(symbol)) return null;
+  const closure = indianMarketClosure();
+  return closure.type === "holiday" ? closure.name : null;
+}
 
 function quoteFreshTtlMs() {
   return indianMarketPhase() === "closed"
@@ -150,10 +161,14 @@ async function getStaleQuotes(symbols) {
     .filter(Boolean)
     .map((quote) => {
       try {
+        const validated = validateQuote(quote, { requestedSymbol: quote.symbol, allowStale: true });
+        const holiday = currentIndianHoliday(quote.symbol);
+        const preserveHolidayClose = Boolean(holiday) && validated.observationKind === "session_close";
         return {
-          ...validateQuote(quote, { requestedSymbol: quote.symbol, allowStale: true }),
-          dataStatus: "stale",
-          isStale: true,
+          ...validated,
+          dataStatus: preserveHolidayClose ? "eod" : "stale",
+          isStale: !preserveHolidayClose,
+          marketClosure: holiday,
         };
       }
       catch (error) { console.warn(`Discarding invalid cached quote: ${error.message}`); return null; }
@@ -418,7 +433,11 @@ async function fetchMarketData(symbol, options = {}) {
     try {
       return await fetchHistoryBackedQuote(normalizedSymbol, staleQuote);
     } catch (error) {
-      if (staleQuote) return { ...staleQuote, dataStatus: "stale", isStale: true };
+      if (staleQuote) {
+        const holiday = currentIndianHoliday(normalizedSymbol);
+        const preserveHolidayClose = Boolean(holiday) && staleQuote.observationKind === "session_close";
+        return { ...staleQuote, dataStatus: preserveHolidayClose ? "eod" : "stale", isStale: !preserveHolidayClose, marketClosure: holiday };
+      }
       throw error;
     }
   }
@@ -458,10 +477,13 @@ async function fetchMarketData(symbol, options = {}) {
       } catch (historyError) {
         if (staleQuote) {
           console.warn(`Using stale cached quote for ${normalizedSymbol}`);
+          const holiday = currentIndianHoliday(normalizedSymbol);
+          const preserveHolidayClose = Boolean(holiday) && staleQuote.observationKind === "session_close";
           return {
             ...validateQuote(staleQuote, { requestedSymbol: normalizedSymbol, allowStale: true }),
-            dataStatus: "stale",
-            isStale: true,
+            dataStatus: preserveHolidayClose ? "eod" : "stale",
+            isStale: !preserveHolidayClose,
+            marketClosure: holiday,
           };
         }
         throw historyError;

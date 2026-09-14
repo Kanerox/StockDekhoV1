@@ -6,6 +6,7 @@ const CORPUS_CACHE_KEY = "news:canonical-corpus:v1";
 const CORPUS_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 const MAX_CORPUS_ARTICLES = 1200;
 let corpusWriteInFlight = Promise.resolve();
+const BLOCKED_CANONICAL_SOURCE_PATTERN = /(^|[^a-z])indexbox(?:\.io)?([^a-z]|$)/i;
 
 const DESTINATION_RULES = [
   ["sector:Financials", /\b(bank|banking|rbi|credit|lending|deposit|nbfc|insurance|financ(?:e|ial))\b/i],
@@ -54,6 +55,12 @@ function normalizeLink(value) {
   } catch {
     return String(value || "").trim().toLowerCase();
   }
+}
+
+function isBlockedCanonicalSource(article) {
+  const source = [article?.source, article?.creator, article?.link, article?.url]
+    .filter(Boolean).join(" ");
+  return BLOCKED_CANONICAL_SOURCE_PATTERN.test(source);
 }
 
 function canonicalArticleId(article) {
@@ -154,10 +161,14 @@ function rankCanonicalArticles(articles, now = new Date(), destination = null) {
 }
 
 async function registerCanonicalArticles(articles, destinations = []) {
-  const normalized = (articles || []).map((article) => normalizeCanonicalArticle(article, destinations));
+  const normalized = (articles || [])
+    .filter((article) => !isBlockedCanonicalSource(article))
+    .map((article) => normalizeCanonicalArticle(article, destinations));
   corpusWriteInFlight = corpusWriteInFlight.then(async () => {
     const existing = await getCachedValue(CORPUS_CACHE_KEY, CORPUS_RETENTION_MS) || [];
-    const byId = new Map(existing.map((article) => [article.canonicalId, article]));
+    const byId = new Map(existing
+      .filter((article) => !isBlockedCanonicalSource(article))
+      .map((article) => [article.canonicalId, article]));
     normalized.forEach((article) => byId.set(article.canonicalId, mergeCanonicalRecord(byId.get(article.canonicalId), article)));
     const retained = [...byId.values()]
       .sort((a, b) => articleChronology(b) - articleChronology(a))
@@ -170,7 +181,10 @@ async function registerCanonicalArticles(articles, destinations = []) {
 
 async function getCanonicalArticles(destination) {
   const corpus = await getCachedValue(CORPUS_CACHE_KEY, CORPUS_RETENTION_MS) || [];
-  return corpus.filter((article) => (article.destinationEligibility || []).includes(destination));
+  return corpus.filter((article) =>
+    !isBlockedCanonicalSource(article) &&
+    (article.destinationEligibility || []).includes(destination)
+  );
 }
 
 module.exports = {
@@ -184,5 +198,6 @@ module.exports = {
     normalizeCanonicalArticle,
     mergeCanonicalRecord,
     rankCanonicalArticles,
+    isBlockedCanonicalSource,
   },
 };
