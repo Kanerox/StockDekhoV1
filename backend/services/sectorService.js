@@ -209,7 +209,7 @@ async function getSectorOverview() {
   return overview;
 }
 
-async function getSectorDetail(key, range = "1Y") {
+async function getSectorDetail(key, range = "1Y", dependencies = {}) {
   const definition = getSectorDefinition(key);
 
   if (!definition) {
@@ -219,23 +219,27 @@ async function getSectorDetail(key, range = "1Y") {
   const selectedPeriod = resolvePeriod(range);
   const oneYearPeriod = resolvePeriod("1Y");
 
+  const historyLoader = dependencies.fetchHistoricalPrices || fetchHistoricalPrices;
+  const constituentLoader = dependencies.fetchConstituents || fetchConstituents;
   const [selectedHistory, oneYearHistory, constituents] = await Promise.all([
-    fetchHistoricalPrices(
+    historyLoader(
       definition.benchmarkSymbol,
       selectedPeriod.period1,
       selectedPeriod.period2
     ),
     range === "1Y"
       ? Promise.resolve(null)
-      : fetchHistoricalPrices(
+      : historyLoader(
           definition.benchmarkSymbol,
           oneYearPeriod.period1,
           oneYearPeriod.period2
         ),
-    fetchConstituents(definition),
+    constituentLoader(definition),
   ]);
 
   const metricHistory = oneYearHistory || selectedHistory;
+  const hasUsableSelectedHistory = Array.isArray(selectedHistory) && selectedHistory.length >= 2;
+  const hasUsableMetricHistory = Array.isArray(metricHistory) && metricHistory.length >= 2;
 
   return {
     key: definition.key,
@@ -243,22 +247,23 @@ async function getSectorDetail(key, range = "1Y") {
     benchmarkSymbol: definition.benchmarkSymbol,
     proxy: definition.proxy,
     range,
-    asOf: latestHistoryDate(selectedHistory),
+    asOf: hasUsableSelectedHistory ? latestHistoryDate(selectedHistory) : null,
     dataProvider: getMarketDataProviderName(),
-    periodReturn: calculateReturn(selectedHistory),
+    periodReturn: hasUsableSelectedHistory ? calculateReturn(selectedHistory) : null,
     returns: {
-      "1W": calculateTrailingReturn(metricHistory, { days: 10 }, 6),
-      "1M": calculateTrailingReturn(metricHistory, { months: 1 }, 22),
-      "3M": calculateTrailingReturn(metricHistory, { months: 3 }, 63),
-      "6M": calculateTrailingReturn(metricHistory, { months: 6 }, 126),
-      "9M": calculateTrailingReturn(metricHistory, { months: 9 }, 189),
-      "1Y": calculateReturn(metricHistory),
+      "1W": hasUsableMetricHistory ? calculateTrailingReturn(metricHistory, { days: 10 }, 6) : null,
+      "1M": hasUsableMetricHistory ? calculateTrailingReturn(metricHistory, { months: 1 }, 22) : null,
+      "3M": hasUsableMetricHistory ? calculateTrailingReturn(metricHistory, { months: 3 }, 63) : null,
+      "6M": hasUsableMetricHistory ? calculateTrailingReturn(metricHistory, { months: 6 }, 126) : null,
+      "9M": hasUsableMetricHistory ? calculateTrailingReturn(metricHistory, { months: 9 }, 189) : null,
+      "1Y": hasUsableMetricHistory ? calculateReturn(metricHistory) : null,
     },
-    points: selectedHistory.map((point) => ({
+    points: (hasUsableSelectedHistory ? selectedHistory : []).map((point) => ({
       date: new Date(point.date).toISOString().slice(0, 10),
       close: point.close,
       adjustedClose: point.adjustedClose,
     })),
+    historyUnavailable: !hasUsableSelectedHistory,
     constituents,
   };
 }

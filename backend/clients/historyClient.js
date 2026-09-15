@@ -96,6 +96,12 @@ function mergePrices(existingPrices, newPrices) {
   );
 }
 
+function selectUsableHistory(prices, retainedRange) {
+  if (Array.isArray(prices) && prices.length >= 2) return prices;
+  if (Array.isArray(retainedRange) && retainedRange.length >= 2) return retainedRange;
+  return Array.isArray(prices) ? prices : [];
+}
+
 async function appendLatestUpstoxQuote(symbol, prices, period1, period2) {
   if (getMarketDataProviderName() !== "upstox") return prices;
 
@@ -223,16 +229,18 @@ async function fetchHistoricalPrices(
         STALE_HISTORY_TTL_MS
       );
       const mergedLatest = mergePrices(existingLatest, prices);
+      const retainedRange = pricesWithinRange(mergedLatest, period1, period2);
+      const usablePrices = selectUsableHistory(prices, retainedRange);
 
       await Promise.all([
-        setCacheEntry(key, prices, STALE_HISTORY_TTL_MS),
+        setCacheEntry(key, usablePrices, STALE_HISTORY_TTL_MS),
         setCacheEntry(
           latestHistoryCacheKey(normalizedSymbol, appendLatestQuote),
           mergedLatest,
           STALE_HISTORY_TTL_MS
         ),
       ]);
-      return prices;
+      return usablePrices;
     } catch (error) {
       const stalePrices = await getCachedValue(key, STALE_HISTORY_TTL_MS);
       if (stalePrices) {
@@ -265,4 +273,4 @@ async function fetchHistoricalPrices(
   return requestPromise;
 }
 
-module.exports = { fetchHistoricalPrices };
+module.exports = { fetchHistoricalPrices, _test: { selectUsableHistory } };

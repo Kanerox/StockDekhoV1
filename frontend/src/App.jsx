@@ -15,6 +15,7 @@ import { getSectorDetail, getSectors } from "./api/sectorApi";
 import stockUniverse from "./data/stockUniverse.json";
 import { shouldRunVisibilityRefresh } from "./utils/refreshPolicy";
 import { SEARCH_TOPIC_ALIASES, searchTopicSuggestion, rankSearchDefinitions } from "./utils/searchSemantics";
+import { mergeAuthoritativeObservationList, mergeRetainedIndexDetail } from "./utils/marketAuthority";
 import {
   ResponsiveContainer,
   LineChart,
@@ -1680,8 +1681,9 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
   const isDemo = false;
   const isVix = indexKey === "VIX";
   const [range, setRange] = useState("1Y");
-  const [indexData, setIndexData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const detailCacheKey = `${indexKey}:${range}`;
+  const [indexData, setIndexData] = useState(() => retainedIndianIndexDetails.get(detailCacheKey) || null);
+  const [loading, setLoading] = useState(() => !retainedIndianIndexDetails.has(detailCacheKey));
   const [error, setError] = useState("");
   const [news, setNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
@@ -1690,7 +1692,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
 
   useEffect(() => {
     let cancelled = false;
-    let hasLoaded = false;
+    let hasLoaded = retainedIndianIndexDetails.has(detailCacheKey);
 
     async function loadIndex({ force = false } = {}) {
       if (!hasLoaded) setLoading(true);
@@ -1704,7 +1706,13 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
       try {
         const data = await getIndexDetail(indexKey, range, { force });
         if (!cancelled) {
-          setIndexData(data);
+          const merged = mergeRetainedIndexDetail(data, retainedIndianIndexDetails.get(detailCacheKey));
+          retainedIndianIndexDetails.set(detailCacheKey, merged);
+          retainedMarketIndices = mergeAuthoritativeObservationList(
+            [{ ...merged, key: indexKey }],
+            retainedMarketIndices
+          );
+          setIndexData(merged);
           setError("");
           hasLoaded = true;
         }
@@ -1727,7 +1735,7 @@ function BenchmarkDetailPage({ indexKey, back, openCompany, watchlist, toggleWat
       cancelled = true;
       stopRefresh();
     };
-  }, [indexKey, range, isDemo]);
+  }, [indexKey, range, isDemo, detailCacheKey]);
 
   const newsSymbols = (indexData?.constituents || [])
     .slice(0, 10)
@@ -2203,6 +2211,7 @@ function EventStrip({ mode, onOpen, events, loading, error }) {
 }
 
 let retainedMarketIndices = [];
+const retainedIndianIndexDetails = new Map();
 let retainedSectorOverview = [];
 const retainedMarketsPage = {
   gsec: null,
@@ -2407,8 +2416,8 @@ useEffect(() => {
 
       if (!cancelled) {
         const nextIndices = Array.isArray(data) ? data : [];
-        retainedMarketIndices = nextIndices;
-        setLiveIndices(nextIndices);
+        retainedMarketIndices = mergeAuthoritativeObservationList(nextIndices, retainedMarketIndices);
+        setLiveIndices(retainedMarketIndices);
         setIndicesError("");
         hasLoadedIndices = true;
       }
@@ -3880,10 +3889,13 @@ function SectorsPage({ mode, openCompany, openSector, activeSector }) {
   );
 }
 
+const retainedSectorDetails = new Map();
+
 function SectorDetail({ sector, mode, openCompany, back }) {
   const [range, setRange] = useState("1Y");
-  const [sectorData, setSectorData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const retainedKey = `${sector}:${range}`;
+  const [sectorData, setSectorData] = useState(() => retainedSectorDetails.get(retainedKey) || null);
+  const [loading, setLoading] = useState(() => !retainedSectorDetails.has(retainedKey));
   const [error, setError] = useState("");
   const [sectorNews, setSectorNews] = useState([]);
   const [newsLoading, setNewsLoading] = useState(false);
@@ -3895,15 +3907,28 @@ function SectorDetail({ sector, mode, openCompany, back }) {
     let cancelled = false;
 
     async function loadSector() {
-      setLoading(true);
+      if (!retainedSectorDetails.has(retainedKey)) setLoading(true);
       setError("");
 
       try {
         const data = await getSectorDetail(sector, range);
-        if (!cancelled) setSectorData(data);
-      } catch (requestError) {
         if (!cancelled) {
-          setSectorData(null);
+          const retained = retainedSectorDetails.get(retainedKey);
+          const next = data?.historyUnavailable && (retained?.points?.length || 0) >= 2
+            ? {
+                ...data,
+                points: retained.points,
+                periodReturn: retained.periodReturn,
+                returns: retained.returns,
+                asOf: retained.asOf,
+                historyUnavailable: false,
+              }
+            : data;
+          retainedSectorDetails.set(retainedKey, next);
+          setSectorData(next);
+        }
+      } catch (requestError) {
+        if (!cancelled && !retainedSectorDetails.has(retainedKey)) {
           setError("Unable to load live sector details.");
         }
       } finally {
@@ -3916,7 +3941,7 @@ function SectorDetail({ sector, mode, openCompany, back }) {
     return () => {
       cancelled = true;
     };
-  }, [sector, range]);
+  }, [sector, range, retainedKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3989,6 +4014,10 @@ function SectorDetail({ sector, mode, openCompany, back }) {
           ) : error ? (
             <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: THEME.down, fontSize: 12 }}>
               {error}
+            </div>
+          ) : sectorData?.historyUnavailable || chartSeries.length < 2 ? (
+            <div style={{ height: 220, display: "flex", alignItems: "center", justifyContent: "center", color: THEME.inkDim, fontSize: 12, textAlign: "center", padding: 16 }}>
+              Historical benchmark data is temporarily unavailable.
             </div>
           ) : (
             <PriceChart series={chartSeries} labels={chartLabels} height={220} />
@@ -6695,21 +6724,28 @@ function CurrencyDetail({ currency, back }) {
 
 function GlobalIndexDetailPage({ indexKey, back }) {
   const [range, setRange] = useState("1Y");
-  const [data, setData] = useState(null);
+  const detailCacheKey = `${indexKey}:${range}`;
+  const [data, setData] = useState(() => retainedGlobalIndexDetails.get(detailCacheKey) || null);
   const [news, setNews] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !retainedGlobalIndexDetails.has(detailCacheKey));
   const [error, setError] = useState("");
   const [newsPage, setNewsPage] = useState(1);
 
   useEffect(() => {
     let cancelled = false;
-    let hasLoaded = false;
+    let hasLoaded = retainedGlobalIndexDetails.has(detailCacheKey);
     async function loadIndex({ force = false } = {}) {
       if (!hasLoaded) setLoading(true);
       try {
         const result = await getGlobalIndexDetail(indexKey, range, { force });
         if (!cancelled) {
-          setData(result);
+          const merged = mergeRetainedIndexDetail(result, retainedGlobalIndexDetails.get(detailCacheKey));
+          retainedGlobalIndexDetails.set(detailCacheKey, merged);
+          retainedGlobalIndices = mergeAuthoritativeObservationList(
+            [{ ...merged, key: indexKey }],
+            retainedGlobalIndices
+          );
+          setData(merged);
           setError("");
           hasLoaded = true;
         }
@@ -6726,7 +6762,7 @@ function GlobalIndexDetailPage({ indexKey, back }) {
       () => loadIndex({ force: true })
     );
     return () => { cancelled = true; stopRefresh(); };
-  }, [indexKey, range]);
+  }, [indexKey, range, detailCacheKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -6827,6 +6863,7 @@ function completeGlobalIndexCards(indices = []) {
 }
 
 let retainedGlobalIndices = [];
+const retainedGlobalIndexDetails = new Map();
 let retainedCurrencyData = [];
 
 function CurrenciesPage() {
@@ -6870,7 +6907,10 @@ function CurrenciesPage() {
       try {
         const result = await getGlobalIndices({ force });
         if (!cancelled) {
-          retainedGlobalIndices = Array.isArray(result) ? result : [];
+          retainedGlobalIndices = mergeAuthoritativeObservationList(
+            Array.isArray(result) ? result : [],
+            retainedGlobalIndices
+          );
           setGlobalIndices(retainedGlobalIndices);
           setGlobalIndicesError("");
           hasLoadedGlobalIndices = true;

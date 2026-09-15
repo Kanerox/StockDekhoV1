@@ -316,6 +316,8 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
       observationKind: latestObservation.observationTimeSource === "last_trade"
         ? "provisional_close"
         : "provisional_session",
+      completedSessionConfirmed: false,
+      completedSessionDate: null,
       quoteSourceName: "Latest market observation",
       fiftyTwoWeekLow: Math.min(...validPrices.map((point) => point.close)),
       fiftyTwoWeekHigh: Math.max(...validPrices.map((point) => point.close)),
@@ -360,6 +362,7 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
     regularMarketTime: historyObservationTimestamp(latest.date),
     observationDate: observationDate(latest.date),
     observationKind: "session_close",
+    providerObservationTime: new Date(latest.date).toISOString(),
     currency: "INR",
     quoteSourceName: "Completed daily market data",
   };
@@ -368,7 +371,14 @@ async function fetchHistoryBackedQuote(symbol, baseQuote = null) {
   const quote = !baseQuote || sameSession || quoteTimestamp(historyQuote) > quoteTimestamp(baseQuote)
     ? { ...(baseQuote || {}), ...historyQuote }
     : baseQuote;
-  const validatedQuote = validateQuote(quote, { requestedSymbol: normalizedSymbol });
+  let validatedQuote = validateQuote(quote, { requestedSymbol: normalizedSymbol });
+  if (validatedQuote.observationKind === "session_close" && validatedQuote.dataStatus === "eod") {
+    validatedQuote = {
+      ...validatedQuote,
+      completedSessionConfirmed: true,
+      completedSessionDate: validatedQuote.observationDate,
+    };
+  }
 
   await setCacheEntry(
     quoteCacheKey(normalizedSymbol),

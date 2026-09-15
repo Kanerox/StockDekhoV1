@@ -63,10 +63,17 @@ function indexSummaryCacheKey(key) {
 
 function withCurrentFreshness(observation, now = new Date()) {
   if (!observation?.marketTime) return observation;
-  const lifecycle = classifyObservationLifecycle(observation, now);
+  const source = observation.completedSessionConfirmed === true && observation.completedSessionDate
+    ? {
+        ...observation,
+        observationDate: observation.completedSessionDate,
+        observationKind: "session_close",
+      }
+    : observation;
+  const lifecycle = classifyObservationLifecycle(source, now);
   const dataStatus = lifecycle.dataStatus;
   return {
-    ...observation,
+    ...source,
     observationKind: lifecycle.observationKind,
     dataStatus,
     isStale: dataStatus === "stale",
@@ -104,7 +111,7 @@ function observationTimestamp(observation) {
 }
 
 function observationSession(observation) {
-  return observation?.observationDate || sessionKey(observation?.marketTime || observation?.asOf);
+  return observation?.completedSessionDate || observation?.observationDate || sessionKey(observation?.marketTime || observation?.asOf);
 }
 
 function selectAuthoritativeIndexObservation(candidate, retained, now = new Date()) {
@@ -137,6 +144,9 @@ function mergeAuthoritativeIndexHeadline(detail, retained, now = new Date()) {
     asOf: authoritative.asOf || authoritative.marketTime,
     observationDate: authoritative.observationDate || null,
     observationKind: authoritative.observationKind || null,
+    completedSessionConfirmed: authoritative.completedSessionConfirmed === true,
+    completedSessionDate: authoritative.completedSessionDate || null,
+    providerObservationTime: authoritative.providerObservationTime || detail.providerObservationTime || null,
     dataStatus: authoritative.dataStatus,
     isStale: Boolean(authoritative.isStale),
     dataProvider: authoritative.dataProvider || detail.dataProvider,
@@ -313,6 +323,9 @@ function mapQuote(definition, quote) {
     asOf: quote.regularMarketTime || null,
     observationDate: quote.observationDate || null,
     observationKind: quote.observationKind || null,
+    completedSessionConfirmed: quote.completedSessionConfirmed === true,
+    completedSessionDate: quote.completedSessionDate || null,
+    providerObservationTime: quote.providerObservationTime || quote.regularMarketTime || null,
     dataProvider: getMarketDataProviderName(),
     quoteSource: quote.quoteSourceName || getMarketDataProviderName(),
     dataStatus: quote.dataStatus || null,
@@ -522,7 +535,7 @@ async function getIndexDetail(key, range = "1Y", dependencies = {}) {
   detail = mergeAuthoritativeIndexHeadline(detail, retainedSummary);
   const authoritativeSummary = selectAuthoritativeIndexObservation(detail, retainedSummary);
   try {
-    await updateCacheEntryAtomic(
+    const persistedSummary = await updateCacheEntryAtomic(
       indexSummaryCacheKey(definition.key),
       {
         ...authoritativeSummary,
@@ -532,6 +545,7 @@ async function getIndexDetail(key, range = "1Y", dependencies = {}) {
       INDEX_OVERVIEW_RETENTION_MS,
       (candidate, existing) => selectAuthoritativeIndexObservation(candidate, existing)
     );
+    detail = mergeAuthoritativeIndexHeadline(detail, persistedSummary);
   } catch (error) {
     console.error(`Index detail authority persistence unavailable for ${definition.key}:`, error.message);
   }
@@ -580,5 +594,6 @@ module.exports = {
     cachedOverviewNeedsReconciliation,
     expectedLatestIndianSession,
     isAuthoritativeCompletedLeadership,
+    mapQuote,
   },
 };
