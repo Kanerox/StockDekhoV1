@@ -11,4 +11,8 @@ assert.match(source, /if \(retainedMarketsPage\.performerStocks\.length === 0\) 
   "retained performers must not be blanked during background refresh");
 assert.match(source, /if \(nextEvents\.length \|\| retainedMarketsPage\.marketEvents\.length === 0\)/,
   "an empty refresh cannot displace retained market events");
+assert.match(source, /marketContextSettled\s*\?\s*"Market leadership snapshot unavailable"/,
+  "a completed failed Leadership request must render a terminal unavailable state instead of indefinite loading");
+assert.match(source, /if \(!hasLoadedMarketContext\) setMarketContextSettled\(false\)/,
+  "Leadership loading is reserved for requests without usable retained context");
 console.log("Markets retained-navigation lifecycle checks passed.");

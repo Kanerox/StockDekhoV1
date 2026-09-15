@@ -366,7 +366,7 @@ async function getIndexSummary(definition) {
   };
 }
 
-async function getIndexOverview() {
+async function getIndexOverview(dependencies = {}) {
   const cacheKey = "index-overview:v8";
   const cached = await getCachedValue(cacheKey, indexOverviewFreshMs());
   // Price payloads may be safely reused after the session, but lifecycle
@@ -385,7 +385,8 @@ async function getIndexOverview() {
   if (overviewInFlight) return overviewInFlight;
 
   overviewInFlight = (async () => {
-  const results = await Promise.allSettled(INDICES.map(getIndexSummary));
+  const summaryLoader = dependencies.getIndexSummary || getIndexSummary;
+  const results = await Promise.allSettled(INDICES.map(summaryLoader));
   const summaries = await Promise.all(results.map(async (result, index) => {
     const definition = INDICES[index];
     if (result.status === "fulfilled") {
@@ -394,13 +395,17 @@ async function getIndexOverview() {
         INDEX_OVERVIEW_RETENTION_MS
       );
       const authoritative = selectAuthoritativeIndexObservation(result.value, retained);
-      const persisted = await updateCacheEntryAtomic(
-        indexSummaryCacheKey(definition.key),
-        authoritative,
-        INDEX_OVERVIEW_RETENTION_MS,
-        (candidate, existing) => selectAuthoritativeIndexObservation(candidate, existing)
-      );
-      return persisted;
+      try {
+        return await updateCacheEntryAtomic(
+          indexSummaryCacheKey(definition.key),
+          authoritative,
+          INDEX_OVERVIEW_RETENTION_MS,
+          (candidate, existing) => selectAuthoritativeIndexObservation(candidate, existing)
+        );
+      } catch (error) {
+        console.error(`Index authority persistence unavailable for ${definition.key}:`, error.message);
+        return authoritative;
+      }
     }
     const retained = await getCachedValue(
       indexSummaryCacheKey(definition.key),
@@ -516,16 +521,20 @@ async function getIndexDetail(key, range = "1Y", dependencies = {}) {
 
   detail = mergeAuthoritativeIndexHeadline(detail, retainedSummary);
   const authoritativeSummary = selectAuthoritativeIndexObservation(detail, retainedSummary);
-  await updateCacheEntryAtomic(
-    indexSummaryCacheKey(definition.key),
-    {
-      ...authoritativeSummary,
-      oneMonthReturn: retainedSummary?.oneMonthReturn ?? null,
-      sparkline: retainedSummary?.sparkline || [],
-    },
-    INDEX_OVERVIEW_RETENTION_MS,
-    (candidate, existing) => selectAuthoritativeIndexObservation(candidate, existing)
-  );
+  try {
+    await updateCacheEntryAtomic(
+      indexSummaryCacheKey(definition.key),
+      {
+        ...authoritativeSummary,
+        oneMonthReturn: retainedSummary?.oneMonthReturn ?? null,
+        sparkline: retainedSummary?.sparkline || [],
+      },
+      INDEX_OVERVIEW_RETENTION_MS,
+      (candidate, existing) => selectAuthoritativeIndexObservation(candidate, existing)
+    );
+  } catch (error) {
+    console.error(`Index detail authority persistence unavailable for ${definition.key}:`, error.message);
+  }
 
   if (!leadershipCacheKey) return detail;
 

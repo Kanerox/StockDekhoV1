@@ -41,9 +41,9 @@ function isIndianInstrument(symbol) {
   return normalized.endsWith(".NS") || normalized.endsWith(".BO") || INDIAN_INDEX_SYMBOLS.has(normalized);
 }
 
-function currentIndianHoliday(symbol) {
+function currentIndianHoliday(symbol, now = new Date()) {
   if (!isIndianInstrument(symbol)) return null;
-  const closure = indianMarketClosure();
+  const closure = indianMarketClosure(now);
   return closure.type === "holiday" ? closure.name : null;
 }
 
@@ -151,6 +151,22 @@ async function withRetry(operation, { attempts = 2, initialDelay = 800, label = 
   throw lastError;
 }
 
+function retainedQuoteWithCurrentStatus(quote, now = new Date()) {
+  const validated = validateQuote(quote, {
+    requestedSymbol: quote.symbol,
+    allowStale: true,
+    now,
+  });
+  const holiday = currentIndianHoliday(quote.symbol, now);
+  const preserveHolidayClose = Boolean(holiday) && validated.observationKind === "session_close";
+  return {
+    ...validated,
+    dataStatus: preserveHolidayClose ? "eod" : validated.dataStatus,
+    isStale: preserveHolidayClose ? false : validated.dataStatus === "stale",
+    marketClosure: holiday,
+  };
+}
+
 async function getStaleQuotes(symbols) {
   const quotes = await Promise.all(
     symbols.map((symbol) =>
@@ -161,15 +177,7 @@ async function getStaleQuotes(symbols) {
     .filter(Boolean)
     .map((quote) => {
       try {
-        const validated = validateQuote(quote, { requestedSymbol: quote.symbol, allowStale: true });
-        const holiday = currentIndianHoliday(quote.symbol);
-        const preserveHolidayClose = Boolean(holiday) && validated.observationKind === "session_close";
-        return {
-          ...validated,
-          dataStatus: preserveHolidayClose ? "eod" : "stale",
-          isStale: !preserveHolidayClose,
-          marketClosure: holiday,
-        };
+        return retainedQuoteWithCurrentStatus(quote);
       }
       catch (error) { console.warn(`Discarding invalid cached quote: ${error.message}`); return null; }
     })
@@ -672,5 +680,5 @@ module.exports = {
   fetchMarketData,
   fetchMarketDataBatch,
   fetchPeerFundamentals,
-  _test: { chooseNewerQuote, needsCompletedSessionReconciliation },
+  _test: { chooseNewerQuote, needsCompletedSessionReconciliation, retainedQuoteWithCurrentStatus },
 };

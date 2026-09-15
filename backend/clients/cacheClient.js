@@ -147,18 +147,35 @@ async function updateCacheEntryAtomic(key, candidate, retentionMs, selectValue) 
     // client. Run the compare/update on Redis itself so competing workers and
     // overview/detail requests serialize at the key.
     const script = `
+      local function is_null(value)
+        return value == nil or value == cjson.null
+      end
+      local function optional_text(value)
+        if is_null(value) or type(value) ~= 'string' then return '' end
+        return value
+      end
       local current = redis.call('GET', KEYS[1])
       local candidate = cjson.decode(ARGV[1])
+      if type(candidate) ~= 'table' or type(candidate.value) ~= 'table' then
+        return redis.error_reply('Invalid StockDekho authority candidate')
+      end
       if current then
         local existing = cjson.decode(current)
+        if type(existing) ~= 'table' or type(existing.value) ~= 'table' then
+          return redis.error_reply('Invalid StockDekho retained authority')
+        end
         local old = existing.value
         local new = candidate.value
-        local oldSession = old.completedSessionDate or old.observationDate or ''
-        local newSession = new.completedSessionDate or new.observationDate or ''
+        local oldSession = optional_text(old.completedSessionDate)
+        if oldSession == '' then oldSession = optional_text(old.observationDate) end
+        local newSession = optional_text(new.completedSessionDate)
+        if newSession == '' then newSession = optional_text(new.observationDate) end
         local oldEod = old.completedSessionConfirmed == true or (old.observationKind == 'session_close' and old.dataStatus == 'eod')
         local newEod = new.completedSessionConfirmed == true or (new.observationKind == 'session_close' and new.dataStatus == 'eod')
-        local oldTime = old.marketTime or old.asOf or ''
-        local newTime = new.marketTime or new.asOf or ''
+        local oldTime = optional_text(old.marketTime)
+        if oldTime == '' then oldTime = optional_text(old.asOf) end
+        local newTime = optional_text(new.marketTime)
+        if newTime == '' then newTime = optional_text(new.asOf) end
         local keepOld = false
         if oldSession ~= '' and (newSession == '' or oldSession > newSession) then
           keepOld = true
@@ -168,12 +185,17 @@ async function updateCacheEntryAtomic(key, candidate, retentionMs, selectValue) 
           keepOld = true
         end
         if keepOld then return current end
-        if oldSession == newSession and old.previousSessionClose ~= nil and new.previousSessionClose == nil then
+        local oldPreviousClose = old.previousSessionClose
+        local hasOldPreviousClose = type(oldPreviousClose) == 'number'
+        local newPreviousCloseMissing = is_null(new.previousSessionClose)
+        if oldSession == newSession and hasOldPreviousClose and newPreviousCloseMissing then
           new.previousSessionClose = old.previousSessionClose
-          new.previousSessionCloseDate = old.previousSessionCloseDate
-          if new.value ~= nil and old.previousSessionClose ~= 0 and new.change == nil then
-            new.change = new.value - old.previousSessionClose
-            new.changePercent = (new.change / old.previousSessionClose) * 100
+          if not is_null(old.previousSessionCloseDate) then
+            new.previousSessionCloseDate = old.previousSessionCloseDate
+          end
+          if type(new.value) == 'number' and oldPreviousClose ~= 0 and is_null(new.change) then
+            new.change = new.value - oldPreviousClose
+            new.changePercent = (new.change / oldPreviousClose) * 100
           end
           candidate.value = new
           ARGV[1] = cjson.encode(candidate)
@@ -183,13 +205,29 @@ async function updateCacheEntryAtomic(key, candidate, retentionMs, selectValue) 
       return ARGV[1]
     `;
     const candidatePayload = { value: candidate, savedAt: Date.now() };
-    const serialized = await redis.eval(script, {
-      keys: [namespacedKey],
-      arguments: [JSON.stringify(candidatePayload), String(retentionMs)],
-    });
-    const selectedPayload = JSON.parse(serialized);
-    memoryCache.set(key, { payload: selectedPayload, expiresAt: Date.now() + retentionMs });
-    return selectedPayload.value;
+    try {
+      const serialized = await redis.eval(script, {
+        keys: [namespacedKey],
+        arguments: [JSON.stringify(candidatePayload), String(retentionMs)],
+      });
+      const selectedPayload = JSON.parse(serialized);
+      memoryCache.set(key, { payload: selectedPayload, expiresAt: Date.now() + retentionMs });
+      return selectedPayload.value;
+    } catch (error) {
+      console.error(`Atomic Redis authority update failed for ${key}:`, error.message);
+      // Persistence protects authority but is not part of response validity.
+      // Read whatever authority remains available, select without writing, and
+      // serve the strongest safe observation. Never downgrade Redis through a
+      // non-atomic GET/SET fallback after EVAL has failed.
+      let retained = getMemoryEntry(key)?.value ?? null;
+      try {
+        retained = (await getCacheEntry(key))?.value ?? retained;
+      } catch {
+        // getCacheEntry already records Redis read failures; the memory mirror
+        // remains the final non-destructive source.
+      }
+      return selectValue(candidate, retained);
+    }
   }
 
   const prior = memoryUpdateQueues.get(key) || Promise.resolve();

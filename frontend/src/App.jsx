@@ -2222,6 +2222,7 @@ function MarketsPage({ mode, setPage, openCompany, openBenchmark, watchlist, tog
   const [marketEvents, setMarketEvents] = useState(() => retainedMarketsPage.marketEvents);
   const [marketEventsLoading, setMarketEventsLoading] = useState(() => !retainedMarketsPage.niftyDetail && retainedMarketsPage.marketEvents.length === 0);
   const [marketEventsError, setMarketEventsError] = useState("");
+  const [marketContextSettled, setMarketContextSettled] = useState(() => Boolean(retainedMarketsPage.niftyDetail));
   const [sectorData, setSectorData] = useState(() => retainedSectorOverview);
   const [sectorLoading, setSectorLoading] = useState(() => retainedSectorOverview.length === 0);
   const [sectorError, setSectorError] = useState("");
@@ -2367,12 +2368,16 @@ const mostActive = [...activityStocks]
       : `Nifty 50 declines as ${laggingStock.name} weighs on index constituents`
     : niftyDetail
       ? "Consistent market leadership snapshot unavailable"
-      : "Loading the latest Indian market leadership snapshot";
+      : marketContextSettled
+        ? "Market leadership snapshot unavailable"
+        : "Loading the latest Indian market leadership snapshot";
   const leadershipSummary = hasLeadershipSnapshot
     ? `${describeIndexMove("The Nifty 50", nifty50.changePercent)}, while ${describeIndexMove("the Sensex", sensex.changePercent)}. ${leadingStock.name} led the Nifty constituents with a ${leadingStock.chgPct >= 0 ? "gain" : "move"} of ${Math.abs(leadingStock.chgPct).toFixed(2)}%, while ${laggingStock.name} was the weakest at ${laggingStock.chgPct.toFixed(2)}%. Index breadth was ${advancing} advancing, ${unchanged} unchanged and ${declining} declining.${hasClosingLeadershipSnapshot ? "" : " This is the latest complete intraday snapshot; closing breadth is still being refreshed."}`
     : niftyDetail
       ? "The index and constituent observations do not currently belong to the same market session, so StockDekho is withholding the headline and breadth rather than showing mismatched figures."
-      : "Current Nifty 50 leadership and breadth data are loading from the market-data provider.";
+      : marketContextSettled
+        ? "A complete, session-consistent Nifty 50 breadth snapshot is not currently available."
+        : "Current Nifty 50 leadership and breadth data are loading from the market-data provider.";
   const sectorByKey = new Map(
   sectorData.map((sector) => [
     sector.key,
@@ -2459,6 +2464,7 @@ useEffect(() => {
 
   async function loadMarketContext({ force = false } = {}) {
     if (!hasLoadedMarketContext) setMarketEventsLoading(true);
+    if (!hasLoadedMarketContext) setMarketContextSettled(false);
     setMarketEventsError("");
 
     try {
@@ -2477,6 +2483,7 @@ useEffect(() => {
         setNiftyDetail(detailResult.value);
         hasLoadedMarketContext = true;
       }
+      setMarketContextSettled(true);
 
       const articles =
         eventsResult.status === "fulfilled"
@@ -2546,6 +2553,7 @@ date: formatArticleNewsDate(article),
     } finally {
       if (!cancelled) {
         setMarketEventsLoading(false);
+        setMarketContextSettled(true);
       }
     }
   }

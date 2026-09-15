@@ -601,7 +601,7 @@ async function getGlobalIndexDetail(key, range = "1Y") {
   );
 }
 
-async function getGlobalIndexOverview() {
+async function getGlobalIndexOverview(dependencies = {}) {
   const cacheKey = "global-index-overview:v10";
   const cached = await getCachedValue(cacheKey, 5 * 60 * 1000);
   if (cached) {
@@ -625,7 +625,7 @@ async function getGlobalIndexOverview() {
     try {
       // One batched Upstox request warms all exact global matches. Individual
       // detail reads then reuse the normal market-data cache and fallback path.
-      await fetchMarketDataBatch(exactUpstoxSymbols, { supplement: false });
+      await (dependencies.fetchMarketDataBatch || fetchMarketDataBatch)(exactUpstoxSymbols, { supplement: false });
     } catch (error) {
       console.warn(`Batched Upstox global quote warm-up unavailable: ${error.message}`);
     }
@@ -665,7 +665,7 @@ async function getGlobalIndexOverview() {
           marketClosure: retainedClosure.type === "holiday" ? retainedClosure.name : null,
         };
       }
-      const detail = await getGlobalIndexDetail(definition.key, "1M");
+      const detail = await (dependencies.getGlobalIndexDetail || getGlobalIndexDetail)(definition.key, "1M");
       if (detail.historyUnavailable && retained) {
         return retainedCardWithCurrentStatus(retained, definition);
       }
@@ -705,7 +705,7 @@ async function getGlobalIndexOverview() {
       }
       return fresh;
     }).filter(Boolean);
-    const authoritativeMerged = await Promise.all(
+    const persistedResults = await Promise.allSettled(
       merged.map((item) => {
         const definition = getGlobalIndexDefinition(item.key);
         return updateCacheEntryAtomic(
@@ -716,6 +716,11 @@ async function getGlobalIndexOverview() {
         );
       })
     );
+    const authoritativeMerged = persistedResults.map((result, index) => {
+      if (result.status === "fulfilled") return result.value;
+      console.error(`Global authority persistence unavailable for ${merged[index].key}:`, result.reason?.message);
+      return merged[index];
+    });
     await setCacheEntry(cacheKey, authoritativeMerged, GLOBAL_CARD_RETENTION_MS);
     return authoritativeMerged;
   })().finally(() => { overviewInFlight = null; });

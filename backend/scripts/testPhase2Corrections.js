@@ -8,6 +8,8 @@ const { GLOBAL_INDICES } = require("../config/globalIndexConfig");
 const news = require("../services/newsService")._test;
 const corpus = require("../news/canonicalArticleCorpus")._test;
 const indexService = require("../services/indexService");
+const { validateQuote } = require("../utils/marketDataValidation");
+const { _test: marketClient } = require("../clients/marketClient");
 
 function selectAuthority(candidate, retained) {
   if (!retained) return candidate;
@@ -36,6 +38,33 @@ function selectAuthority(candidate, retained) {
   assert.deepStrictEqual(indianMarketClosure(holidayNow), { closed: true, type: "holiday", name: "Ganesh Chaturthi" });
   const lifecycle = classifyObservationLifecycle({ regularMarketTime: "2026-09-11T10:10:00Z", observationDate: "2026-09-11", observationKind: "session_close" }, holidayNow);
   assert.strictEqual(lifecycle.dataStatus, "eod", "previous validated close remains EOD on holiday");
+
+  const liveQuote = {
+    symbol: "RELIANCE.NS", regularMarketPrice: 3000, regularMarketPreviousClose: 2980,
+    regularMarketTime: "2026-09-15T06:20:00Z", observationDate: "2026-09-15",
+    observationKind: "intraday",
+  };
+  const liveNow = new Date("2026-09-15T06:22:00Z");
+  const companyStatus = validateQuote(liveQuote, { requestedSymbol: liveQuote.symbol, allowStale: true, now: liveNow });
+  const listStatus = marketClient.retainedQuoteWithCurrentStatus(liveQuote, liveNow);
+  assert.strictEqual(companyStatus.dataStatus, "live");
+  assert.strictEqual(listStatus.dataStatus, companyStatus.dataStatus, "Stocks fallback and Company page agree for the same live observation");
+  assert.strictEqual(listStatus.isStale, false);
+  assert.strictEqual(
+    marketClient.retainedQuoteWithCurrentStatus({ ...liveQuote, regularMarketTime: "2026-09-14T06:20:00Z", observationDate: "2026-09-14" }, liveNow).dataStatus,
+    "stale",
+    "a prior-session observation is not relabelled live on Sep 15"
+  );
+  assert.strictEqual(
+    marketClient.retainedQuoteWithCurrentStatus({
+      ...liveQuote,
+      regularMarketTime: "2026-09-11T10:00:00Z",
+      observationDate: "2026-09-11",
+      observationKind: "session_close",
+    }, holidayNow).dataStatus,
+    "eod",
+    "Sep 14 holiday retains the prior validated completed session"
+  );
 
   const hangSeng = GLOBAL_INDICES.find((item) => item.key === "HANGSENG");
   assert.strictEqual(global.mergeRetainedHeadline(weak, eod, hangSeng, new Date("2026-09-14T12:00:00Z")).value, 100);
