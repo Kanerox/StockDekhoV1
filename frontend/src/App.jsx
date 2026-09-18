@@ -16,17 +16,11 @@ import stockUniverse from "./data/stockUniverse.json";
 import { shouldRunVisibilityRefresh } from "./utils/refreshPolicy";
 import { SEARCH_TOPIC_ALIASES, searchTopicSuggestion, rankSearchDefinitions } from "./utils/searchSemantics";
 import { mergeAuthoritativeObservationList, mergeRetainedIndexDetail } from "./utils/marketAuthority";
-import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ReferenceLine,
-  Legend,
-} from "recharts";
+
+const loadStockCharts = () => import("./components/StockCharts.jsx");
+const LazyPriceChart = React.lazy(() => loadStockCharts().then((module) => ({ default: module.PriceChartRenderer })));
+const LazyYieldHistoryChart = React.lazy(() => loadStockCharts().then((module) => ({ default: module.YieldHistoryChart })));
+const LazyComparisonReturnsChart = React.lazy(() => loadStockCharts().then((module) => ({ default: module.ComparisonReturnsChart })));
 
 import Search from "lucide-react/dist/esm/icons/search.mjs";
 import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
@@ -864,6 +858,17 @@ const THEME = {
   mono: "'IBM Plex Mono','SF Mono',Menlo,monospace",
 };
 
+function ChartFallback({ height }) {
+  return (
+    <div
+      aria-label="Loading chart"
+      style={{ height, display: "grid", placeItems: "center", color: THEME.inkDim, fontSize: 12 }}
+    >
+      Loading chart...
+    </div>
+  );
+}
+
 const fmtNum = (n, d = 2) => (n === null || n === undefined || Number.isNaN(n) ? "—" : n.toLocaleString("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const fmtInt = (n) => (n === null || n === undefined ? "—" : n.toLocaleString("en-IN"));
 const fmtPct = (n) => (n === null || n === undefined ? "—" : `${n > 0 ? "+" : ""}${n.toFixed(2)}%`);
@@ -1359,24 +1364,19 @@ function MetricExplain({ mode, text }) {
    PRICE CHART (recharts)
    ========================================================================================= */
 function PriceChart({ series, labels, height = 280, benchmarkSeries, benchmarkLabel, color = THEME.gold }) {
-  const data = series.map((v, i) => {
-    const row = { i: labels ? labels[i] : i, price: v };
-    if (benchmarkSeries) row.benchmark = benchmarkSeries[i];
-    return row;
-  });
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={data} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
-        <CartesianGrid stroke={THEME.hairline} strokeDasharray="2 4" vertical={false} />
-        <XAxis dataKey="i" tick={{ fill: THEME.inkDim, fontSize: 10 }} minTickGap={40} axisLine={{ stroke: THEME.hairline }} tickLine={false} />
-        <YAxis tick={{ fill: THEME.inkDim, fontSize: 10 }} axisLine={false} tickLine={false} domain={["auto", "auto"]} width={54} />
-        <Tooltip contentStyle={{ background: THEME.panelAlt, border: `1px solid ${THEME.hairline}`, borderRadius: 4, fontSize: 12 }}
-          labelStyle={{ color: THEME.inkDim }} itemStyle={{ color: THEME.ink }} formatter={(value) => fmtNum(value, 2)} />
-        {benchmarkSeries && <Legend wrapperStyle={{ fontSize: 11, color: THEME.inkDim }} />}
-        <Line type="monotone" dataKey="price" name="Price" stroke={color} strokeWidth={2} dot={false} />
-        {benchmarkSeries && <Line type="monotone" dataKey="benchmark" name={benchmarkLabel || "Benchmark"} stroke={THEME.inkDim} strokeWidth={1.4} dot={false} strokeDasharray="3 3" />}
-      </LineChart>
-    </ResponsiveContainer>
+    <React.Suspense fallback={<ChartFallback height={height} />}>
+      <LazyPriceChart
+        series={series}
+        labels={labels}
+        height={height}
+        benchmarkSeries={benchmarkSeries}
+        benchmarkLabel={benchmarkLabel}
+        color={color}
+        theme={THEME}
+        formatNumber={fmtNum}
+      />
+    </React.Suspense>
   );
 }
 
@@ -1656,15 +1656,9 @@ function GsecDetailPage({ back }) {
       <Panel style={{ padding: 16 }}>
         {loading ? <div style={{ height: 320, display: "grid", placeItems: "center", color: THEME.inkDim }}>Loading official yield history...</div>
           : error ? <div style={{ height: 320, display: "grid", placeItems: "center", color: THEME.down }}>{error}</div>
-          : <ResponsiveContainer width="100%" height={320}>
-              <LineChart data={chartData} margin={{ top: 6, right: 12, left: 0, bottom: 0 }}>
-                <CartesianGrid stroke={THEME.hairline} strokeDasharray="2 4" vertical={false} />
-                <XAxis dataKey="date" tick={{ fill: THEME.inkDim, fontSize: 10 }} minTickGap={40} tickLine={false} />
-                <YAxis tick={{ fill: THEME.inkDim, fontSize: 10 }} domain={["auto", "auto"]} width={58} tickFormatter={(value) => `${Number(value).toFixed(2)}%`} />
-                <Tooltip contentStyle={{ background: THEME.panelAlt, border: `1px solid ${THEME.hairline}`, borderRadius: 4 }} formatter={(value, name, item) => [`${Number(value).toFixed(2)}%${Number.isFinite(item?.payload?.change) ? ` · ${item.payload.change > 0 ? "+" : ""}${item.payload.change} bps` : ""}`, "Yield"]} />
-                <Line type="monotone" dataKey="yield" stroke={THEME.gold} strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>}
+          : <React.Suspense fallback={<ChartFallback height={320} />}>
+              <LazyYieldHistoryChart data={chartData} theme={THEME} />
+            </React.Suspense>}
       </Panel>
       <div style={{ marginTop: 40 }}><SectionHeading title="What moved the Yield?" /></div>
       <p style={{ fontSize: 11.5, color: THEME.inkDim, marginTop: -8, marginBottom: 12 }}>Reporting from the last 15 days that explicitly connects developments to Indian government securities or sovereign yields.</p>
@@ -6520,30 +6514,9 @@ function ComparePage({ compareList, toggleCompare, openCompany }) {
                 {historyError}
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height={280}>
-                <LineChart>
-                  <CartesianGrid stroke={THEME.hairline} strokeDasharray="2 4" vertical={false} />
-                  <XAxis dataKey="i" type="number" domain={[0, 100]} hide />
-                  <YAxis tick={{ fill: THEME.inkDim, fontSize: 10 }} axisLine={false} tickLine={false} />
-                  <Tooltip
-                    contentStyle={{ background: THEME.panelAlt, border: `1px solid ${THEME.hairline}`, borderRadius: 4 }}
-                    formatter={(value) => [`${fmtNum(value, 2)}%`, undefined]}
-                  />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  {stocks.map((s, idx) => {
-                    const points = histories[s.ticker]?.points || [];
-                    const firstValue = points[0]?.adjustedClose;
-                    const series = points.map((point, index) => ({
-                      i: points.length > 1 ? (index / (points.length - 1)) * 100 : 0,
-                      [s.ticker]: Number.isFinite(firstValue) && firstValue !== 0
-                        ? (point.adjustedClose / firstValue) * 100 - 100
-                        : null,
-                    }));
-                    const colors = [THEME.gold, THEME.up, THEME.down, "#7C9CBF", "#B47EC9"];
-                    return <Line key={s.ticker} data={series} type="monotone" dataKey={s.ticker} stroke={colors[idx % colors.length]} dot={false} strokeWidth={2} />;
-                  })}
-                </LineChart>
-              </ResponsiveContainer>
+              <React.Suspense fallback={<ChartFallback height={280} />}>
+                <LazyComparisonReturnsChart stocks={stocks} histories={histories} theme={THEME} formatNumber={fmtNum} />
+              </React.Suspense>
             )}
             {historyError && Object.keys(histories).length > 0 && (
               <div style={{ fontSize: 11, color: THEME.inkDim, marginTop: 8 }}>{historyError}</div>
